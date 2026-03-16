@@ -1,0 +1,42 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.15.6
+    hooks:
+      # Run the linter.
+      - id: ruff-check
+        types_or: [ python, pyi ]
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+        types_or: [ python, pyi ]
+
+  # Hooks generales de calidad
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]        # bloquea archivos > 500 KB (datasets, modelos)
+      - id: check-merge-conflict
+      - id: debug-statements       # bloquea breakpoint() / pdb olvidados
+      - id: no-commit-to-branch
+        args: [--branch, main]     # fuerza a trabajar en branches, no directo en main
+      - id: name-tests-test
+      - id: pretty-format-json
+        args:
+          - --autofix
+      # - id: sort-simple-yaml
+      #   files: # needs a path
+
+  # Commitizen: valida el formato del mensaje de commit
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.13.9
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
