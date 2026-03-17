@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "End-to-end ML pipeline for IEEE-CIS fraud detection"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "dvc>=3.67.0",
+    "kagglehub>=1.0.0",
+]
 
 [project.optional-dependencies]
 dev = [
