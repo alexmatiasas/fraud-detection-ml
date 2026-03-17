@@ -4,3 +4,11 @@ stages:
     outs:
     - data/raw:
         persist: true
+  prepare:
+    cmd: uv run python scripts/prepare_data.py
+    deps:
+    - configs/data.yaml
+    - data/raw
+    outs:
+    - data/processed:
+        persist: true

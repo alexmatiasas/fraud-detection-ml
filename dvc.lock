@@ -5,6 +5,24 @@ stages:
     outs:
     - path: data/raw
       hash: md5
-      md5: cbb41dabaccc89ea41bb6c7e2123e989.dir
+      md5: 26a595de8c32cce09174f0d91250f56b.dir
       size: 1354953156
+      nfiles: 5
+  prepare:
+    cmd: uv run python scripts/prepare_data.py
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: c4a24a120a745a1bd1eb49f91e63fbfc
+      size: 459
+    - path: data/raw
+      hash: md5
+      md5: 26a595de8c32cce09174f0d91250f56b.dir
+      size: 1354953156
+      nfiles: 5
+    outs:
+    - path: data/processed
+      hash: md5
+      md5: eda40a5608803133a4c2aed24568deaa.dir
+      size: 158179677
       nfiles: 6
