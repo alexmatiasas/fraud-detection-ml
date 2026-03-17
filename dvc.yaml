@@ -1,0 +1,6 @@
+stages:
+  download:
+    cmd: uv run python scripts/download_data.py
+    outs:
+    - data/raw:
+        persist: true
