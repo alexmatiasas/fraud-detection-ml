@@ -13,8 +13,8 @@ stages:
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: c4a24a120a745a1bd1eb49f91e63fbfc
-      size: 459
+      md5: 4b4566f3eddfe24dd8682334d5c14d0e
+      size: 460
     - path: data/raw
       hash: md5
       md5: 26a595de8c32cce09174f0d91250f56b.dir
