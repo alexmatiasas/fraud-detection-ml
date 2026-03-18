@@ -313,3 +313,95 @@ train |>
   - `os_family`: OS grouped from `DeviceInfo` using `Build/` pattern
   - `DeviceType`: label encoded (mobile/desktop/missing)
   - `Other` in `os_family` investigated further in feature engineering
+
+### 5.3 Temporal Features Analysis
+
+`TransactionDT` is a timedelta in seconds from an undisclosed reference
+point. The absolute origin is arbitrary — we use "2017-12-01" solely to
+convert seconds into interpretable hour and day-of-week values. The
+competition data is from 2019, but absolute dates are not recoverable
+from this dataset. Relative temporal patterns (hour of day, day of week)
+are valid regardless of the chosen origin.
+
+```{r temporal-features}
+# Convert TransactionDT to hours and days
+# Note: the dataset starts at a reference point, we define a fake 'origin'
+origin_time <- as.POSIXct("2017-12-01", tz = "UTC")
+
+train <- train |>
+  mutate(
+    TransactionDate = origin_time + TransactionDT,
+    TransactionHour = lubridate::hour(TransactionDate),
+    TransactionDay  = lubridate::wday(TransactionDate, label = TRUE)
+  )
+```
+
+next step is visualizing the distribution of transactions by hour and day of the week. This helps us understand if there are specific times or days when fraudulent transactions are more likely to occur.
+
+```{r temporal-features-plot}
+# Plot fraud rate by hour
+ggplot(train, aes(x = TransactionHour, fill = factor(isFraud))) +
+  geom_histogram(binwidth = 1, position = "fill") +
+  labs(
+    title = "Fraud Ratio by Hour of Day",
+    x = "Hour of Day",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  scale_x_continuous(breaks = 0:23) +
+  theme_minimal()
+```
+
+**Observation:**
+
+This plot shows the proportion of fraudulent vs. non-fraudulent transactions across different hours of the day.
+
+**Hour of day:**
+- Most transactions occur between 5 a.m. and 12 p.m. (UTC reference).
+- Fraudulent activity peaks between 6–9 a.m., with a maximum around
+  7 a.m. — consistent with automated fraud attempts during low
+  supervision periods or bot activity scheduled around timezone patterns.
+- **Pipeline implication**: `TransactionHour` will be included as a
+  cyclical feature using sin/cos encoding to preserve the circular
+  nature of time (hour 23 is close to hour 0).
+
+This information could be useful to:
+
+- Engineer features like `IsMorning`, `IsNight`, etc.
+- Apply time-aware models or rules.
+
+```{r temporal-features-plot2}
+ggplot(train, aes(x = TransactionDay, fill = factor(isFraud))) +
+  geom_bar(position = "fill") + # bars with separation for readability
+  labs(
+    title = "Fraud Ratio by Day of Week",
+    x = "Day of Week",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  theme_minimal()
+```
+
+**Observation:**
+
+This bar plot shows the proportion of fraudulent transactions by day of the week.
+
+**Day of week:**
+- Fraud rate is remarkably stable across all days — no significant
+  peaks or drops.
+- This uniformity suggests automated fraud systems operating
+  independently of calendar patterns.
+- `TransactionDay` has limited standalone predictive power but may
+  contribute signal in interaction features (e.g., `hour × day`).
+- **Pipeline implication**: included as a low-priority feature —
+  interaction with `TransactionHour` more valuable than raw day alone.
+
+As a result, `TransactionDay` may have **limited predictive power on its own**, but could still be useful when combined with other temporal or categorical features.
