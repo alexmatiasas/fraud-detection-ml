@@ -203,3 +203,113 @@ ggplot(train, aes(x = TransactionAmt, fill = factor(isFraud))) +
 - Log scaling is necessary to visualize the distribution — the raw
   amounts are heavily right-skewed, which justifies a `log(TransactionAmt)`
   transformation in the feature engineering pipeline.
+
+### 5.2 Device Info
+
+`DeviceInfo` and `DeviceType` come from `train_identity`, which covers
+only 144,233 of 590,540 transactions (~24%). The remaining ~76% of
+missing values after the join are structural — not a data quality issue.
+
+```{r device-info-distribution}
+# Distribution within the identity subset (train_identity directly)
+train_identity |>
+  filter(!is.na(DeviceInfo), DeviceInfo != "") |>
+  count(DeviceInfo) |>
+  slice_max(n, n = 10) |>
+  ggplot(aes(x = reorder(DeviceInfo, n), y = n)) +
+  geom_col(fill = "#3B8BD4") +
+  coord_flip() +
+  labs(
+    title = "Top 10 Device Info (identity subset only)",
+    x = "Device Info", y = "Count"
+  ) +
+  theme_minimal()
+```
+
+```{r device-type-fraud-rate}
+# Fraud rate by DeviceType — requires join for isFraud
+train |>
+  mutate(DeviceType = replace_na(DeviceType, "missing")) |>
+  count(DeviceType, isFraud) |>
+  group_by(DeviceType) |>
+  mutate(fraud_rate = n / sum(n)) |>
+  filter(isFraud == 1) |>
+  ggplot(aes(x = reorder(DeviceType, fraud_rate), y = fraud_rate)) +
+  geom_col(fill = "#D85A30") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Fraud Rate by Device Type",
+    x = "Device Type", y = "Fraud Rate"
+  ) +
+  theme_minimal()
+```
+
+```{r os-family-fraud-rate}
+# OS family grouping — requires join for isFraud
+# DeviceInfo contains truncated UA strings, not full user agents.
+# Build/ pattern identifies Android model numbers (e.g. SM-G930V Build/NRD90M)
+train |>
+  filter(!is.na(DeviceInfo), DeviceInfo != "") |>
+  mutate(os_family = case_when(
+    str_detect(DeviceInfo, regex("windows|trident|rv:", ignore_case = TRUE)) ~ "Windows/IE",
+    str_detect(DeviceInfo, regex("ios device|iphone|ipad", ignore_case = TRUE)) ~ "iOS",
+    str_detect(DeviceInfo, regex("macos|mac os", ignore_case = TRUE)) ~ "MacOS",
+    str_detect(DeviceInfo, regex("android|Build/|SM-|samsung|redmi|lenovo|lg-|xt[0-9]",
+      ignore_case = TRUE
+    )) ~ "Android",
+    TRUE ~ "Other"
+  )) |>
+  count(os_family, isFraud) |>
+  group_by(os_family) |>
+  mutate(total = sum(n), fraud_rate = n / total) |>
+  filter(isFraud == 1, total >= 100) |>
+  ggplot(aes(x = reorder(os_family, fraud_rate), y = fraud_rate)) +
+  geom_col(fill = "#D85A30") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Fraud Rate by OS Family",
+    x = "OS Family", y = "Fraud Rate"
+  ) +
+  theme_minimal()
+```
+
+**Observations:**
+
+- The ~76% missingness in `DeviceInfo` after the join is structural —
+  only ~24% of transactions have identity records. Within that subset,
+  missingness drops to 18% for `DeviceInfo` and 2% for `DeviceType`.
+- Windows dominates the identity subset (~48,000 records), followed
+  by iOS (~20,000) and MacOS (~13,000). `Trident/7.0` and `rv:11.0`
+  are IE11 user agent fragments — grouped with Windows/IE.
+- `DeviceInfo` contains truncated user agent strings, not full UA
+  strings — standard UA parsing libraries are unreliable on this data.
+  OS family grouping uses pattern matching: `Build/` identifies Android
+  model numbers. The `Other` category warrants further investigation
+  in feature engineering.
+- **Device type**: mobile shows notably higher fraud rate (>10%) vs
+  desktop (~6.25%). Missing device type has very low fraud rate
+  (<2.5%) — consistent with lower-risk transaction channels where
+  device fingerprinting is unavailable.
+- **OS family**: Android has the highest fraud rate (~13%),
+  significantly above iOS (~6%), Windows/IE (~6%), Other (~5%),
+  and MacOS (~2.5%).
+- The `missing` category in `DeviceType` (~2.5% fraud rate) aggregates
+  all NAs including the ~446,307 structural missing values. Its low
+  fraud rate reflects dilution by the large volume of transactions
+  without identity records — not that missing device info predicts
+  lower fraud.
+- `Other` in `os_family` excludes NAs entirely (filtered before
+  grouping) — it represents only transactions with a `DeviceInfo`
+  value that did not match any OS pattern. These are likely obscure
+  device strings worth investigating in feature engineering.
+- **`has_identity`** is therefore critical: it separates the structural
+  missing (~76%) from the actual device populations, preventing the
+  dilution effect seen in the `missing` DeviceType category.
+
+- **Pipeline implications**:
+  - `has_identity`: binary feature encoding absence of identity record
+  - `os_family`: OS grouped from `DeviceInfo` using `Build/` pattern
+  - `DeviceType`: label encoded (mobile/desktop/missing)
+  - `Other` in `os_family` investigated further in feature engineering
