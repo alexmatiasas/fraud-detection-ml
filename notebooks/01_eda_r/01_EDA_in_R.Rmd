@@ -32,3 +32,72 @@ This notebook presents an Exploratory Data Analysis (EDA) of the [IEEE-CIS Fraud
 - Which features carry the most signal for fraud detection?
 - What multicollinearity exists among predictors?
 - Where are the missing values concentrated, and are they informative?
+
+## 2. Libraries
+
+We'll require the next libraries for data manipulation and visualization.
+
+```{r libraries}
+library(tidyverse)
+library(arrow) # read parquet — replaces data.table for I/O
+library(gridExtra)
+library(skimr)
+library(ggcorrplot)
+library(naniar)
+```
+
+## 3. Data Loading
+
+The dataset is composed of two main files:
+
+- **`train_transaction`**: transactional data for online purchases — amount,
+  product codes, card and address information, and the fraud label (`isFraud`).
+
+- **`train_identity`**: identity-related features (device info, browser, email
+  domain) for a subset of transactions. Only ~24% of transactions have
+  corresponding identity information.
+
+To perform a comprehensive analysis, both datasets are merged using
+`TransactionID` as the join key. A **left join** preserves all transactions
+from `train_transaction`, including those without identity information.
+This ensures:
+
+- The **full set of transactions** is available for fraud analysis.
+- Identity features are included **only when available** — their absence
+  is itself informative and will be considered during feature engineering.
+
+```{r data-loading}
+train_transaction <- read_parquet(
+  "../../data/processed/train_transaction.parquet"
+)
+train_identity <- read_parquet(
+  "../../data/processed/train_identity.parquet"
+)
+
+cat(
+  "train_transaction:", nrow(train_transaction), "rows,",
+  ncol(train_transaction), "cols\n"
+)
+cat(
+  "train_identity:   ", nrow(train_identity), "rows,",
+  ncol(train_identity), "cols\n"
+)
+```
+
+```{r data-join}
+train <- train_transaction |>
+  left_join(train_identity, by = "TransactionID")
+
+cat("Combined dataset:", nrow(train), "rows,", ncol(train), "cols\n")
+```
+
+`train_transaction` contains 590,540 rows and 394 columns, while
+`train_identity` has 144,233 rows and 41 columns. The merged dataset
+has **590,540 rows and 434 columns** — `TransactionID` appears in both
+files but is not duplicated after the join.
+
+Due to the high dimensionality and anonymized nature of the dataset
+(434 features), this EDA focuses on interpretable and structurally
+relevant features: `TransactionAmt`, `DeviceType`, email domains,
+`C1–C14`, and `D1–D15`. Feature importance and selection will be
+addressed in the modeling stage using SHAP values.
