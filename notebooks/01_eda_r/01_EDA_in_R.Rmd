@@ -101,3 +101,70 @@ Due to the high dimensionality and anonymized nature of the dataset
 relevant features: `TransactionAmt`, `DeviceType`, email domains,
 `C1–C14`, and `D1–D15`. Feature importance and selection will be
 addressed in the modeling stage using SHAP values.
+
+## 4. Data Overview
+
+Let's analyze the dataset to understand its structure, missing values, and class balance.
+
+### 4.1 Missing Values
+
+To assess the quality of the data, we calculated the percentage of missing values in each column using the `summarise_all(~ mean(is.na(.)))` function chain. This provides a quick overview of how much information is missing in each feature.
+
+```{r missing-values}
+missing_data <- train |>
+  summarise(across(everything(), ~ mean(is.na(.)))) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "missing_perc"
+  ) |>
+  arrange(desc(missing_perc))
+
+# View top 20 variables with the highest percentage of missing values
+head(missing_data, 20)
+```
+
+From the results above, we observe that several variables (especially `id_24`, `id_25`, `id_07`, `id_08`, and many features from the `id_` and `D` families) have over 85–99% missing values. This is critical because:
+
+- Such high missingness may suggest that these features are either optional, sparsely recorded, or system-dependent.
+- These features may not be useful for modeling without appropriate imputation, encoding, or dimensionality reduction.
+- We must decide whether to drop these variables or retain them by filling missing values (e.g., using domain knowledge or imputation strategies).
+
+This information will be key during the feature selection and preprocessing phases.
+
+### 4.2 Class Balance
+
+This dataset is highly imbalanced, with a strong predominance of non-fraudulent transactions. Understanding this imbalance is crucial before training machine learning models, as it can bias the models toward the majority class.
+
+```{r class-balance}
+# Distribution of target variable
+train |>
+  count(isFraud) |>
+  mutate(percentage = n / sum(n))
+```
+
+**Observation**:
+
+The target variable `isFraud` is heavily imbalanced:
+
+- **Non-fraudulent transactions** (isFraud = 0): 569,877 (~96.5%)
+- **Fraudulent transactions** (isFraud = 1): 20,663 (~3.5%)
+
+This imbalance has direct implications for modeling and evaluation:
+
+- **Accuracy is misleading**: a model predicting "no fraud" for every
+  transaction achieves 96.5% accuracy while detecting zero fraud cases.
+  AUC-ROC and Average Precision (AUC-PR) will be used instead.
+
+- **Class weighting over resampling**: `scale_pos_weight` in LightGBM
+  penalizes misclassification of the minority class without generating
+  synthetic data. Resampling techniques like SMOTE are avoided —
+  generating synthetic fraudulent transactions in a 400+ dimensional
+  space produces samples that do not reflect real fraud patterns.
+
+- **Threshold tuning**: the default classification threshold of 0.5
+  is suboptimal for imbalanced datasets. Since this is a Kaggle
+  competition evaluated on AUC-ROC — a threshold-free metric —
+  threshold selection is not critical here, but would be a key
+  decision in a production deployment where false positive and
+  false negative costs differ.
