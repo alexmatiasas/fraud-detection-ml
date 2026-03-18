@@ -168,3 +168,38 @@ This imbalance has direct implications for modeling and evaluation:
   threshold selection is not critical here, but would be a key
   decision in a production deployment where false positive and
   false negative costs differ.
+
+## 5. Exploratory Visualizations
+
+### 5.1 Transaction Amount Distribution
+
+```{r transaction-amound}
+ggplot(train, aes(x = TransactionAmt, fill = factor(isFraud))) +
+  geom_histogram(bins = 100, position = "identity", alpha = 0.6) +
+  scale_x_log10(labels = scales::dollar) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  labs(
+    title = "Transaction Amount Distribution (Log Scale)",
+    x = "Transaction Amount (log scale)",
+    y = "Count",
+    fill = "Transaction type"
+  ) +
+  theme_minimal()
+```
+
+**Observation**:
+
+- The majority of transactions cluster between $10 and $1,000, with a
+  peak around $50–$100 suggesting common purchase amounts.
+- Fraudulent transactions follow a distribution very similar to legitimate
+  ones in terms of amount — `TransactionAmt` alone is not a strong
+  discriminator between classes.
+- The spikes at round numbers (e.g., $100, $200) suggest transaction
+  rounding behavior, which may be informative as an engineered binary
+  feature (e.g., `is_round_amount`).
+- Log scaling is necessary to visualize the distribution — the raw
+  amounts are heavily right-skewed, which justifies a `log(TransactionAmt)`
+  transformation in the feature engineering pipeline.
