@@ -1,0 +1,34 @@
+---
+title: "Exploratory Data Analysis (EDA) - IEEE-CIS Fraud Detection"
+author: "Manuel Alejandro Matías Astorga"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: false
+    theme: flatly
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+```
+
+## 1. Introduction
+
+This notebook presents an Exploratory Data Analysis (EDA) of the [IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection) dataset, provided by Vesta Corporation for a Kaggle competition. The dataset contains anonymized transactional and identity information with the the goal of detecting fraudulent transactions.
+
+**Key questions this EDA answers:**
+
+- How severe is the class imbalance, and what does it imply for modeling?
+- What patterns in transaction amount, time, and device distinguish fraud from legitimate transactions?
+- Which features carry the most signal for fraud detection?
+- What multicollinearity exists among predictors?
+- Where are the missing values concentrated, and are they informative?
