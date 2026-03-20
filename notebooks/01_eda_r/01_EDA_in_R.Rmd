@@ -405,3 +405,223 @@ This bar plot shows the proportion of fraudulent transactions by day of the week
   interaction with `TransactionHour` more valuable than raw day alone.
 
 As a result, `TransactionDay` may have **limited predictive power on its own**, but could still be useful when combined with other temporal or categorical features.
+
+### 5.4 Categorical Features Analysis
+
+We will explore some categorical features that may provide insights into the fraud detection process. The following features are of particular interest:
+
+- `ProductCD`: Product code associated with the transaction.
+- `card4`: Card type (e.g., Visa, Mastercard).
+- `card6`: Card type (e.g., credit, debit).
+- `P_emaildomain`: Email domain of the payer.
+- `R_emaildomain`: Email domain of the recipient.
+
+We analyze the fraud proportions across these categories using proportion-based bar plots (`position = "fill"` in `ggplot2`) to better visualize class imbalance across each level.
+
+- `ProductCD`
+
+```{r productcd-barplot}
+ggplot(train, aes(x = ProductCD, fill = factor(isFraud))) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Fraud Proportion by ProductCD",
+    x = "ProductCD",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  theme_minimal()
+```
+
+**Observation**:
+
+- Product code C has a noticeably higher fraud rate compared to the others.
+- This may suggest that some product categories are more prone to fraud, perhaps due to their price range, popularity, or nature of transactions.
+
+- `card4`
+
+```{r card4-barplot}
+ggplot(train, aes(x = card4, fill = factor(isFraud))) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Fraud Proportion by Card Type (card4)",
+    x = "Card Type",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  theme_minimal()
+```
+
+**Observation**:
+
+- Among card types, `discover` shows the highest fraud proportion.
+- `Visa` and `Mastercard` dominate in volume, but their fraud ratio is relatively lower.
+
+- `card6`
+
+```{r card6-barplot}
+ggplot(train, aes(x = card6, fill = factor(isFraud))) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Fraud Proportion by Card Type (card6)",
+    x = "Card Type (card6)",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  theme_minimal()
+```
+
+**Observation**:
+
+- Fraud is more frequent in `credit` cards compared to `debit` or `charge` cards.
+- Transactions labeled as `debit or credit` are rare and also show lower fraud prevalence, this may due to the duplication of options since there is a separate `credit` and `debit` option..
+
+- `P_emaildomain`
+
+```{r p-emaildomain-barplot}
+# Top 10 most common purchaser email domains
+top_p_domains <- train |>
+  count(P_emaildomain) |>
+  slice_max(n, n = 10) |>
+  pull(P_emaildomain)
+
+ggplot(
+  train |> filter(P_emaildomain %in% top_p_domains),
+  aes(x = P_emaildomain, fill = factor(isFraud))
+) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Fraud Proportion by Purchaser Email Domain",
+    x = "Purchaser Email Domain (Top 10)",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  theme_minimal() +
+  coord_flip()
+```
+
+```{r p-emaildomain-fraud-rate }
+p_email_domain_fr <- train |>
+  filter(!is.na(P_emaildomain)) |>
+  count(P_emaildomain, isFraud) |>
+  group_by(P_emaildomain) |>
+  mutate(total = sum(n), fraud_rate = n / total) |>
+  ungroup() |>
+  filter(isFraud == 1, total >= 500) |>
+  slice_max(fraud_rate, n = 10)
+
+
+ggplot(p_email_domain_fr, aes(x = reorder(P_emaildomain, fraud_rate), y = fraud_rate)) +
+  geom_col(fill = "#D85A30") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Top 10 Purchaser Email Domains by Fraud Rate (min. 500 transactions)",
+    x = "Purchaser Email Domain",
+    y = "Fraud Rate"
+  ) +
+  theme_minimal()
+```
+
+**Observation**:
+
+- Among the top 10 purchaser domains by volume, `outlook.com` shows the
+  highest fraud proportion (~12.5%), followed by `hotmail.com` (~6%) and
+  `gmail.com` (~5.5%). High-volume providers like `gmail.com` and
+  `yahoo.com` have relatively lower fraud rates despite their volume.
+- The fraud rate plot (min. 500 transactions) reveals `mail.com` as the
+  highest-risk purchaser domain (~20%), followed by `outlook.com` (~10%)
+  and `live.com.mx` (~5.5%). Microsoft-affiliated domains (`outlook`,
+  `hotmail`, `live`) appear consistently across the top — possibly
+  reflecting account compromise patterns on older email platforms.
+- **Pipeline implication**: `P_emaildomain` will be frequency-encoded.
+  Microsoft-affiliated domains (`outlook.com`, `hotmail.com`, `live.com`,
+  `live.com.mx`) may warrant grouping into a single category.
+
+- `R_emaildomain`
+
+```{r r-emaildomain-barplot}
+# Top 10 most common recipient email domains
+top_r_domains <- train |>
+  count(R_emaildomain) |>
+  slice_max(n, n = 10) |>
+  pull(R_emaildomain)
+
+ggplot(
+  train |> filter(R_emaildomain %in% top_r_domains),
+  aes(x = R_emaildomain, fill = factor(isFraud))
+) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Fraud Proportion by Recipient Email Domain",
+    x = "Recipient Email Domain (Top 10)",
+    y = "Proportion",
+    fill = "Is Fraud"
+  ) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  theme_minimal() +
+  coord_flip()
+```
+
+```{r r-emaildomain-fraud-rate }
+r_email_domain_fr <- train |>
+  filter(!is.na(R_emaildomain)) |>
+  count(R_emaildomain, isFraud) |>
+  group_by(R_emaildomain) |>
+  mutate(total = sum(n), fraud_rate = n / total) |>
+  ungroup() |>
+  filter(isFraud == 1, total >= 500) |>
+  slice_max(fraud_rate, n = 10)
+
+
+ggplot(r_email_domain_fr, aes(x = reorder(R_emaildomain, fraud_rate), y = fraud_rate)) +
+  geom_col(fill = "#D85A30") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Top 10 Recipient Email Domains by Fraud Rate (min. 500 transactions)",
+    x = "Recipient Email Domain",
+    y = "Fraud Rate"
+  ) +
+  theme_minimal()
+```
+
+**Observation:**
+
+- Recipient domains show notably higher fraud rates than purchaser domains
+  for the same providers — `outlook.com` leads at ~17.5%, followed by
+  `icloud.com` (~12.5%), `gmail.com` (~12%), and `hotmail.com` (~8-10%).
+- `anonymous.com` appears in the recipient top 10 (~2.5%) despite lower
+  volume — its presence as a recipient domain is a strong fraud signal
+  given its name suggests intentional anonymization.
+- The asymmetry between purchaser and recipient fraud rates is notable:
+  a transaction where the recipient uses `outlook.com` is riskier than
+  one where the purchaser uses the same domain. This suggests recipient
+  email domain carries more signal than purchaser email domain.
+- **Pipeline implication**: `R_emaildomain` will be frequency-encoded.
+  A binary feature `p_r_domain_match` (purchaser domain == recipient
+  domain) captures whether both sides of the transaction share the same
+  email provider — an unusual pattern worth investigating.
+- `anonymous.com` appears as a recipient domain with ~2.5% fraud rate —
+  below the dataset average of ~3.5%. Its presence is notable given the
+  name implies intentional anonymization, but the data does not support
+  flagging it as high-risk based on fraud rate alone. It warrants
+  monitoring but not automatic flagging.
