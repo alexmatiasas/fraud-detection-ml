@@ -9,6 +9,9 @@ output:
     number_sections: false
     theme: flatly
     highlight: tango
+editor_options:
+  markdown:
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -23,48 +26,59 @@ knitr::opts_chunk$set(
 
 ## 1. Introduction
 
-This notebook presents an Exploratory Data Analysis (EDA) of the [IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection) dataset, provided by Vesta Corporation for a Kaggle competition. The dataset contains anonymized transactional and identity information with the the goal of detecting fraudulent transactions.
+This notebook presents an Exploratory Data Analysis (EDA) of the
+[IEEE-CIS Fraud
+Detection](https://www.kaggle.com/competitions/ieee-fraud-detection)
+dataset, provided by Vesta Corporation for a Kaggle competition. The
+dataset contains anonymized transactional and identity information with
+the the goal of detecting fraudulent transactions.
 
 **Key questions this EDA answers:**
 
-- How severe is the class imbalance, and what does it imply for modeling?
-- What patterns in transaction amount, time, and device distinguish fraud from legitimate transactions?
+- How severe is the class imbalance, and what does it imply for
+  modeling?
+- What patterns in transaction amount, time, and device distinguish
+  fraud from legitimate transactions?
 - Which features carry the most signal for fraud detection?
 - What multicollinearity exists among predictors?
 - Where are the missing values concentrated, and are they informative?
 
 ## 2. Libraries
 
-We'll require the next libraries for data manipulation and visualization.
+We'll require the next libraries for data manipulation and
+visualization.
 
 ```{r libraries}
 library(tidyverse)
-library(arrow) # read parquet — replaces data.table for I/O
+library(arrow)
 library(gridExtra)
 library(skimr)
 library(ggcorrplot)
 library(naniar)
+library(here)
 ```
 
 ## 3. Data Loading
 
 The dataset is composed of two main files:
 
-- **`train_transaction`**: transactional data for online purchases — amount,
-  product codes, card and address information, and the fraud label (`isFraud`).
+- **`train_transaction`**: transactional data for online purchases —
+  amount, product codes, card and address information, and the fraud
+  label (`isFraud`).
 
-- **`train_identity`**: identity-related features (device info, browser, email
-  domain) for a subset of transactions. Only ~24% of transactions have
-  corresponding identity information.
+- **`train_identity`**: identity-related features (device info, browser,
+  email domain) for a subset of transactions. Only \~24% of transactions
+  have corresponding identity information.
 
 To perform a comprehensive analysis, both datasets are merged using
-`TransactionID` as the join key. A **left join** preserves all transactions
-from `train_transaction`, including those without identity information.
-This ensures:
+`TransactionID` as the join key. A **left join** preserves all
+transactions from `train_transaction`, including those without identity
+information. This ensures:
 
 - The **full set of transactions** is available for fraud analysis.
 - Identity features are included **only when available** — their absence
-  is itself informative and will be considered during feature engineering.
+  is itself informative and will be considered during feature
+  engineering.
 
 ```{r data-loading}
 train_transaction <- read_parquet(
@@ -92,23 +106,27 @@ cat("Combined dataset:", nrow(train), "rows,", ncol(train), "cols\n")
 ```
 
 `train_transaction` contains 590,540 rows and 394 columns, while
-`train_identity` has 144,233 rows and 41 columns. The merged dataset
-has **590,540 rows and 434 columns** — `TransactionID` appears in both
-files but is not duplicated after the join.
+`train_identity` has 144,233 rows and 41 columns. The merged dataset has
+**590,540 rows and 434 columns** — `TransactionID` appears in both files
+but is not duplicated after the join.
 
-Due to the high dimensionality and anonymized nature of the dataset
-(434 features), this EDA focuses on interpretable and structurally
-relevant features: `TransactionAmt`, `DeviceType`, email domains,
-`C1–C14`, and `D1–D15`. Feature importance and selection will be
-addressed in the modeling stage using SHAP values.
+Due to the high dimensionality and anonymized nature of the dataset (434
+features), this EDA focuses on interpretable and structurally relevant
+features: `TransactionAmt`, `DeviceType`, email domains, `C1–C14`, and
+`D1–D15`. Feature importance and selection will be addressed in the
+modeling stage using SHAP values.
 
 ## 4. Data Overview
 
-Let's analyze the dataset to understand its structure, missing values, and class balance.
+Let's analyze the dataset to understand its structure, missing values,
+and class balance.
 
 ### 4.1 Missing Values
 
-To assess the quality of the data, we calculated the percentage of missing values in each column using the `summarise_all(~ mean(is.na(.)))` function chain. This provides a quick overview of how much information is missing in each feature.
+To assess the quality of the data, we calculated the percentage of
+missing values in each column using the
+`summarise_all(~ mean(is.na(.)))` function chain. This provides a quick
+overview of how much information is missing in each feature.
 
 ```{r missing-values}
 missing_data <- train |>
@@ -124,17 +142,27 @@ missing_data <- train |>
 head(missing_data, 20)
 ```
 
-From the results above, we observe that several variables (especially `id_24`, `id_25`, `id_07`, `id_08`, and many features from the `id_` and `D` families) have over 85–99% missing values. This is critical because:
+From the results above, we observe that several variables (especially
+`id_24`, `id_25`, `id_07`, `id_08`, and many features from the `id_` and
+`D` families) have over 85–99% missing values. This is critical because:
 
-- Such high missingness may suggest that these features are either optional, sparsely recorded, or system-dependent.
-- These features may not be useful for modeling without appropriate imputation, encoding, or dimensionality reduction.
-- We must decide whether to drop these variables or retain them by filling missing values (e.g., using domain knowledge or imputation strategies).
+- Such high missingness may suggest that these features are either
+  optional, sparsely recorded, or system-dependent.
+- These features may not be useful for modeling without appropriate
+  imputation, encoding, or dimensionality reduction.
+- We must decide whether to drop these variables or retain them by
+  filling missing values (e.g., using domain knowledge or imputation
+  strategies).
 
-This information will be key during the feature selection and preprocessing phases.
+This information will be key during the feature selection and
+preprocessing phases.
 
 ### 4.2 Class Balance
 
-This dataset is highly imbalanced, with a strong predominance of non-fraudulent transactions. Understanding this imbalance is crucial before training machine learning models, as it can bias the models toward the majority class.
+This dataset is highly imbalanced, with a strong predominance of
+non-fraudulent transactions. Understanding this imbalance is crucial
+before training machine learning models, as it can bias the models
+toward the majority class.
 
 ```{r class-balance}
 # Distribution of target variable
@@ -147,8 +175,8 @@ train |>
 
 The target variable `isFraud` is heavily imbalanced:
 
-- **Non-fraudulent transactions** (isFraud = 0): 569,877 (~96.5%)
-- **Fraudulent transactions** (isFraud = 1): 20,663 (~3.5%)
+- **Non-fraudulent transactions** (isFraud = 0): 569,877 (\~96.5%)
+- **Fraudulent transactions** (isFraud = 1): 20,663 (\~3.5%)
 
 This imbalance has direct implications for modeling and evaluation:
 
@@ -162,19 +190,18 @@ This imbalance has direct implications for modeling and evaluation:
   generating synthetic fraudulent transactions in a 400+ dimensional
   space produces samples that do not reflect real fraud patterns.
 
-- **Threshold tuning**: the default classification threshold of 0.5
-  is suboptimal for imbalanced datasets. Since this is a Kaggle
-  competition evaluated on AUC-ROC — a threshold-free metric —
-  threshold selection is not critical here, but would be a key
-  decision in a production deployment where false positive and
-  false negative costs differ.
+- **Threshold tuning**: the default classification threshold of 0.5 is
+  suboptimal for imbalanced datasets. Since this is a Kaggle competition
+  evaluated on AUC-ROC — a threshold-free metric — threshold selection
+  is not critical here, but would be a key decision in a production
+  deployment where false positive and false negative costs differ.
 
 ## 5. Exploratory Visualizations
 
 ### 5.1 Transaction Amount Distribution
 
-```{r transaction-amound}
-ggplot(train, aes(x = TransactionAmt, fill = factor(isFraud))) +
+```{r transaction-amount}
+trans_amount <- ggplot(train, aes(x = TransactionAmt, fill = factor(isFraud))) +
   geom_histogram(bins = 100, position = "identity", alpha = 0.6) +
   scale_x_log10(labels = scales::dollar) +
   scale_fill_manual(
@@ -188,26 +215,35 @@ ggplot(train, aes(x = TransactionAmt, fill = factor(isFraud))) +
     fill = "Transaction type"
   ) +
   theme_minimal()
+trans_amount
+ggsave(
+  filename = here("reports", "figures", "transaction_amt_dist.png"),
+  plot = trans_amount,
+  width = 10,
+  height = 6,
+  dpi = "print"
+)
 ```
 
 **Observation**:
 
-- The majority of transactions cluster between $10 and $1,000, with a
-  peak around $50–$100 suggesting common purchase amounts.
-- Fraudulent transactions follow a distribution very similar to legitimate
-  ones in terms of amount — `TransactionAmt` alone is not a strong
-  discriminator between classes.
-- The spikes at round numbers (e.g., $100, $200) suggest transaction
+- The majority of transactions cluster between \$10 and \$1,000, with a
+  peak around \$50–\$100 suggesting common purchase amounts.
+- Fraudulent transactions follow a distribution very similar to
+  legitimate ones in terms of amount — `TransactionAmt` alone is not a
+  strong discriminator between classes.
+- The spikes at round numbers (e.g., \$100, \$200) suggest transaction
   rounding behavior, which may be informative as an engineered binary
   feature (e.g., `is_round_amount`).
 - Log scaling is necessary to visualize the distribution — the raw
-  amounts are heavily right-skewed, which justifies a `log(TransactionAmt)`
-  transformation in the feature engineering pipeline.
+  amounts are heavily right-skewed, which justifies a
+  `log(TransactionAmt)` transformation in the feature engineering
+  pipeline.
 
 ### 5.2 Device Info
 
 `DeviceInfo` and `DeviceType` come from `train_identity`, which covers
-only 144,233 of 590,540 transactions (~24%). The remaining ~76% of
+only 144,233 of 590,540 transactions (\~24%). The remaining \~76% of
 missing values after the join are structural — not a data quality issue.
 
 ```{r device-info-distribution}
@@ -277,38 +313,46 @@ train |>
 
 **Observations:**
 
-- The ~76% missingness in `DeviceInfo` after the join is structural —
-  only ~24% of transactions have identity records. Within that subset,
+- The \~76% missingness in `DeviceInfo` after the join is structural —
+  only \~24% of transactions have identity records. Within that subset,
   missingness drops to 18% for `DeviceInfo` and 2% for `DeviceType`.
-- Windows dominates the identity subset (~48,000 records), followed
-  by iOS (~20,000) and MacOS (~13,000). `Trident/7.0` and `rv:11.0`
-  are IE11 user agent fragments — grouped with Windows/IE.
+
+- Windows dominates the identity subset (\~48,000 records), followed by
+  iOS (\~20,000) and MacOS (\~13,000). `Trident/7.0` and `rv:11.0` are
+  IE11 user agent fragments — grouped with Windows/IE.
+
 - `DeviceInfo` contains truncated user agent strings, not full UA
   strings — standard UA parsing libraries are unreliable on this data.
   OS family grouping uses pattern matching: `Build/` identifies Android
-  model numbers. The `Other` category warrants further investigation
-  in feature engineering.
-- **Device type**: mobile shows notably higher fraud rate (>10%) vs
-  desktop (~6.25%). Missing device type has very low fraud rate
-  (<2.5%) — consistent with lower-risk transaction channels where
+  model numbers. The `Other` category warrants further investigation in
+  feature engineering.
+
+- **Device type**: mobile shows notably higher fraud rate (\>10%) vs
+  desktop (\~6.25%). Missing device type has very low fraud rate
+  (\<2.5%) — consistent with lower-risk transaction channels where
   device fingerprinting is unavailable.
-- **OS family**: Android has the highest fraud rate (~13%),
-  significantly above iOS (~6%), Windows/IE (~6%), Other (~5%),
-  and MacOS (~2.5%).
-- The `missing` category in `DeviceType` (~2.5% fraud rate) aggregates
-  all NAs including the ~446,307 structural missing values. Its low
+
+- **OS family**: Android has the highest fraud rate (\~13%),
+  significantly above iOS (\~6%), Windows/IE (\~6%), Other (\~5%), and
+  MacOS (\~2.5%).
+
+- The `missing` category in `DeviceType` (\~2.5% fraud rate) aggregates
+  all NAs including the \~446,307 structural missing values. Its low
   fraud rate reflects dilution by the large volume of transactions
-  without identity records — not that missing device info predicts
-  lower fraud.
+  without identity records — not that missing device info predicts lower
+  fraud.
+
 - `Other` in `os_family` excludes NAs entirely (filtered before
-  grouping) — it represents only transactions with a `DeviceInfo`
-  value that did not match any OS pattern. These are likely obscure
-  device strings worth investigating in feature engineering.
+  grouping) — it represents only transactions with a `DeviceInfo` value
+  that did not match any OS pattern. These are likely obscure device
+  strings worth investigating in feature engineering.
+
 - **`has_identity`** is therefore critical: it separates the structural
-  missing (~76%) from the actual device populations, preventing the
+  missing (\~76%) from the actual device populations, preventing the
   dilution effect seen in the `missing` DeviceType category.
 
 - **Pipeline implications**:
+
   - `has_identity`: binary feature encoding absence of identity record
   - `os_family`: OS grouped from `DeviceInfo` using `Build/` pattern
   - `DeviceType`: label encoded (mobile/desktop/missing)
@@ -336,7 +380,9 @@ train <- train |>
   )
 ```
 
-next step is visualizing the distribution of transactions by hour and day of the week. This helps us understand if there are specific times or days when fraudulent transactions are more likely to occur.
+next step is visualizing the distribution of transactions by hour and
+day of the week. This helps us understand if there are specific times or
+days when fraudulent transactions are more likely to occur.
 
 ```{r temporal-features-plot}
 # Plot fraud rate by hour
@@ -358,16 +404,16 @@ ggplot(train, aes(x = TransactionHour, fill = factor(isFraud))) +
 
 **Observation:**
 
-This plot shows the proportion of fraudulent vs. non-fraudulent transactions across different hours of the day.
+This plot shows the proportion of fraudulent vs. non-fraudulent
+transactions across different hours of the day.
 
-**Hour of day:**
-- Most transactions occur between 5 a.m. and 12 p.m. (UTC reference).
-- Fraudulent activity peaks between 6–9 a.m., with a maximum around
-  7 a.m. — consistent with automated fraud attempts during low
-  supervision periods or bot activity scheduled around timezone patterns.
-- **Pipeline implication**: `TransactionHour` will be included as a
-  cyclical feature using sin/cos encoding to preserve the circular
-  nature of time (hour 23 is close to hour 0).
+**Hour of day:** - Most transactions occur between 5 a.m. and 12 p.m.
+(UTC reference). - Fraudulent activity peaks between 6–9 a.m., with a
+maximum around 7 a.m. — consistent with automated fraud attempts during
+low supervision periods or bot activity scheduled around timezone
+patterns. - **Pipeline implication**: `TransactionHour` will be included
+as a cyclical feature using sin/cos encoding to preserve the circular
+nature of time (hour 23 is close to hour 0).
 
 This information could be useful to:
 
@@ -392,23 +438,26 @@ ggplot(train, aes(x = TransactionDay, fill = factor(isFraud))) +
 
 **Observation:**
 
-This bar plot shows the proportion of fraudulent transactions by day of the week.
+This bar plot shows the proportion of fraudulent transactions by day of
+the week.
 
-**Day of week:**
-- Fraud rate is remarkably stable across all days — no significant
-  peaks or drops.
-- This uniformity suggests automated fraud systems operating
-  independently of calendar patterns.
-- `TransactionDay` has limited standalone predictive power but may
-  contribute signal in interaction features (e.g., `hour × day`).
-- **Pipeline implication**: included as a low-priority feature —
-  interaction with `TransactionHour` more valuable than raw day alone.
+**Day of week:** - Fraud rate is remarkably stable across all days — no
+significant peaks or drops. - This uniformity suggests automated fraud
+systems operating independently of calendar patterns. - `TransactionDay`
+has limited standalone predictive power but may contribute signal in
+interaction features (e.g., `hour × day`). - **Pipeline implication**:
+included as a low-priority feature — interaction with `TransactionHour`
+more valuable than raw day alone.
 
-As a result, `TransactionDay` may have **limited predictive power on its own**, but could still be useful when combined with other temporal or categorical features.
+As a result, `TransactionDay` may have **limited predictive power on its
+own**, but could still be useful when combined with other temporal or
+categorical features.
 
 ### 5.4 Categorical Features Analysis
 
-We will explore some categorical features that may provide insights into the fraud detection process. The following features are of particular interest:
+We will explore some categorical features that may provide insights into
+the fraud detection process. The following features are of particular
+interest:
 
 - `ProductCD`: Product code associated with the transaction.
 - `card4`: Card type (e.g., Visa, Mastercard).
@@ -416,7 +465,9 @@ We will explore some categorical features that may provide insights into the fra
 - `P_emaildomain`: Email domain of the payer.
 - `R_emaildomain`: Email domain of the recipient.
 
-We analyze the fraud proportions across these categories using proportion-based bar plots (`position = "fill"` in `ggplot2`) to better visualize class imbalance across each level.
+We analyze the fraud proportions across these categories using
+proportion-based bar plots (`position = "fill"` in `ggplot2`) to better
+visualize class imbalance across each level.
 
 - `ProductCD`
 
@@ -438,8 +489,12 @@ ggplot(train, aes(x = ProductCD, fill = factor(isFraud))) +
 
 **Observation**:
 
-- Product code C has a noticeably higher fraud rate compared to the others.
-- This may suggest that some product categories are more prone to fraud, perhaps due to their price range, popularity, or nature of transactions.
+- Product code C has a noticeably higher fraud rate compared to the
+  others.
+
+- This may suggest that some product categories are more prone to fraud,
+  perhaps due to their price range, popularity, or nature of
+  transactions.
 
 - `card4`
 
@@ -462,7 +517,9 @@ ggplot(train, aes(x = card4, fill = factor(isFraud))) +
 **Observation**:
 
 - Among card types, `discover` shows the highest fraud proportion.
-- `Visa` and `Mastercard` dominate in volume, but their fraud ratio is relatively lower.
+
+- `Visa` and `Mastercard` dominate in volume, but their fraud ratio is
+  relatively lower.
 
 - `card6`
 
@@ -484,8 +541,12 @@ ggplot(train, aes(x = card6, fill = factor(isFraud))) +
 
 **Observation**:
 
-- Fraud is more frequent in `credit` cards compared to `debit` or `charge` cards.
-- Transactions labeled as `debit or credit` are rare and also show lower fraud prevalence, this may due to the duplication of options since there is a separate `credit` and `debit` option..
+- Fraud is more frequent in `credit` cards compared to `debit` or
+  `charge` cards.
+
+- Transactions labeled as `debit or credit` are rare and also show lower
+  fraud prevalence, this may due to the duplication of options since
+  there is a separate `credit` and `debit` option..
 
 - `P_emaildomain`
 
@@ -541,17 +602,21 @@ ggplot(p_email_domain_fr, aes(x = reorder(P_emaildomain, fraud_rate), y = fraud_
 **Observation**:
 
 - Among the top 10 purchaser domains by volume, `outlook.com` shows the
-  highest fraud proportion (~12.5%), followed by `hotmail.com` (~6%) and
-  `gmail.com` (~5.5%). High-volume providers like `gmail.com` and
+  highest fraud proportion (\~12.5%), followed by `hotmail.com` (\~6%)
+  and `gmail.com` (\~5.5%). High-volume providers like `gmail.com` and
   `yahoo.com` have relatively lower fraud rates despite their volume.
+
 - The fraud rate plot (min. 500 transactions) reveals `mail.com` as the
-  highest-risk purchaser domain (~20%), followed by `outlook.com` (~10%)
-  and `live.com.mx` (~5.5%). Microsoft-affiliated domains (`outlook`,
-  `hotmail`, `live`) appear consistently across the top — possibly
-  reflecting account compromise patterns on older email platforms.
+  highest-risk purchaser domain (\~20%), followed by `outlook.com`
+  (\~10%) and `live.com.mx` (\~5.5%). Microsoft-affiliated domains
+  (`outlook`, `hotmail`, `live`) appear consistently across the top —
+  possibly reflecting account compromise patterns on older email
+  platforms.
+
 - **Pipeline implication**: `P_emaildomain` will be frequency-encoded.
-  Microsoft-affiliated domains (`outlook.com`, `hotmail.com`, `live.com`,
-  `live.com.mx`) may warrant grouping into a single category.
+  Microsoft-affiliated domains (`outlook.com`, `hotmail.com`,
+  `live.com`, `live.com.mx`) may warrant grouping into a single
+  category.
 
 - `R_emaildomain`
 
