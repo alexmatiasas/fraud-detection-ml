@@ -1352,3 +1352,138 @@ variables are informative for fraud prediction. Product type
 meaningful variation in fraud rates across categories. These features
 may be especially valuable for downstream modeling, and further
 interaction effects could be explored.
+
+### 5.10 Dimensionality Reduction with PCA
+
+Principal Component Analysis (PCA) is a technique used to reduce the
+dimensionality of high-dimensional data by transforming correlated
+variables into a smaller number of uncorrelated variables called
+principal components. Although PCA is not ideal for interpretability, it
+is useful for visualizing potential separation between fraudulent and
+non-fraudulent transactions.
+
+#### 5.10.1 Data Preparation for PCA
+
+We use the cleaned numerical dataset from the correlation analysis
+(`train_num`) and apply **z-score standardization** (mean = 0, std. dev.
+= 1) to each variable before computing the principal components.
+
+```{r pca-preparation}
+# Ensure all numeric values are scaled
+numeric_scaled <- train_num |>
+  select(-isFraud) |>
+  mutate_all(~ scale(.) |> as.vector())
+
+# Attach target back
+pca_data <- cbind(numeric_scaled, isFraud = train_num$isFraud)
+```
+
+**Note**:
+
+- Out of 177 numeric features available (excluding `isFraud`), 176 were
+  used in PCA.
+- The variable `V305` was excluded because it had zero variance (i.e.,
+  constant value across samples). Variables with zero variance do not
+  contribute to PCA and must be removed.
+
+#### 5.10.2 PCA Execution
+
+To make PCA computationally tractable, we randomly sample 10,000
+observations from the dataset and remove variables with zero variance.
+
+```{r pca-execution}
+# Step 1: sample 10,000 rows (with isFraud)
+pca_sample <- train_num |>
+  sample_n(10000)
+
+# Step 2: drop isFraud and remove constant columns (zero variance)
+scaled_sample <- pca_sample |>
+  select(-isFraud) |>
+  select(where(~ var(.x, na.rm = TRUE) > 0)) |>
+  mutate_all(~ scale(.) |> as.vector())
+
+# Step 3: apply PCA
+pca_result <- prcomp(scaled_sample, center = TRUE, scale. = TRUE)
+
+# Step 4: create plot data
+pca_df <- as.data.frame(pca_result$x[, 1:2])
+pca_df$isFraud <- factor(pca_sample$isFraud)
+
+# Step 5: plot
+ggplot(pca_df, aes(x = PC1, y = PC2, color = isFraud)) +
+  geom_point(alpha = 0.5, size = 1) +
+  labs(
+    title = "PCA (Sample of 10K)",
+    x = "PC1", y = "PC2",
+    color = "Is Fraud"
+  ) +
+  theme_minimal()
+```
+
+Interpretation:
+
+- Each point represents a transaction, projected into a 2D space formed
+  by the two directions of greatest variance in the dataset: PC1 and
+  PC2.
+- Transactions are not clearly separated by fraud status, confirming
+  that fraud patterns are subtle and not captured by linear combinations
+  alone.
+- Some outliers lie far along the principal axes, suggesting
+  transactions that deviate significantly from typical behavior. These
+  may be interesting candidates for anomaly detection.
+- Most fraudulent transactions are embedded within the large cloud of
+  normal transactions, again reinforcing the challenge of detecting
+  fraud via simple linear boundaries.
+
+#### 5.10.3 Variance Explained by Principal Components
+
+We now assess how much variance each principal component captures.
+
+```{r pca-variance-summary}
+# Show variance explained by each component
+summary(pca_result)
+```
+
+You can also visualize it more clarly:
+
+```{r pca-variance-plot}
+# Variance proportion
+pca_var <- summary(pca_result)$importance[2, 1:10] # Proportion of variance
+
+# Barplot
+barplot(pca_var,
+  names.arg = paste0("PC", 1:10),
+  main = "Variance Explained by Top 10 Principal Components",
+  xlab = "Principal Component",
+  ylab = "Proportion of Variance",
+  col = "#D85A30"
+)
+```
+
+**Interpretation**:
+
+- PC1 captures about 13–14% of the total variance, followed by PC2 with
+  around 11%.
+- The first 2 components together explain approximately 25% of the total
+  variability.
+- Additional components (PC3 to PC10) each add between 3% and 6%,
+  showing that the variance is moderately distributed across many
+  components.
+- This implies that the data’s structure is complex and not dominated by
+  a single axis of variation.
+
+**Conclusion**:
+
+PCA confirms that:
+
+- Fraudulent transactions do not linearly separate from non-fraudulent
+  ones in the first two components.
+- However, PCA remains valuable for:
+  - Anomaly detection and visual exploration,
+  - Dimensionality reduction before clustering or linear modeling,
+  - Reducing noise and multicollinearity in downstream tasks.
+
+If used for modeling, a larger number of principal components should be
+retained to preserve enough information. Future steps could include
+training models on the top k components or integrating PCA into a
+pipeline with clustering techniques.
