@@ -1554,3 +1554,47 @@ vs identity tables).
 | id\_ variables nearly 100% missing without identity merge | Create `has_identity` binary flag | Captures structural missingness as a feature — 0.25x odds ratio per literature |
 | V features with moderate missingness (\<20%) | Keep with sentinel imputation | 154 V features are core to model performance; -999 sentinel is standard for LightGBM |
 | Missingness follows row-level patterns | No explicit missingness indicators per feature | Structural patterns are captured by `has_identity`; per-feature indicators add noise |
+
+## 6. Summary and Next Steps
+
+This EDA analyzed all available features in the IEEE-CIS Fraud Detection
+dataset. The analysis focused on extracting actionable decisions for the
+feature engineering pipeline rather than exhaustive description.
+
+**Key Decisions:**
+
+| Feature Group | Decision | Rationale |
+|----|----|----|
+| **TransactionAmt** | Keep, log-transform | Bimodal fraud distribution; extreme outliers carry fraud signal |
+| **TransactionDT** | Keep, extract hour/DoW/Weekend | Temporal fraud patterns (early morning, weekday) |
+| **ProductCD** | Keep, categorical | Product C: 12% fraud rate vs 3.5% baseline |
+| **card1, card2, card3, card5** | Keep, frequency encoding | High cardinality; card aggregates capture velocity |
+| **addr1, addr2** | Keep, frequency encoding | Geographic signal; addr1 is in top features |
+| **M1–M9** | Keep, binary (T→1, F→0, NaN→-1) | Match flags — binary signal for identity verification |
+| **P/R_emaildomain** | Keep, frequency encoding | Rare emails correlate with fraud |
+| **C3** | **Drop** | 99.59% zeros; non-zero values have 0.21% fraud rate (vs 3.5% baseline) — inverse signal, no predictive value |
+| **C4, C7, C8, C10, C12** | Keep (near-binary) | Value = 2 shows 10–14% fraud rate — clear discriminative signal |
+| **C1, C2, C5, C6, C9, C11, C13, C14** | Keep (continuous) | Right-skewed; decile D10 shows elevated fraud; C13/C14 inverse pattern to monitor |
+| **D1–D5, D10, D11, D15** | Keep | Clear inverse monotonic pattern: lower values = higher fraud (D2 ratio D1/D10 = 0.10) |
+| **D6–D9** | **Drop** | 87–94% missing; no structural explanation |
+| **D12–D14** | **Drop** | 89% missing; flat or non-monotonic patterns |
+| **V features (154)** | Keep, apply correlation filter | Most correlated with target (V283, V281, V292); apply |
+| **id features (38)** | Conditional on identity merge | Requires `has_identity` flag; sentinel imputation for missing |
+| **has_identity** | **Engineered feature** | Binary flag capturing structural missingness from identity table |
+
+**Architectural decisions for the Python pipeline:**
+
+- **Missing value strategy**: LightGBM sentinel `-999` for numerical /
+  `"missing"` for categorical — preserves structural missingness signal
+  without explicit imputation
+- **Encoding**: Label encoding for low-cardinality categoricals,
+  frequency encoding for high-cardinality — avoids high-dimensional
+  one-hot encoding
+- **Feature importance**: Computed via LightGBM (split + gain) and SHAP
+  in the Python training pipeline, not in EDA — ensures importance
+  reflects engineered features
+- **Model**: LightGBM baseline with Optuna HPO, evaluated on ROC-AUC and
+  average precision (accuracy is useless at 3.5% fraud rate)
+
+See `configs/features.yaml` for the full feature configuration and
+`configs/train.yaml` for model and evaluation setup.
