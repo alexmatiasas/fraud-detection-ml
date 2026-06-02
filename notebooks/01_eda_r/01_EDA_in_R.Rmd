@@ -1273,3 +1273,82 @@ categorical encoding) will be used for importance analysis, providing
 more reliable rankings than an EDA-level Random Forest run on
 complete-case data. See `configs/train.yaml` for SHAP configuration and
 `src/models/train.py` for the implementation.
+
+### 5.9 Cross-feature exploratory analysis
+
+To better understand how fraud is distributed across categories, we
+compute the fraud rate for selected categorical variables. This
+highlights which categories are more likely to be associated with
+fraudulent behavior.
+
+```{r fraud-rate-function}
+# Helper function to plot fraud rates for a categorical variable
+plot_fraud_rate <- function(data, var) {
+  data |>
+    group_by(.data[[var]]) |>
+    summarise(
+      Count = n(),
+      FraudRate = mean(isFraud, na.rm = TRUE)
+    ) |>
+    filter(Count > 200) |> # Optional: filter rare categories
+    ggplot(aes(x = reorder(.data[[var]], -FraudRate), y = FraudRate)) +
+    geom_col(fill = "#D85A30") +
+    labs(
+      title = paste("Fraud Rate by", var),
+      x = var,
+      y = "Fraud Rate"
+    ) +
+    theme_minimal()
+}
+```
+
+#### 5.9.1 Fraud Rate by `ProductCD`
+
+```{r fraud-rate-productcd}
+# Plot for ProductCD
+plot_fraud_rate(train, "ProductCD")
+```
+
+**Observations**:
+
+- Category `C` has the highest fraud rate (nearly 12%), while `W` has
+  the lowest.
+- This suggests that transactions involving product type `C` should be
+  treated with increased scrutiny during model training or rule design.
+
+#### 5.9.2 Fraud Rate by `card4`
+
+```{r fraud-rate-card4}
+# Plot for card4
+plot_fraud_rate(train, "card4")
+```
+
+**Observations**:
+
+- `Discover` cards exhibit the highest fraud rate (around 8%), compared
+  to others like `Visa` and `Mastercard.`
+- This pattern may reflect underlying behavioral or systemic differences
+  in transactions processed by these networks.
+
+#### 5.9.3 Fraud Rate by `card6`
+
+```{r fraud-rate-card6}
+# Plot for card6
+plot_fraud_rate(train, "card6")
+```
+
+**Observations**:
+
+- `Credit` cards show a significantly higher fraud rate than debit
+  cards.
+- This might relate to the differing risk profiles or spending habits
+  associated with each type.
+
+#### 5.9.4 Summary
+
+This cross-feature fraud rate analysis reinforces that some categorical
+variables are informative for fraud prediction. Product type
+(`ProductCD`), card provider (`card4`), and card type (`card6`) show
+meaningful variation in fraud rates across categories. These features
+may be especially valuable for downstream modeling, and further
+interaction effects could be explored.
