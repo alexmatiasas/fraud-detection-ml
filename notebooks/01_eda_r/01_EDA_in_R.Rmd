@@ -1099,3 +1099,161 @@ train |>
 | **D2** | High priority | Strongest inverse pattern — ratio D1/D10 of 0.10; likely important feature in SHAP analysis |
 | **All D variables** | Missing → -999 | LightGBM sentinel strategy — these variables have structured missingness, so -999 is meaningful |
 | **Inverse pattern** | Document | Values near 0 are associated with fraud; this is a strong behavioral signal worth monitoring in model |
+
+### 5.7 Correlation Analysis
+
+In this section, we examine linear relationships between numeric
+variables to identify:
+
+- Redundancy or multicollinearity
+- Structural patterns and feature clusters
+- Variables that may be useful (or harmful) in modeling
+
+These insights can inform `feature selection`, `regularization`, and
+`dimensionality reduction` strategies such as `PCA` or `Lasso`.
+
+#### 5.7.1 Selection of Numerical Features
+
+We restrict the analysis to numeric variables with fewer than 20%
+missing values to ensure robustness of correlations.
+
+```{r correlation-numeric-selection}
+# Identify numeric columns with low NA ratio
+# Exclude TransactionID explicitly
+numeric_vars <- train |>
+  select(where(is.numeric)) |>
+  select(-TransactionID) |>
+  summarise_all(~ mean(is.na(.))) |>
+  pivot_longer(everything(), names_to = "Variable", values_to = "NA_Percent") |>
+  filter(NA_Percent < 0.2) |>
+  pull(Variable)
+
+# Filter and clean
+train_num <- train |>
+  select(all_of(numeric_vars)) |>
+  drop_na()
+```
+
+#### 5.7.2 Computing Correlation Matrix
+
+We compute the **Pearson correlation matrix** for the cleaned numeric
+dataset.
+
+```{r correlation-matrix}
+# Compute Pearson correlation matrix
+cor_matrix <- cor(train_num, use = "complete.obs", method = "pearson")
+
+# Quick check
+dim(cor_matrix)
+head(cor_matrix[, 1:5])
+```
+
+The full correlation matrix has 177 variables and is illegible as a
+heatmap. Instead, we focus on two targeted views: correlations with the
+target and multicollinearity among top predictors.
+
+#### 5.7.3 Top Correlations with `isFraud`
+
+We extract the variables most linearly associated with the target.
+
+```{r correlation_heatmap2}
+# Ordering by absolute correlation with isFraud
+cor_target <- cor_matrix[, "isFraud"]
+cor_target_sorted <- sort(abs(cor_target), decreasing = TRUE)
+
+# View top correlations
+head(cor_target_sorted, 20)
+```
+
+**Observation**:
+
+- No feature has a strong linear correlation with isFraud (\> 0.15).
+- The most correlated variables include V283, V281, V292, V291, V315,
+  among others.
+- This suggests that fraud detection may require nonlinear patterns or
+  interactions.
+
+#### 5.7.4 Correlation Among Top Predictors
+
+We isolate and visualize the top 15 variables most correlated with the
+target.
+
+```{r correlation_heatmap2-subset}
+# Obtain the top 15 variables with highest absolute correlation with isFraud (except isFraud itself)
+top_vars <- names(cor_target_sorted)[2:16]
+
+# Subset the correlation matrix for these variables
+cor_subset <- cor_matrix[top_vars, top_vars]
+
+# Heatmap
+ggcorrplot(cor_subset,
+  hc.order = TRUE, type = "lower", lab = TRUE,
+  colors = c("#3B8BD4", "white", "#D85A30"),
+  title = "Correlation Matrix of Top 15 Variables Correlated with isFraud",
+  ggtheme = theme_minimal()
+)
+```
+
+**Observation**:
+
+- Variables such as `V282`–`V283`, `V313`–`V315`, and `V291`–`V292` show
+  strong mutual correlations, indicating:
+  - Possible feature redundancy
+  - Opportunities for aggregation or dimensionality reduction
+
+#### 5.7.5 Detecting Multicollinearity (Corr \> 0.90)
+
+To identify highly redundant variables, we extract all variable pairs
+with correlation above 0.90 (excluding self-correlation).
+
+```{r correlation_heatmap2-subset2}
+high_corr_pairs <- which(abs(cor_matrix) > 0.9 & abs(cor_matrix) < 1, arr.ind = TRUE)
+
+# Remove symmetric duplicates
+high_corr_df <- as.data.frame(high_corr_pairs)
+high_corr_df <- high_corr_df[high_corr_df$row < high_corr_df$col, ]
+
+# Add variable names and correlation values
+high_corr_df <- high_corr_df |>
+  mutate(
+    var1 = rownames(cor_matrix)[row],
+    var2 = colnames(cor_matrix)[col],
+    corr = cor_matrix[cbind(row, col)]
+  ) |>
+  arrange(desc(abs(corr)))
+
+head(high_corr_df, 10)
+```
+
+### Correlation Analysis Observations
+
+- The top variables correlated with isFraud (e.g., `V283`, `V281`,
+  `V292`, `V315`, `V289`) exhibit relatively low Pearson correlation
+  coefficients (mostly under 0.15). This suggests that no single
+  variable is linearly predictive of fraud on its own, reaffirming the
+  complex and subtle nature of fraud detection.
+- A subset of features (e.g., `V69`, `V90`, `V291`) show some moderate
+  correlation, but these are likely to be more effective when used
+  together or transformed (e.g., via non-linear models or interactions).
+- Several pairs of variables exhibit very high mutual correlation (above
+  0.99), such as:
+  - `C7` ↔ `C12`
+  - `C10` ↔ `C8`
+  - `C1` ↔ `C11`
+  - `V101` ↔ `V293`
+  - `V95` ↔ `V101`, `V279`
+
+These indicate redundancy or multicollinearity, which could impact model
+stability and interpretability—particularly for linear models.
+
+- `TransactionID` was excluded from the analysis, as it is an identifier
+  and does not convey predictive information about the target.
+
+#### 5.7.6 Pipeline Implications — Correlation
+
+| Finding | Decision | Rationale |
+|----|----|----|
+| No linear feature has | None. Non linear relation detected. | r \< 0.15 with isFraud |
+| V-clusters (V282–V283, V291–V292, V313–V315) show | Dimensional reduction | r \> 0.95 |
+| C7 ↔ C12 and C8 ↔ C10 have | Dimensional reduction | r \> 0.99 |
+| Correlation matrix computed with `complete.obs` | — | 1,478 rows used (0.25% of data) |
