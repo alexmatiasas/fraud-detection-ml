@@ -1257,3 +1257,19 @@ stability and interpretability—particularly for linear models.
 | V-clusters (V282–V283, V291–V292, V313–V315) show | Dimensional reduction | r \> 0.95 |
 | C7 ↔ C12 and C8 ↔ C10 have | Dimensional reduction | r \> 0.99 |
 | Correlation matrix computed with `complete.obs` | — | 1,478 rows used (0.25% of data) |
+
+### 5.8 Feature Importance
+
+Feature importance analysis is deferred to the Python modeling pipeline,
+where it is computed using:
+
+- **LightGBM built-in importance** (split and gain) — available directly
+  from the trained model
+- **SHAP values** — for per-instance interpretability and global feature
+  ranking
+
+The full dataset (with engineered features, sentinel imputation, and
+categorical encoding) will be used for importance analysis, providing
+more reliable rankings than an EDA-level Random Forest run on
+complete-case data. See `configs/train.yaml` for SHAP configuration and
+`src/models/train.py` for the implementation.
