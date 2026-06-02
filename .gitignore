@@ -1,3 +1,7 @@
+# ── MLflow artifacts ────────────────────────────────────────────────────────
+mlruns/
+mlartifacts/
+
 # ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
@@ -30,6 +34,7 @@ htmlcov/
 renv/library/
 renv/staging/
 renv/python/
+notebooks/01_eda_r/01_EDA_in_R_files/
 
 # ── macOS ────────────────────────────────────────────────────────────────────
 .DS_Store
@@ -42,3 +47,20 @@ renv/python/
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+# docker-compose.override.yaml puede tener secrets locales
+docker-compose.override.yaml
+
+# ── Secrets y configuración local ────────────────────────────────────────────
+.env
+.env.local
+*.pem
+*.key
+secrets/
+
+# ── Reportes generados ───────────────────────────────────────────────────────
+reports/figures/*
+!reports/figures/.gitkeep
+.Rproj.user
+.positai
