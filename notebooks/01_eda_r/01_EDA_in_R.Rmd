@@ -1487,3 +1487,70 @@ If used for modeling, a larger number of principal components should be
 retained to preserve enough information. Future steps could include
 training models on the top k components or integrating PCA into a
 pipeline with clustering techniques.
+
+### 5.11 Missing Data Analysis (NA Patterns)
+
+While we’ve previously reviewed missing value percentages across
+variables, visualizing their distribution across observations can reveal
+structured patterns—such as whether certain blocks of features tend to
+be missing together, or whether missingness is concentrated in specific
+transaction types.
+
+To do this, we generate a missing data heatmap of the top 50 variables
+with the highest proportion of missing values. Due to computational
+limits, we sample 5,000 rows from the full dataset.
+
+```{r na-heatmap-setup}
+# Step 1: select top 50 variables with highest NA percentage
+na_top_vars <- train |>
+  summarise(across(everything(), ~ mean(is.na(.)))) |>
+  pivot_longer(everything(), names_to = "variable", values_to = "na_rate") |>
+  arrange(desc(na_rate)) |>
+  slice(1:50) |>
+  pull(variable)
+```
+
+Now we have selected the top 50 variables with the highest missingness.
+Next, we will visualize the missing data patterns.
+
+```{r na-heatmap-plot}
+# step 2: Sample for plotting
+train_na_subset <- train |>
+  select(all_of(na_top_vars)) |>
+  slice_sample(n = 5000)
+
+# step3: Plot heatmap with rotated labels
+vis_miss(train_na_subset, sort_miss = TRUE) +
+  labs(title = "Missing Data Heatmap - Top 50 Variables (Sample of 5,000 Rows)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+    plot.title = element_text(size = 14, face = "bold")
+  )
+```
+
+**Interpretation**:
+
+- The majority of the top 50 variables exhibit high missingness, often
+  above 85%, with some exceeding 95%.
+- There is clear horizontal banding, which suggests that missingness is
+  not completely random—it may be associated with particular transaction
+  types or sources.
+- Blocks of variables (e.g., many id\_ or V features) appear to be
+  missing together, possibly reflecting system-level logging gaps or
+  different data collection pipelines.
+
+**Conclusion**:
+
+This visual supports previous numeric summaries — missingness is
+structural, driven by different data collection pipelines (transaction
+vs identity tables).
+
+#### 5.11.1 Pipeline Implications — Missing Data
+
+| Finding | Decision | Rationale |
+|----|----|----|
+| High-missingness variables (\>80%) form distinct blocks | Drop D6–D9, D12–D14 per Section 5.6 | No structural explanation; non-missing values lack discriminative signal |
+| id\_ variables nearly 100% missing without identity merge | Create `has_identity` binary flag | Captures structural missingness as a feature — 0.25x odds ratio per literature |
+| V features with moderate missingness (\<20%) | Keep with sentinel imputation | 154 V features are core to model performance; -999 sentinel is standard for LightGBM |
+| Missingness follows row-level patterns | No explicit missingness indicators per feature | Structural patterns are captured by `has_identity`; per-feature indicators add noise |
