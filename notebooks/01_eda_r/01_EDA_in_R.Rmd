@@ -671,22 +671,308 @@ ggplot(r_email_domain_fr, aes(x = reorder(R_emaildomain, fraud_rate), y = fraud_
 
 **Observation:**
 
-- Recipient domains show notably higher fraud rates than purchaser domains
-  for the same providers — `outlook.com` leads at ~17.5%, followed by
-  `icloud.com` (~12.5%), `gmail.com` (~12%), and `hotmail.com` (~8-10%).
-- `anonymous.com` appears in the recipient top 10 (~2.5%) despite lower
+- Recipient domains show notably higher fraud rates than purchaser
+  domains for the same providers — `outlook.com` leads at \~17.5%,
+  followed by `icloud.com` (\~12.5%), `gmail.com` (\~12%), and
+  `hotmail.com` (\~8-10%).
+- `anonymous.com` appears in the recipient top 10 (\~2.5%) despite lower
   volume — its presence as a recipient domain is a strong fraud signal
   given its name suggests intentional anonymization.
 - The asymmetry between purchaser and recipient fraud rates is notable:
   a transaction where the recipient uses `outlook.com` is riskier than
   one where the purchaser uses the same domain. This suggests recipient
   email domain carries more signal than purchaser email domain.
-- **Pipeline implication**: `R_emaildomain` will be frequency-encoded.
-  A binary feature `p_r_domain_match` (purchaser domain == recipient
+- **Pipeline implication**: `R_emaildomain` will be frequency-encoded. A
+  binary feature `p_r_domain_match` (purchaser domain == recipient
   domain) captures whether both sides of the transaction share the same
   email provider — an unusual pattern worth investigating.
-- `anonymous.com` appears as a recipient domain with ~2.5% fraud rate —
-  below the dataset average of ~3.5%. Its presence is notable given the
+- `anonymous.com` appears as a recipient domain with \~2.5% fraud rate —
+  below the dataset average of \~3.5%. Its presence is notable given the
   name implies intentional anonymization, but the data does not support
   flagging it as high-risk based on fraud rate alone. It warrants
   monitoring but not automatic flagging.
+
+### 5.5 Continuous Features Analysis - C1 to C14
+
+See [this
+post](https://www.kaggle.com/c/ieee-fraud-detection/discussion/101203)
+for more information about these features and other.
+
+`C1–C14` are **counting features** — each represents a count of entities
+associated with a payment card, such as number of addresses, devices, or
+emails linked to that card. The actual meaning of each variable is
+masked by Vesta, but their nature as counts has direct implications for
+analysis:
+
+- Count distributions are inherently right-skewed — most cards have few
+  associated entities, while a small number have many.
+- High counts may indicate account sharing (considering this is for a
+  e-commerce payment solution, this meant it may be shared by kin or
+  even friends), synthetic identities, or cards used across many
+  transactions — all signals relevant to fraud.
+- Filtering above the 99th percentile removes extreme outliers for
+  visualization only — they are retained for modeling as they may encode
+  the strongest fraud signals.
+
+#### 5.5.1 C1 and C2 – Initial Exploration
+
+C1 and C2 are the two continuous count variables with the widest range
+and highest cardinality among the C features.
+
+```{r c1-and-c2-distribution}
+train |>
+  select(C1, C2, isFraud) |>
+  pivot_longer(cols = c(C1, C2), names_to = "Variable", values_to = "Value") |>
+  ggplot(aes(x = Value, fill = factor(isFraud))) +
+  geom_histogram(bins = 100, position = "identity", alpha = 0.5) +
+  facet_wrap(~Variable, scales = "free") +
+  scale_x_continuous(trans = "log1p") +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  labs(
+    title = "Distribution of C1 and C2 by Fraud Status",
+    x = "Value (log scale)",
+    y = "Count",
+    fill = "Is Fraud"
+  )
+```
+
+**Observation**:
+
+- The distributions are highly skewed to the right.
+- Fraudulent and non-fraudulent transactions overlap heavily in this
+  space, though fine-grained differences might still be exploitable with
+  modeling.
+- A log transformation improves visualization but still shows
+  long-tailed distributions.
+
+To reduce noise from extreme outliers and improve interpretability, we
+apply filtering below the 99th percentile.
+
+```{r c1-and-c2-distribution-filtered}
+# Calculating 99th percentiles for C1 and C2
+c1_99 <- quantile(train$C1, 0.99, na.rm = TRUE)
+c2_99 <- quantile(train$C2, 0.99, na.rm = TRUE)
+
+# Filtering and plotting
+train |>
+  filter(C1 < c1_99, C2 < c2_99) |>
+  select(C1, C2, isFraud) |>
+  pivot_longer(cols = c(C1, C2), names_to = "Variable", values_to = "Value") |>
+  ggplot(aes(x = Value, fill = factor(isFraud))) +
+  geom_histogram(bins = 60, position = "identity", alpha = 0.5) +
+  facet_wrap(~Variable, scales = "free") +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  labs(
+    title = "Distribution of C1 and C2 by Fraud Status (Filtered < 99th Percentile)",
+    x = "Value",
+    y = "Count",
+    fill = "Is Fraud"
+  )
+```
+
+**Note**: While we remove outliers for visualization clarity, they are
+retained for modeling, as they may encode meaningful anomalies.
+
+#### 5.5.2 General Analysis of C1–C14
+
+Now, we extend the distribution analysis to the full set of C variables
+grouped into two categories identified during exploration:
+**continuous** (C1, C2, C5, C6, C9, C11, C13, C14) and **near-binary**
+(C4, C7, C8, C10, C12). C3 is dropped — see Section 5.5.3 for the
+rationale.
+
+**Continuous count variables** have wide ranges and right-skewed
+distributions with long tails extending to thousands.
+
+```{r c-vars-plot-summary}
+c_continuous <- c("C1", "C2", "C5", "C6", "C9", "C11", "C13", "C14")
+
+c_long_cont <- train |>
+  select(isFraud, all_of(c_continuous)) |>
+  pivot_longer(cols = all_of(c_continuous), names_to = "Variable", values_to = "Value")
+
+c_thresh_cont <- c_long_cont |>
+  group_by(Variable) |>
+  summarise(threshold = quantile(Value, 0.99, na.rm = TRUE), .groups = "drop")
+
+c_long_cont <- c_long_cont |>
+  left_join(c_thresh_cont, by = "Variable") |>
+  filter(is.na(Value) | Value < threshold) |>
+  mutate(Variable = factor(Variable, levels = c_continuous))
+
+plot_c_block <- function(df, vars_subset) {
+  df |>
+    filter(Variable %in% vars_subset) |>
+    mutate(Variable = factor(Variable, levels = vars_subset)) |>
+    ggplot(aes(x = Value, fill = factor(isFraud))) +
+    geom_histogram(bins = 60, position = "identity", alpha = 0.5) +
+    facet_wrap(~Variable, scales = "free", ncol = 2) +
+    scale_fill_manual(
+      values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+      labels = c("0" = "Legitimate", "1" = "Fraud")
+    ) +
+    labs(x = "Value", y = "Count", fill = "Is Fraud") +
+    theme_minimal()
+}
+```
+
+```{r c-continuous-block-1}
+plot_c_block(c_long_cont, c("C1", "C2", "C5", "C6"))
+```
+
+```{r c-continuous-block-2}
+plot_c_block(c_long_cont, c("C9", "C11", "C13", "C14"))
+```
+
+**Near-binary count variables** are concentrated almost entirely at
+values 0 or 1, with occasional values of 2–3 and extreme outliers above
+the 99th percentile that are retained for modeling.
+
+```{r c-vars-near-binary}
+c_near_binary <- c("C4", "C7", "C8", "C10", "C12")
+
+c_long_nb <- train |>
+  select(isFraud, all_of(c_near_binary)) |>
+  pivot_longer(cols = all_of(c_near_binary), names_to = "Variable", values_to = "Value")
+
+c_thresh_nb <- c_long_nb |>
+  group_by(Variable) |>
+  summarise(threshold = quantile(Value, 0.99, na.rm = TRUE), .groups = "drop")
+
+c_long_nb <- c_long_nb |>
+  left_join(c_thresh_nb, by = "Variable") |>
+  filter(is.na(Value) | Value < threshold) |>
+  mutate(Variable = factor(Variable, levels = c_near_binary))
+
+c_long_nb |>
+  filter(Variable %in% c("C4", "C7", "C8", "C10", "C12")) |>
+  mutate(Variable = factor(Variable, levels = c_near_binary)) |>
+  ggplot(aes(x = Value, fill = factor(isFraud))) +
+  geom_histogram(bins = 10, position = "identity", alpha = 0.5) +
+  facet_wrap(~Variable, scales = "free", ncol = 3) +
+  scale_fill_manual(
+    values = c("0" = "#3B8BD4", "1" = "#D85A30"),
+    labels = c("0" = "Legitimate", "1" = "Fraud")
+  ) +
+  labs(x = "Value", y = "Count", fill = "Is Fraud") +
+  theme_minimal()
+```
+
+#### 5.5.3 C3 — Dropped Feature
+
+C3 is dropped from analysis due to near-zero variation combined with
+inverse fraud signal:
+
+- **99.59%** of values are exactly 0.
+- The remaining **2,429 records** (0.4%) have non-zero values (range
+  1–26).
+- Transactions where C3 \> 0 have a fraud rate of **0.21%** versus
+  **3.51%** for C3 = 0 — the opposite of the expected direction.
+- The feature has no actionable signal and would add noise to the model.
+
+**Pipeline implication**: C3 is excluded from all downstream feature
+engineering.
+
+#### 5.5.4 Fraud Rate by Count Value
+
+For count features, the most informative view is not the distribution
+but the **fraud rate at each count level**. This reveals whether high
+counts are associated with elevated fraud risk — the core question for
+feature engineering.
+
+**Near-binary variables (C4, C7, C8, C10, C12):** count values are
+grouped as 0, 1, 2, and 3+ (categories with fewer than 50 records are
+excluded).
+
+```{r c-near-binary-fraud-rate}
+train |>
+  select(isFraud, all_of(c_near_binary)) |>
+  pivot_longer(cols = all_of(c_near_binary), names_to = "Variable", values_to = "Value") |>
+  filter(!is.na(Value)) |>
+  mutate(Value = if_else(Value >= 3, "3+", as.character(as.integer(Value))),
+         Value = factor(Value, levels = c("0", "1", "2", "3+"))) |>
+  group_by(Variable, Value) |>
+  summarise(n = n(), fraud_rate = mean(isFraud), .groups = "drop") |>
+  filter(n >= 50) |>
+  ggplot(aes(x = Value, y = fraud_rate)) +
+  geom_col(fill = "#D85A30", width = 0.7) +
+  geom_text(aes(label = scales::percent(fraud_rate, accuracy = 0.1)),
+            vjust = -0.5, size = 3) +
+  facet_wrap(~Variable, nrow = 1) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 0.17)) +
+  labs(
+    title = "Fraud Rate by Count Value — Near-Binary C Variables",
+    subtitle = "Categories with < 50 records excluded",
+    x = "Count Value",
+    y = "Fraud Rate"
+  ) +
+  theme_minimal()
+```
+
+**Key findings for near-binary variables:**
+
+- Value = 2 consistently shows the highest fraud rate across C4, C7,
+  C10, and C12 (10–14%), compared to 2–5% for value = 0.
+- C8 is an exception: value = 1 shows the highest fraud rate (9.8%),
+  suggesting its counting unit may differ from the others.
+- All near-binary variables show monotonic fraud rate increase from
+  value = 0 to value = 2 — clear discriminative signal.
+- The jump from value = 1 to value = 2 represents a 3–6x fraud risk
+  increase over baseline.
+
+**Continuous count variables (C1, C2, C5, C6, C9, C11, C13, C14):**
+fraud rate calculated per decile.
+
+```{r c-continuous-fraud-rate}
+train |>
+  select(isFraud, all_of(c_continuous)) |>
+  pivot_longer(cols = all_of(c_continuous), names_to = "Variable", values_to = "Value") |>
+  filter(!is.na(Value)) |>
+  group_by(Variable) |>
+  mutate(decile = ntile(Value, 10)) |>
+  ungroup() |>
+  group_by(Variable, decile) |>
+  summarise(n = n(), fraud_rate = mean(isFraud), .groups = "drop") |>
+  ggplot(aes(x = decile, y = fraud_rate, fill = fraud_rate)) +
+  geom_col() +
+  facet_wrap(~Variable, scales = "free_y", ncol = 4) +
+  scale_fill_gradient(low = "#f0c9be", high = "#D85A30", guide = "none") +
+  scale_x_continuous(breaks = c(1, 5, 10), labels = c("D1\nlowest", "D5", "D10\nhighest")) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Fraud Rate by Decile — Continuous C Variables",
+    subtitle = "D1 = lowest 10% of counts, D10 = highest 10%",
+    x = "Decile",
+    y = "Fraud Rate"
+  ) +
+  theme_minimal()
+```
+
+**Key findings for continuous variables:**
+
+- C1, C2, C6, C11, and C12 show the expected pattern: D10 (highest
+  counts) associated with elevated fraud rates.
+- **C13 and C14 exhibit an inverse pattern**: higher counts are
+  associated with *lower* fraud rates. This may indicate that high
+  counts of these entity types are associated with verified or
+  legitimate accounts rather than fraud.
+- **C9 shows a mid-range peak** at D2–D3 — unusual pattern worth
+  monitoring.
+- Extreme outliers (D10) are retained in modeling — they represent the
+  strongest anomalies in count space.
+
+### 5.5.5 Pipeline Implications — C Variables
+
+| Feature / Group | Decision | Rationale |
+|------------------------|------------------------|------------------------|
+| **C3** | Drop | 99.59% zeros; non-zero values have lower fraud rate than baseline — no predictive value |
+| **C4, C7, C8, C10, C12** | Keep as-is | Near-binary distribution; clear fraud rate increase at value = 2; retained outliers are strongest signal |
+| **C1, C2, C5, C6, C9, C11, C13, C14** | Keep as-is; note inverse patterns | Continuous with long tails; extreme outliers (D10) carry fraud signal; C13/C14 inverse direction worth monitoring in model |
+| **All C variables** | Missing → -999 | LightGBM sentinel strategy (per architecture) — not explored here as all have 0% missing |
+| **C13, C14** | Monitor in model | Inverse fraud-count relationship may indicate these count verified entities — SHAP will clarify importance |
