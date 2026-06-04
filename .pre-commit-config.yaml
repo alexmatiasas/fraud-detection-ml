@@ -45,3 +45,8 @@ repos:
       - id: lintr
       - id: parsable-R
       - id: no-browser-statement
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
