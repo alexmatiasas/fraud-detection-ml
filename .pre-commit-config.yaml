@@ -35,8 +35,6 @@ repos:
         args:
           - --autofix
       - id: check-ast
-      # - id: sort-simple-yaml
-      #   files: # needs a path
 
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.16.3
