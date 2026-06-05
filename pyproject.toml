@@ -38,6 +38,7 @@ dev = [
     "plotly>=6.6.0",
     "pre-commit>=4.5.1",
     "prek>=0.3.8",
+    "hypothesis>=6.129.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.6",
@@ -53,4 +54,12 @@ update_changelog_on_bump = true
 major_version_zero = true
 
 [dependency-groups]
-dev = []
+dev = [
+    "basedpyright>=1.39.6",
+]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+include = ["src"]
+reportMissingTypeStubs = false  # evita falsos positivos con pandas/numpy
+pythonVersion = "3.11"
