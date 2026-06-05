@@ -1,12 +1,17 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.6
+    rev: v0.15.16
     hooks:
       - id: ruff-check
         types_or: [ python, pyi ]
         args: [ --fix ]
       - id: ruff-format
         types_or: [ python, pyi ]
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.19
+    hooks:
+      - id: uv-lock
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -19,29 +24,34 @@ repos:
       - id: check-json
       - id: check-added-large-files
         args: [--maxkb=500]
+        exclude: ^uv\.lock$
       - id: check-merge-conflict
       - id: debug-statements
       - id: no-commit-to-branch
         args: [--branch, main, --branch, develop]
       - id: name-tests-test
+        args: [--pytest-test-first]
       - id: pretty-format-json
         args:
           - --autofix
       - id: check-ast
-      # - id: sort-simple-yaml
-      #   files: # needs a path
 
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.13.9
+    rev: v4.16.3
     hooks:
       - id: commitizen
         stages: [commit-msg]
 
   - repo: https://github.com/lorenzwalthert/precommit
-    rev: v0.4.3.9021
+    rev: v0.4.3.9025
     hooks:
       - id: style-files
         args: [--style_pkg=styler, --style_fun=tidyverse_style]
       - id: lintr
       - id: parsable-R
       - id: no-browser-statement
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

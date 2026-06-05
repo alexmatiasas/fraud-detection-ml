@@ -1,0 +1,83 @@
+$schema: ../schemas/train.schema.json
+# ── Reproducibilidad ──────────────────────────────────────────────────────────
+seed: 42
+
+# ── Datos ─────────────────────────────────────────────────────────────────────
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  features_dir: data/features
+  train_transaction: data/raw/train_transaction.parquet
+  train_identity: data/raw/train_identity.parquet
+  test_transaction: data/raw/test_transaction.parquet
+  test_identity: data/raw/test_identity.parquet
+
+# ── Split ─────────────────────────────────────────────────────────────────────
+# Usamos split temporal, no aleatorio — crítico para fraude
+# Los datos de train son anteriores a los de test en la competencia
+split:
+  strategy: temporal      # "temporal" | "random"
+  time_col: TransactionDT
+  test_size: 0.2
+
+# ── Modelo ────────────────────────────────────────────────────────────────────
+model:
+  name: lightgbm          # "lightgbm" | "xgboost" | "logistic_regression"
+  artifact_dir: models/
+
+  # Hiperparámetros base (Optuna los optimiza partiendo de aquí)
+  params:
+    n_estimators: 1000
+    learning_rate: 0.05
+    max_depth: 8
+    num_leaves: 127
+    min_child_samples: 100
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    scale_pos_weight: 27.6  # ratio exacto (1-0.035)/0.035 — ver EDA Section 1
+    random_state: 42
+    n_jobs: -1
+
+# ── Optuna HPO ────────────────────────────────────────────────────────────────
+optuna:
+  enabled: false           # true para correr HPO completo
+  n_trials: 50
+  timeout_seconds: 3600
+  metric: roc_auc          # métrica a optimizar
+  direction: maximize
+  study_name: fraud_lgbm_v1
+
+# ── Early stopping ────────────────────────────────────────────────────────────
+early_stopping:
+  enabled: true
+  rounds: 100
+  eval_metric: auc
+
+# ── Métricas de evaluación ────────────────────────────────────────────────────
+# Para fraude: accuracy es INÚTIL (96.5% baseline).
+# Average Precision (PR AUC) > ROC AUC > F2.
+evaluation:
+  metrics:
+    - roc_auc             # métrica principal de la competencia
+    - average_precision   # AUC-PR: más informativa en clases desbalanceadas
+    - f1_score
+    - precision
+    - recall
+  threshold: 0.5
+
+# ── MLflow ────────────────────────────────────────────────────────────────────
+mlflow:
+  experiment_name: fraud-detection
+  run_name: lgbm_baseline
+  tracking_uri: mlruns/    # train.py lo sobreescribe con dagshub.init() si hay .env
+  log_model: true
+  log_feature_importance: true
+  log_shap: true           # SHAP values para explicabilidad
+
+# ── SHAP ──────────────────────────────────────────────────────────────────────
+shap:
+  enabled: true
+  max_display: 20          # top N features en el summary plot
+  sample_size: 1000        # muestra para SHAP (dataset completo es lento)

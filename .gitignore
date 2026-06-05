@@ -17,6 +17,9 @@ build/
 .mypy_cache/
 .pytest_cache/
 .coverage
+.coverage.*
+*.cover
+*.py,cover
 htmlcov/
 
 # ── Jupyter ──────────────────────────────────────────────────────────────────
