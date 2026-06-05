@@ -32,6 +32,7 @@ class VFeatureFilter(BaseFeatureTransformer):
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "VFeatureFilter":
         if not self.enabled:
+            self._fitted_ = True
             return self
         v_cols = [c for c in X.columns if c.startswith("V")]
         if not v_cols:

@@ -24,19 +24,12 @@ class BaseFeatureTransformer(BaseEstimator, TransformerMixin, ABC):
     """
 
     def __init__(self, enabled: bool = True):
-        """Constructor method
-
-        Args:
-            enabled (bool, optional): When False the transform returns
-            X unchanged.  This lets the pipeline factory keep all steps
-            in the list while allowing Optuna to disable individual
-            groups. Defaults to True.
-        """
         self.enabled = enabled
 
     def fit(
         self, X: pd.DataFrame, y: Optional[pd.Series] = None
     ) -> "BaseFeatureTransformer":
+        self._fitted_ = True
         return self
 
     @abstractmethod

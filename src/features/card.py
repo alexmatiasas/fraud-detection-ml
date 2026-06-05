@@ -33,6 +33,7 @@ class CardAggregator(BaseFeatureTransformer):
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "CardAggregator":
         if not self.enabled:
+            self._fitted_ = True
             return self
 
         valid_groups = [c for c in self.group_by if c in X.columns]

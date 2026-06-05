@@ -24,6 +24,7 @@ class FrequencyEncoder(BaseFeatureTransformer):
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "FrequencyEncoder":
         if not self.enabled:
+            self._fitted_ = True
             return self
         self._freq_maps: dict[str, dict] = {}
         for col in self.columns:

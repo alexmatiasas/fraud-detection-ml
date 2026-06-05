@@ -2,7 +2,18 @@ import pandas as pd
 
 from src.features.base import BaseFeatureTransformer
 
-_NUMERIC_DTYPES = ("float64", "float32", "int64", "int32", "int16", "int8")
+_NUMERIC_DTYPES = (
+    "float64",
+    "float32",
+    "int64",
+    "int32",
+    "int16",
+    "int8",
+    "Int64",
+    "Int32",
+    "Int16",
+    "Int8",
+)
 _CATEGORY_DTYPES = ("object", "category")
 
 
