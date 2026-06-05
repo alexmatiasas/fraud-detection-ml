@@ -1,0 +1,426 @@
+{
+  "$defs": {
+    "DataPathsCfg": {
+      "properties": {
+        "features_dir": {
+          "default": "data/features",
+          "description": "Feature Feather directory",
+          "title": "Features Dir",
+          "type": "string"
+        },
+        "processed_dir": {
+          "default": "data/processed",
+          "description": "Processed Parquet directory",
+          "title": "Processed Dir",
+          "type": "string"
+        },
+        "raw_dir": {
+          "default": "data/raw",
+          "description": "Raw data directory",
+          "title": "Raw Dir",
+          "type": "string"
+        },
+        "test_identity": {
+          "default": "data/raw/test_identity.parquet",
+          "description": "Test identity file",
+          "title": "Test Identity",
+          "type": "string"
+        },
+        "test_transaction": {
+          "default": "data/raw/test_transaction.parquet",
+          "description": "Test transaction file",
+          "title": "Test Transaction",
+          "type": "string"
+        },
+        "train_identity": {
+          "default": "data/raw/train_identity.parquet",
+          "description": "Training identity file",
+          "title": "Train Identity",
+          "type": "string"
+        },
+        "train_transaction": {
+          "default": "data/raw/train_transaction.parquet",
+          "description": "Training transaction file",
+          "title": "Train Transaction",
+          "type": "string"
+        }
+      },
+      "title": "DataPathsCfg",
+      "type": "object"
+    },
+    "EarlyStoppingCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable early stopping",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "eval_metric": {
+          "default": "auc",
+          "description": "Early stopping evaluation metric",
+          "enum": [
+            "auc",
+            "average_precision"
+          ],
+          "title": "Eval Metric",
+          "type": "string"
+        },
+        "rounds": {
+          "default": 100,
+          "description": "Patience rounds",
+          "minimum": 1,
+          "title": "Rounds",
+          "type": "integer"
+        }
+      },
+      "title": "EarlyStoppingCfg",
+      "type": "object"
+    },
+    "EvaluationCfg": {
+      "properties": {
+        "metrics": {
+          "description": "Metrics computed at evaluation time",
+          "items": {
+            "enum": [
+              "roc_auc",
+              "average_precision",
+              "f1_score",
+              "precision",
+              "recall"
+            ],
+            "type": "string"
+          },
+          "title": "Metrics",
+          "type": "array"
+        },
+        "threshold": {
+          "default": 0.5,
+          "description": "Decision threshold for binary classification",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "title": "EvaluationCfg",
+      "type": "object"
+    },
+    "LightGBMParams": {
+      "properties": {
+        "colsample_bytree": {
+          "default": 0.8,
+          "description": "Column sampling ratio per tree",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Colsample Bytree",
+          "type": "number"
+        },
+        "learning_rate": {
+          "default": 0.05,
+          "description": "Boosting learning rate",
+          "exclusiveMinimum": 0.0,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "max_depth": {
+          "default": 8,
+          "description": "Maximum tree depth (-1 = unlimited)",
+          "minimum": -1,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "min_child_samples": {
+          "default": 100,
+          "description": "Minimum data per child node",
+          "minimum": 1,
+          "title": "Min Child Samples",
+          "type": "integer"
+        },
+        "n_estimators": {
+          "default": 1000,
+          "description": "Number of boosting rounds",
+          "minimum": 1,
+          "title": "N Estimators",
+          "type": "integer"
+        },
+        "n_jobs": {
+          "default": -1,
+          "description": "Parallel threads (-1 = all cores)",
+          "title": "N Jobs",
+          "type": "integer"
+        },
+        "num_leaves": {
+          "default": 127,
+          "description": "Maximum tree leaves",
+          "minimum": 1,
+          "title": "Num Leaves",
+          "type": "integer"
+        },
+        "random_state": {
+          "default": 42,
+          "description": "PRNG seed",
+          "title": "Random State",
+          "type": "integer"
+        },
+        "reg_alpha": {
+          "default": 0.1,
+          "description": "L1 regularization",
+          "minimum": 0.0,
+          "title": "Reg Alpha",
+          "type": "number"
+        },
+        "reg_lambda": {
+          "default": 1.0,
+          "description": "L2 regularization",
+          "minimum": 0.0,
+          "title": "Reg Lambda",
+          "type": "number"
+        },
+        "scale_pos_weight": {
+          "default": 27.6,
+          "description": "Class weight for positive class (~(1-0.035)/0.035)",
+          "exclusiveMinimum": 0.0,
+          "title": "Scale Pos Weight",
+          "type": "number"
+        },
+        "subsample": {
+          "default": 0.8,
+          "description": "Row sampling ratio per tree",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Subsample",
+          "type": "number"
+        }
+      },
+      "title": "LightGBMParams",
+      "type": "object"
+    },
+    "MlflowCfg": {
+      "properties": {
+        "experiment_name": {
+          "default": "fraud-detection",
+          "description": "MLflow experiment name",
+          "title": "Experiment Name",
+          "type": "string"
+        },
+        "log_feature_importance": {
+          "default": true,
+          "description": "Log feature importance plot",
+          "title": "Log Feature Importance",
+          "type": "boolean"
+        },
+        "log_model": {
+          "default": true,
+          "description": "Log model artifact to MLflow",
+          "title": "Log Model",
+          "type": "boolean"
+        },
+        "log_shap": {
+          "default": true,
+          "description": "Log SHAP summary plot",
+          "title": "Log Shap",
+          "type": "boolean"
+        },
+        "run_name": {
+          "default": "lgbm_baseline",
+          "description": "MLflow run name",
+          "title": "Run Name",
+          "type": "string"
+        },
+        "tracking_uri": {
+          "default": "mlruns/",
+          "description": "MLflow tracking URI (local dir or DagsHub remote)",
+          "title": "Tracking Uri",
+          "type": "string"
+        }
+      },
+      "title": "MlflowCfg",
+      "type": "object"
+    },
+    "ModelCfg": {
+      "properties": {
+        "artifact_dir": {
+          "default": "models/",
+          "description": "Directory for model artifacts",
+          "title": "Artifact Dir",
+          "type": "string"
+        },
+        "name": {
+          "default": "lightgbm",
+          "description": "Model algorithm",
+          "enum": [
+            "lightgbm",
+            "xgboost",
+            "logistic_regression"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/LightGBMParams",
+          "description": "Model hyperparameters"
+        }
+      },
+      "title": "ModelCfg",
+      "type": "object"
+    },
+    "OptunaCfg": {
+      "properties": {
+        "direction": {
+          "default": "maximize",
+          "description": "Optimisation direction",
+          "enum": [
+            "maximize",
+            "minimize"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Enable Optuna hyperparameter optimisation",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "metric": {
+          "default": "roc_auc",
+          "description": "Metric to optimise",
+          "enum": [
+            "roc_auc",
+            "average_precision"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "n_trials": {
+          "default": 50,
+          "description": "Number of HPO trials",
+          "minimum": 1,
+          "title": "N Trials",
+          "type": "integer"
+        },
+        "study_name": {
+          "default": "fraud_lgbm_v1",
+          "description": "Optuna study name (persisted to DB)",
+          "title": "Study Name",
+          "type": "string"
+        },
+        "timeout_seconds": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 3600,
+          "description": "HPO timeout (None = unlimited)",
+          "title": "Timeout Seconds"
+        }
+      },
+      "title": "OptunaCfg",
+      "type": "object"
+    },
+    "ShapCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Compute SHAP values at evaluation time",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_display": {
+          "default": 20,
+          "description": "Top-N features in summary plot",
+          "minimum": 1,
+          "title": "Max Display",
+          "type": "integer"
+        },
+        "sample_size": {
+          "default": 1000,
+          "description": "Sample size for SHAP computation (full dataset is expensive)",
+          "minimum": 1,
+          "title": "Sample Size",
+          "type": "integer"
+        }
+      },
+      "title": "ShapCfg",
+      "type": "object"
+    },
+    "SplitCfg": {
+      "properties": {
+        "strategy": {
+          "default": "temporal",
+          "description": "Split strategy \u2014 temporal is preferred for fraud",
+          "enum": [
+            "temporal",
+            "random"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        },
+        "test_size": {
+          "default": 0.2,
+          "description": "Fraction of data held out for validation",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Test Size",
+          "type": "number"
+        },
+        "time_col": {
+          "default": "TransactionDT",
+          "description": "Column used for temporal split",
+          "title": "Time Col",
+          "type": "string"
+        }
+      },
+      "title": "SplitCfg",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/DataPathsCfg",
+      "description": "Data file paths"
+    },
+    "early_stopping": {
+      "$ref": "#/$defs/EarlyStoppingCfg",
+      "description": "Early stopping configuration"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/EvaluationCfg",
+      "description": "Evaluation metrics configuration"
+    },
+    "mlflow": {
+      "$ref": "#/$defs/MlflowCfg",
+      "description": "MLflow tracking configuration"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelCfg",
+      "description": "Model configuration"
+    },
+    "optuna": {
+      "$ref": "#/$defs/OptunaCfg",
+      "description": "Optuna HPO configuration"
+    },
+    "seed": {
+      "default": 42,
+      "description": "Global PRNG seed",
+      "title": "Seed",
+      "type": "integer"
+    },
+    "shap": {
+      "$ref": "#/$defs/ShapCfg",
+      "description": "SHAP explainability configuration"
+    },
+    "split": {
+      "$ref": "#/$defs/SplitCfg",
+      "description": "Train/validation split configuration"
+    }
+  },
+  "title": "TrainConfig",
+  "type": "object"
+}

@@ -1,0 +1,161 @@
+$schema: ../schemas/features.schema.json
+# ── Feature configuration ─────────────────────────────────────────────────────
+# This file documents feature engineering decisions.
+# Each group has an explicit justification—this is part of the portfolio.
+
+# ── Features of the original dataset ─────────────────────────────────────────────
+transaction:
+  target: isFraud
+
+  # Direct numeric features — high signal according to EDA
+  numerical:
+    - TransactionAmt       # amount: bimodal distribution between fraud/non-fraud
+    - TransactionDT        # timedelta: extracts time, day of the week, etc.
+    - dist1                # distance: correlated with fraud
+    - dist2
+
+  # Categories with manageable cardinality
+  categorical:
+    - ProductCD            # 5 categories: W has the highest volume
+    - card4                # Card type: Visa/Mastercard/etc.
+    - card6                # type: credit/debit
+    - P_emaildomain        # payer email domain
+    - R_emaildomain        # recipient email domain
+    - M1                   # match fields (T/F/NaN) — binaries
+    - M2
+    - M3
+    - M4                   # categorical: M0/M1/M2 (not T/F)
+    - M5
+    - M6
+    - M7
+    - M8
+    - M9
+
+  # High cardinality — frequency encoding
+  high_cardinality:
+    - card1                # 13 553 unique values
+    - card2                # ~500 unique values
+    - card3
+    - card5
+    - addr1
+    - addr2
+
+  # Features C — transaction counts (important per top Kaggle solutions)
+  count_features:
+    - C1
+    - C2
+    # C3: DROPPED per EDA Section 5.5.3 — 99.59% zeros, inverse fraud signal
+    - C4
+    - C5
+    - C6
+    - C7
+    - C8
+    - C9
+    - C10
+    - C11
+    - C12
+    - C13
+    - C14
+
+  # Features D — time delta between events (captures speed of fraud)
+  # D6–D9, D12–D14: DROPPED per EDA Section 5.6 — 87–94% missing
+  delta_features:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D5
+    - D10
+    - D11
+    - D15
+
+  # Features V — Vesta engineered (154 features, variance + correlation filter)
+  vesta_features:
+    include: true
+    variance_threshold: 0.01
+    correlation_threshold: 0.95   # drops one per correlated pair
+
+# ── Identity table features ─────────────────────────────────────────────────────
+identity:
+  categorical:
+    - DeviceType           # mobile / desktop
+    - DeviceInfo           # high cardinality, frequency-encoded
+  id_features:
+    - id_01
+    - id_02
+    - id_03
+    - id_04
+    - id_05
+    - id_06
+    - id_07
+    - id_08
+    - id_09
+    - id_10
+    - id_11
+    - id_12
+    - id_13
+    - id_14
+    - id_15
+    - id_16
+    - id_17
+    - id_18
+    - id_19
+    - id_20
+    - id_21
+    - id_22
+    - id_23
+    - id_24
+    - id_25
+    - id_26
+    - id_27
+    - id_28
+    - id_29
+    - id_30
+    - id_31
+    - id_32
+    - id_33
+    - id_34
+    - id_35
+    - id_36
+    - id_37
+    - id_38
+
+# ── Features engineered (created in the pipeline) ──────────────────────────────
+engineered:
+  # Temporal features extracted from TransactionDT
+  datetime:
+    - hour_of_day          # fraud has clear time-of-day patterns
+    - day_of_week
+    - day_of_month
+
+  # Device info extracted from DeviceInfo via heuristics (OS + brand)
+  device_os: true
+  device_brand: true
+
+  # Card aggregations — capture historical spending behaviour
+  card_aggregations:
+    group_by: [card1, card2, card3, card5]
+    aggregations:
+      TransactionAmt: [mean, std, max, count]
+
+  # Frequency encoding for high-cardinality categorical columns
+  frequency_encoding:
+    - P_emaildomain
+    - R_emaildomain
+    - DeviceInfo
+    - card1
+
+# ── Encoding strategy ─────────────────────────────────────────────────────────
+encoding:
+  low_cardinality_max_values: 50
+  high_cardinality_strategy: frequency
+  # M flags: T → 1, F → 0, NaN → -1 (M4 is categorical, handled separately)
+  match_flags_encoding:
+    T: 1
+    F: 0
+    nan: -1
+
+# ── Missing value strategy ────────────────────────────────────────────────────
+imputation:
+  numerical: -999          # LightGBM-native sentinel
+  categorical: "missing"   # explicit category for NaN
