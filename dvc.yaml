@@ -4,6 +4,7 @@ stages:
     outs:
     - data/raw:
         persist: true
+    frozen: true
   prepare:
     cmd: uv run python scripts/prepare_data.py
     deps:
@@ -11,10 +12,10 @@ stages:
     - data/raw
     params:
     - configs/data.yaml:
-        - base_dir
-        - files
-        - join_key
-        - target
+      - base_dir
+      - files
+      - join_key
+      - target
     outs:
     - data/processed:
         persist: true
@@ -28,14 +29,14 @@ stages:
     - src/schemas/
     params:
     - configs/features.yaml:
-        - transaction
-        - identity
-        - engineered
-        - encoding
-        - imputation
+      - transaction
+      - identity
+      - engineered
+      - encoding
+      - imputation
     - configs/data.yaml:
-        - processed_dir
-        - features_dir
+      - processed_dir
+      - features_dir
     outs:
     - data/features:
         persist: true
