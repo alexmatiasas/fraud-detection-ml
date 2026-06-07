@@ -45,7 +45,7 @@ class SplitCfg(BaseModel):
     )
 
 
-ModelName = Literal["lightgbm", "xgboost", "logistic_regression"]
+ModelName = Literal["lightgbm", "xgboost", "random_forest"]
 
 
 class LightGBMParams(BaseModel):

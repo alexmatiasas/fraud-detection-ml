@@ -1,4 +1,4 @@
-$schema: ../schemas/features.schema.json
+# $schema: ../schemas/features.schema.json
 # ── Feature configuration ─────────────────────────────────────────────────────
 # This file documents feature engineering decisions.
 # Each group has an explicit justification—this is part of the portfolio.

@@ -23,9 +23,7 @@ class FilesCfg(BaseModel):
 
 class ValidationCfg(BaseModel):
     target_values: list[int] = Field(
-        default=[0, 1],
-        description="Expected unique values in target column",
-        examples=[[0, 1]],
+        default=[0, 1], description="Expected unique values in target column"
     )
     transaction_id_unique: bool = Field(
         default=True, description="TransactionID must be unique", examples=[True, False]
