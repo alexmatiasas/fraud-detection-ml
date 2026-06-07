@@ -19,24 +19,3 @@ stages:
     outs:
     - data/processed:
         persist: true
-  features:
-    cmd: uv run python -m src.features.build_features
-    deps:
-    - configs/features.yaml
-    - configs/data.yaml
-    - data/processed
-    - src/features/
-    - src/schemas/
-    params:
-    - configs/features.yaml:
-      - transaction
-      - identity
-      - engineered
-      - encoding
-      - imputation
-    - configs/data.yaml:
-      - processed_dir
-      - features_dir
-    outs:
-    - data/features:
-        persist: true

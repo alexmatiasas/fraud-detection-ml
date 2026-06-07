@@ -50,14 +50,8 @@ schemas:  ## Genera JSON Schema desde modelos Pydantic
 .PHONY: schemas
 
 ## ── Pipeline ─────────────────────────────────────────────────────────────────
-features:  ## Construye features desde datos procesados
-	$(PYTHON) -m src.features.build_features
-
-train:  ## Entrena modelo con config por defecto
-	$(PYTHON) -m src.models.train
-
-train-config:  ## Entrena con config específica (uso: make train-config CONFIG=configs/lgbm.yaml)
-	$(PYTHON) -m src.models.train --config $(CONFIG)
+train:  ## Entrena modelo (pasa args via ARGS: make train ARGS="model.name=xgboost")
+	$(PYTHON) -m src.models.train $(ARGS)
 
 ## ── API ──────────────────────────────────────────────────────────────────────
 serve:  ## Levanta la API localmente
@@ -86,5 +80,5 @@ clean:  ## Limpia caches y archivos temporales
 	@echo "Limpieza completada"
 
 clean-data:  ## Elimina datos procesados (conserva raw)
-	rm -rf data/processed/* data/features/*
-	touch data/processed/.gitkeep data/features/.gitkeep
+	rm -rf data/processed/*
+	touch data/processed/.gitkeep
