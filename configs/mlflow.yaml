@@ -1,0 +1,33 @@
+# $schema: ../schemas/mlflow.schema.json
+# ── MLflow ────────────────────────────────────────────────────────────────────
+# Si existe .env con DAGSHUB_USER_TOKEN, usa DagsHub remote.
+# Si no, usa SQLite local (soporta Model Registry).
+
+# ── Tracking server ───────────────────────────────────────────────────────────
+tracking:
+  experiment_name: fraud-detection
+  run_name: lgbm_baseline
+  # Local: sqlite:///mlruns.db  |  DagsHub: https://dagshub.com/user/repo.mlflow
+  tracking_uri: sqlite:///mlruns.db
+  backend: local  # auto-detected if .env has dagshub credentials
+
+# ── Model Registry ────────────────────────────────────────────────────────────
+registry:
+  enabled: true
+  model_name: fraud-detection-lgbm
+  alias: champion  # champion | challenger | candidate
+
+# ── Dataset lineage ───────────────────────────────────────────────────────────
+datasets:
+  enabled: true
+  context: training
+
+# ── Artifacts ─────────────────────────────────────────────────────────────────
+log_model: true
+log_feature_importance: true
+
+# ── Custom metrics (mlflow.evaluate) ──────────────────────────────────────────
+custom_metrics:
+  enabled: false
+  fn_cost: 1.0    # multiplicador del transaction_amt por FN
+  fp_cost: 25.0   # costo estimado de revisión manual por FP

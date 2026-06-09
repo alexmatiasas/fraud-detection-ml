@@ -55,29 +55,9 @@ early_stopping:
   rounds: 100
   eval_metric: auc
 
-# ── Métricas de evaluación ────────────────────────────────────────────────────
-# Para fraude: accuracy es INÚTIL (96.5% baseline).
-# Average Precision (PR AUC) > ROC AUC > F2.
-evaluation:
-  metrics:
-    - roc_auc
-    - average_precision
-    - f1_score
-    - precision
-    - recall
-  threshold: 0.5
-
 # ── MLflow ────────────────────────────────────────────────────────────────────
+# Minimal config for train.py. Full config in configs/mlflow.yaml.
 mlflow:
   experiment_name: fraud-detection
   run_name: lgbm_baseline
-  tracking_uri: mlruns/
   log_model: true
-  log_feature_importance: true
-  log_shap: true
-
-# ── SHAP ──────────────────────────────────────────────────────────────────────
-shap:
-  enabled: true
-  max_display: 20
-  sample_size: 1000

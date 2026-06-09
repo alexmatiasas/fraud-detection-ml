@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 
 from src.schemas.data import DataConfig
+from src.schemas.evaluate import EvaluateConfig
 from src.schemas.features import FeaturesConfig
+from src.schemas.mlflow import MlflowFullConfig
 from src.schemas.train import TrainConfig
 
 
@@ -13,9 +15,11 @@ def generate_all(output_dir: str = "schemas") -> None:
     schemas_dir.mkdir(exist_ok=True)
 
     entries = [
-        ("features.schema.json", FeaturesConfig),
         ("data.schema.json", DataConfig),
+        ("features.schema.json", FeaturesConfig),
         ("train.schema.json", TrainConfig),
+        ("evaluate.schema.json", EvaluateConfig),
+        ("mlflow.schema.json", MlflowFullConfig),
     ]
 
     for filename, model_cls in entries:

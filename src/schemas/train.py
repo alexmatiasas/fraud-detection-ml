@@ -120,46 +120,6 @@ class EarlyStoppingCfg(BaseModel):
     )
 
 
-EvalMetricName = Literal[
-    "roc_auc", "average_precision", "f1_score", "precision", "recall"
-]
-
-
-class EvaluationCfg(BaseModel):
-    metrics: list[EvalMetricName] = Field(
-        default_factory=lambda: [
-            "roc_auc",
-            "average_precision",
-            "f1_score",
-            "precision",
-            "recall",
-        ],
-        description="Metrics computed at evaluation time",
-    )
-    threshold: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Decision threshold for binary classification",
-    )
-
-
-class MlflowCfg(BaseModel):
-    experiment_name: str = Field(
-        default="fraud-detection", description="MLflow experiment name"
-    )
-    run_name: str = Field(default="lgbm_baseline", description="MLflow run name")
-    tracking_uri: str = Field(
-        default="mlruns/",
-        description="MLflow tracking URI (local dir or DagsHub remote)",
-    )
-    log_model: bool = Field(default=True, description="Log model artifact to MLflow")
-    log_feature_importance: bool = Field(
-        default=True, description="Log feature importance plot"
-    )
-    log_shap: bool = Field(default=True, description="Log SHAP summary plot")
-
-
 class ShapCfg(BaseModel):
     enabled: bool = Field(
         default=True, description="Compute SHAP values at evaluation time"
@@ -172,6 +132,14 @@ class ShapCfg(BaseModel):
         ge=1,
         description="Sample size for SHAP computation (full dataset is expensive)",
     )
+
+
+class MlflowCfg(BaseModel):
+    experiment_name: str = Field(
+        default="fraud-detection", description="MLflow experiment name"
+    )
+    run_name: str = Field(default="lgbm_baseline", description="MLflow run name")
+    log_model: bool = Field(default=True, description="Log model artifact to MLflow")
 
 
 class TrainConfig(BaseModel):
@@ -189,11 +157,8 @@ class TrainConfig(BaseModel):
     early_stopping: EarlyStoppingCfg = Field(
         default_factory=EarlyStoppingCfg, description="Early stopping configuration"
     )
-    evaluation: EvaluationCfg = Field(
-        default_factory=EvaluationCfg, description="Evaluation metrics configuration"
-    )
     mlflow: MlflowCfg = Field(
-        default_factory=MlflowCfg, description="MLflow tracking configuration"
+        default_factory=MlflowCfg, description="Minimal MLflow config"
     )
     shap: ShapCfg = Field(
         default_factory=ShapCfg, description="SHAP explainability configuration"

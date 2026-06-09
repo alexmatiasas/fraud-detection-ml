@@ -1,0 +1,60 @@
+# $schema: ../schemas/evaluate.schema.json
+# ── Evaluación ────────────────────────────────────────────────────────────────
+# Para fraude: accuracy es INÚTIL (96.5% baseline).
+# Average Precision (PR AUC) > ROC AUC > F1.
+
+# ── Threshold tuning + bootstrap CI ───────────────────────────────────────────
+threshold:
+  threshold: 0.5
+  n_thresholds: 100
+  bootstrap: true
+  bootstrap_metric: average_precision
+  bootstrap_iterations: 1000
+  bootstrap_seed: 42
+
+# ── Segmentos ─────────────────────────────────────────────────────────────────
+segments:
+  enabled: true
+  columns:
+    - ProductCD
+    - card4
+  min_samples: 50
+
+# ── Learning curves (opt-in, re-entrena modelo N veces) ──────────────────────
+learning_curves:
+  enabled: false
+  train_sizes: [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+
+# ── Feature importance stability (opt-in, re-entrena N seeds) ─────────────────
+stability:
+  feature_importance: false
+  n_iterations: 10
+  seed: 42
+
+# ── Error analysis ────────────────────────────────────────────────────────────
+error_analysis:
+  enabled: true
+  features: [TransactionAmt]
+
+# ── Adversarial validation (opt-in, entrena RF extra) ────────────────────────
+adversarial_validation:
+  enabled: false
+  seed: 42
+
+# ── Model card ────────────────────────────────────────────────────────────────
+model_card:
+  enabled: true
+  filename: model_card.md
+
+# ── Plots ─────────────────────────────────────────────────────────────────────
+plots:
+  output_dir: models/
+  plots:
+    - roc_curve
+    - pr_curve
+    - calibration
+  error_features: null
+
+# ── Report (JSON, sin dependencia de MLflow) ─────────────────────────────────
+report:
+  path: models/report.json
