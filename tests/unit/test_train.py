@@ -4,14 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.models.categoricals import encode_categoricals
 from src.models.config import load_train_config
+from src.models.evaluate.metrics import compute_metrics
 from src.models.split import StratifiedSplitter, TemporalSplitter
-from src.models.train import (
-    _build_model,
-    _compute_metrics,
-    _encode_categoricals,
-    _get_splitter,
-)
+from src.models.train.model_builder import model_builder_registry
+from src.models.train.runner import _get_splitter
 
 
 class TestGetSplitter:
@@ -35,32 +33,22 @@ class TestGetSplitter:
 
 
 class TestBuildModel:
-    def test_lightgbm(self):
-        cfg = load_train_config(cli_args=["model.name=lightgbm"]).model
-        m = _build_model(cfg)
-        assert m.__class__.__name__ == "LGBMClassifier"
-
-    def test_xgboost(self):
-        cfg = load_train_config(cli_args=["model.name=xgboost"]).model
-        m = _build_model(cfg)
-        assert m.__class__.__name__ == "XGBClassifier"
-
-    def test_random_forest(self):
-        cfg = load_train_config(cli_args=["model.name=random_forest"]).model
-        m = _build_model(cfg)
-        assert m.__class__.__name__ == "RandomForestClassifier"
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("lightgbm", "LGBMClassifier"),
+            ("xgboost", "XGBClassifier"),
+            ("random_forest", "RandomForestClassifier"),
+        ],
+    )
+    def test_builds_known_models(self, name: str, expected: str):
+        cfg = load_train_config(cli_args=[f"model.name={name}"]).model
+        model = model_builder_registry.build(name, cfg.params.model_dump())
+        assert model.__class__.__name__ == expected
 
     def test_unknown_raises(self):
-        class FakeParams:
-            def model_dump(self):
-                return {}
-
-        class FakeCfg:
-            name = "unknown_model"
-            params = FakeParams()
-
         with pytest.raises(ValueError, match="Unknown model"):
-            _build_model(FakeCfg())
+            model_builder_registry.build("unknown_model", {})
 
 
 class TestEncodeCategoricals:
@@ -84,23 +72,23 @@ class TestEncodeCategoricals:
 
     def test_encodes_object_and_category(self, df_with_cats):
         train, val = df_with_cats
-        result_train, result_val = _encode_categoricals(train, val)
+        result_train, result_val = encode_categoricals(train, val)
 
-        assert result_train["num"].dtype.name == "int64"  # unchanged
+        assert result_train["num"].dtype.name == "int64"
         assert result_train["obj"].dtype.name == "int32"
         assert result_train["cat"].dtype.name == "int32"
 
     def test_unknown_category_maps_to_neg_one(self, df_with_cats):
         train, val = df_with_cats
-        _, result_val = _encode_categoricals(train, val)
+        _, result_val = encode_categoricals(train, val)
 
-        assert result_val["obj"].iloc[1] == -1  # "d" not in train
-        assert result_val["cat"].iloc[1] == -1  # "w" not in train
+        assert result_val["obj"].iloc[1] == -1
+        assert result_val["cat"].iloc[1] == -1
 
     def test_no_cat_cols_returns_unchanged(self):
         train = pd.DataFrame({"a": [1, 2], "b": [3.0, 4.0]})
         val = pd.DataFrame({"a": [5], "b": [6.0]})
-        t, v = _encode_categoricals(train, val)
+        t, v = encode_categoricals(train, val)
         pd.testing.assert_frame_equal(t, train)
         pd.testing.assert_frame_equal(v, val)
 
@@ -109,18 +97,19 @@ class TestComputeMetrics:
     def test_returns_expected_keys(self):
         y_true = np.array([0, 1, 0, 1, 0])
         y_proba = np.array([0.1, 0.9, 0.2, 0.8, 0.3])
-        metrics = _compute_metrics(y_true, y_proba)
-        assert set(metrics.keys()) == {"roc_auc", "average_precision"}
+        metrics = compute_metrics(y_true, y_proba)
+        expected = {"roc_auc", "average_precision", "f1", "precision", "recall"}
+        assert set(metrics.keys()) == expected
 
     def test_perfect_predictions(self):
         y_true = np.array([0, 1])
         y_proba = np.array([0.0, 1.0])
-        metrics = _compute_metrics(y_true, y_proba)
+        metrics = compute_metrics(y_true, y_proba)
         assert metrics["roc_auc"] == 1.0
         assert metrics["average_precision"] == 1.0
 
     def test_worst_predictions(self):
         y_true = np.array([0, 1])
         y_proba = np.array([1.0, 0.0])
-        metrics = _compute_metrics(y_true, y_proba)
+        metrics = compute_metrics(y_true, y_proba)
         assert metrics["roc_auc"] == 0.0
