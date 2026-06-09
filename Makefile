@@ -53,6 +53,9 @@ schemas:  ## Genera JSON Schema desde modelos Pydantic
 train:  ## Entrena modelo (pasa args via ARGS: make train ARGS="model.name=xgboost")
 	$(PYTHON) -m src.models.train $(ARGS)
 
+evaluate:  ## Evaluación completa (métricas, plots, model card)
+	$(PYTHON) -m src.models.evaluate
+
 ## ── API ──────────────────────────────────────────────────────────────────────
 serve:  ## Levanta la API localmente
 	uv run uvicorn src.api.main:app --reload --port 8000
