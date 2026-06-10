@@ -19,3 +19,31 @@ stages:
     outs:
     - data/processed:
         persist: true
+  train:
+    cmd: uv run python -m src.models.train
+    deps:
+    - configs/train.yaml
+    - configs/features.yaml
+    - configs/data.yaml
+    - src/models/
+    - src/features/
+    - src/schemas/
+    - data/processed
+    params:
+    - configs/train.yaml:
+      - model
+      - split
+      - early_stopping
+    outs:
+    - models/pipeline.joblib
+  evaluate:
+    cmd: uv run python -m src.models.evaluate
+    deps:
+    - configs/train.yaml
+    - configs/features.yaml
+    - configs/data.yaml
+    - src/models/
+    - src/features/
+    - src/schemas/
+    - data/processed
+    - models/pipeline.joblib

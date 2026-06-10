@@ -37,3 +37,108 @@ stages:
       md5: 43b41ede9e8aeb0d224f61ff795f4abc.dir
       size: 157449730
       nfiles: 6
+  train:
+    cmd: uv run python -m src.models.train
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4b8ebd9795a2fb7b3ebc90e4e7dc4e72
+      size: 500
+    - path: configs/features.yaml
+      hash: md5
+      md5: 91c68c869d92d57c5f82c03659ff0029
+      size: 4677
+    - path: configs/train.yaml
+      hash: md5
+      md5: e23631d5df329d7a192e2e6c240a6739
+      size: 2849
+    - path: data/processed
+      hash: md5
+      md5: 43b41ede9e8aeb0d224f61ff795f4abc.dir
+      size: 157449730
+      nfiles: 6
+    - path: src/features/
+      hash: md5
+      md5: 2acd7b1794e7cac7a1ab86fc5a2fc712.dir
+      size: 87446
+      nfiles: 34
+    - path: src/models/
+      hash: md5
+      md5: a8ce928d38cf86f3f756040fd90b3db1.dir
+      size: 244894
+      nfiles: 48
+    - path: src/schemas/
+      hash: md5
+      md5: 1f87ed8b2d1fef9e537cf3841ce971af.dir
+      size: 61185
+      nfiles: 14
+    params:
+      configs/train.yaml:
+        early_stopping:
+          enabled: true
+          rounds: 100
+          eval_metric: auc
+        model:
+          name: lightgbm
+          artifact_dir: models/
+          params:
+            n_estimators: 1000
+            learning_rate: 0.05
+            max_depth: 8
+            num_leaves: 127
+            min_child_samples: 100
+            subsample: 0.8
+            colsample_bytree: 0.8
+            reg_alpha: 0.1
+            reg_lambda: 1.0
+            scale_pos_weight: 27.6
+            random_state: 42
+            n_jobs: -1
+        split:
+          strategy: temporal
+          time_col: TransactionDT
+          test_size: 0.2
+    outs:
+    - path: models/pipeline.joblib
+      hash: md5
+      md5: 371107d8f89d786845bfd267a7834aa3
+      size: 9482278
+  evaluate:
+    cmd: uv run python -m src.models.evaluate
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4b8ebd9795a2fb7b3ebc90e4e7dc4e72
+      size: 500
+    - path: configs/features.yaml
+      hash: md5
+      md5: 91c68c869d92d57c5f82c03659ff0029
+      size: 4677
+    - path: configs/train.yaml
+      hash: md5
+      md5: e23631d5df329d7a192e2e6c240a6739
+      size: 2849
+    - path: data/processed
+      hash: md5
+      md5: 43b41ede9e8aeb0d224f61ff795f4abc.dir
+      size: 157449730
+      nfiles: 6
+    - path: models/pipeline.joblib
+      hash: md5
+      md5: 371107d8f89d786845bfd267a7834aa3
+      size: 9482278
+    - path: src/features/
+      hash: md5
+      md5: 2acd7b1794e7cac7a1ab86fc5a2fc712.dir
+      size: 87446
+      nfiles: 34
+    - path: src/models/
+      hash: md5
+      md5: a8ce928d38cf86f3f756040fd90b3db1.dir
+      size: 244894
+      nfiles: 48
+    - path: src/schemas/
+      hash: md5
+      md5: 1f87ed8b2d1fef9e537cf3841ce971af.dir
+      size: 61185
+      nfiles: 14
