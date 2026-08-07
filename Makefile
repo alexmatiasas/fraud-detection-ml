@@ -16,7 +16,7 @@ install:  ## Instala dependencias con uv
 	uv sync --extra dev
 
 hooks:  ## Instala pre-commit hooks
-	uv run pre-commit install --hook-type commit-msg --hook-type pre-commit
+	uv run prek install --hook-type commit-msg --hook-type pre-commit
 
 ## ── Calidad de código ────────────────────────────────────────────────────────
 lint:  ## Linting con ruff
