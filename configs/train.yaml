@@ -48,12 +48,18 @@ optuna:
   metric: roc_auc
   direction: maximize
   study_name: fraud_lgbm_v1
+  save_best_params: true
 
 # ── Early stopping ────────────────────────────────────────────────────────────
 early_stopping:
   enabled: true
   rounds: 100
   eval_metric: auc
+
+# ── Training callbacks (per-iteration logging) ──────────────────────────────
+training_callbacks:
+  log_per_iteration: true
+  dvclive: false
 
 # ── MLflow ────────────────────────────────────────────────────────────────────
 # Minimal config for train.py. Full config in configs/mlflow.yaml.
