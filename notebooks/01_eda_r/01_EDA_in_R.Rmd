@@ -895,15 +895,18 @@ train |>
   select(isFraud, all_of(c_near_binary)) |>
   pivot_longer(cols = all_of(c_near_binary), names_to = "Variable", values_to = "Value") |>
   filter(!is.na(Value)) |>
-  mutate(Value = if_else(Value >= 3, "3+", as.character(as.integer(Value))),
-         Value = factor(Value, levels = c("0", "1", "2", "3+"))) |>
+  mutate(
+    Value = if_else(Value >= 3, "3+", as.character(as.integer(Value))),
+    Value = factor(Value, levels = c("0", "1", "2", "3+"))
+  ) |>
   group_by(Variable, Value) |>
   summarise(n = n(), fraud_rate = mean(isFraud), .groups = "drop") |>
   filter(n >= 50) |>
   ggplot(aes(x = Value, y = fraud_rate)) +
   geom_col(fill = "#D85A30", width = 0.7) +
   geom_text(aes(label = scales::percent(fraud_rate, accuracy = 0.1)),
-            vjust = -0.5, size = 3) +
+    vjust = -0.5, size = 3
+  ) +
   facet_wrap(~Variable, nrow = 1) +
   scale_y_continuous(labels = scales::percent, limits = c(0, 0.17)) +
   labs(
@@ -970,7 +973,7 @@ train |>
 ### 5.5.5 Pipeline Implications — C Variables
 
 | Feature / Group | Decision | Rationale |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | **C3** | Drop | 99.59% zeros; non-zero values have lower fraud rate than baseline — no predictive value |
 | **C4, C7, C8, C10, C12** | Keep as-is | Near-binary distribution; clear fraud rate increase at value = 2; retained outliers are strongest signal |
 | **C1, C2, C5, C6, C9, C11, C13, C14** | Keep as-is; note inverse patterns | Continuous with long tails; extreme outliers (D10) carry fraud signal; C13/C14 inverse direction worth monitoring in model |
@@ -984,7 +987,7 @@ Since their meaning is unknown, we group them into two sets based on
 missingness:
 
 | Set | Variables | Missing % | Non-missing n | Decision |
-|----|----|----|----|----|
+|---------------|---------------|---------------|---------------|---------------|
 | **Complete** | D1, D2, D3, D4, D5, D10, D11, D15 | 0–52% | 280K–589K | Keep — full analysis |
 | **High missingness** | D6, D7, D8, D9, D12, D13, D14 | 87–94% | 39K–75K | Drop — no actionable signal |
 
@@ -1092,7 +1095,7 @@ train |>
 #### 5.6.3 Pipeline Implications — D Variables
 
 | Feature / Group | Decision | Rationale |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | **D6, D7, D8, D9** | Drop | 87–94% missing; no structural explanation; non-missing observations show no clear discriminative pattern |
 | **D12, D13, D14** | Drop | 89% missing; no structural explanation; non-missing shows flat or mid-range peak patterns |
 | **D1, D2, D3, D4, D5, D10, D11, D15** | Keep as-is | \<53% missing; clear inverse monotonic fraud pattern (low value = higher fraud); strong discriminative signal despite overlap in raw distributions |
@@ -1162,7 +1165,7 @@ cor_target <- cor_matrix[, "isFraud"]
 cor_target_sorted <- sort(abs(cor_target), decreasing = TRUE)
 
 # View top correlations
-head(cor_target_sorted, 20)
+head(cor_target_sorted, 25)
 ```
 
 **Observation**:
@@ -1252,7 +1255,7 @@ stability and interpretability—particularly for linear models.
 #### 5.7.6 Pipeline Implications — Correlation
 
 | Finding | Decision | Rationale |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | No linear feature has | None. Non linear relation detected. | r \< 0.15 with isFraud |
 | V-clusters (V282–V283, V291–V292, V313–V315) show | Dimensional reduction | r \> 0.95 |
 | C7 ↔ C12 and C8 ↔ C10 have | Dimensional reduction | r \> 0.99 |
@@ -1549,7 +1552,7 @@ vs identity tables).
 #### 5.11.1 Pipeline Implications — Missing Data
 
 | Finding | Decision | Rationale |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | High-missingness variables (\>80%) form distinct blocks | Drop D6–D9, D12–D14 per Section 5.6 | No structural explanation; non-missing values lack discriminative signal |
 | id\_ variables nearly 100% missing without identity merge | Create `has_identity` binary flag | Captures structural missingness as a feature — 0.25x odds ratio per literature |
 | V features with moderate missingness (\<20%) | Keep with sentinel imputation | 154 V features are core to model performance; -999 sentinel is standard for LightGBM |
@@ -1564,7 +1567,7 @@ feature engineering pipeline rather than exhaustive description.
 **Key Decisions:**
 
 | Feature Group | Decision | Rationale |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | **TransactionAmt** | Keep, log-transform | Bimodal fraud distribution; extreme outliers carry fraud signal |
 | **TransactionDT** | Keep, extract hour/DoW/Weekend | Temporal fraud patterns (early morning, weekday) |
 | **ProductCD** | Keep, categorical | Product C: 12% fraud rate vs 3.5% baseline |
