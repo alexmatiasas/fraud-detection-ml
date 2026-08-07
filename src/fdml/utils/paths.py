@@ -37,6 +37,7 @@ PROJECT_ROOT = _find_project_root()
 CONFIGS_DIR = PROJECT_ROOT / "configs"
 MODELS_DIR = PROJECT_ROOT / "models"
 REPORTS_DIR = PROJECT_ROOT / "reports"
+LOGS_DIR = PROJECT_ROOT / "logs"
 
 data_config = _load_config_as_dict(CONFIGS_DIR / "data.yaml")
 evaluate_config = _load_config_as_dict(CONFIGS_DIR / "evaluate.yaml")
