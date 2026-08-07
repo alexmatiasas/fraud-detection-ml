@@ -1,6 +1,0 @@
-model_name: lightgbm
-split_strategy: temporal
-n_features: 332
-n_train: 472432
-n_val: 118108
-best_threshold: 0.7524242424242424
