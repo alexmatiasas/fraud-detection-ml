@@ -10,6 +10,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def bootstrap_ci(
         "average_precision": average_precision_score,
     }[metric]
 
-    for _ in range(n_iterations):
+    for _ in tqdm(range(n_iterations), desc="Bootstrapping", leave=False):
         idx = rng.integers(0, n, n)
         y_boot = y_true[idx]
         p_boot = y_proba[idx]

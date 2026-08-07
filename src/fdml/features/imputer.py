@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.base import BaseFeatureTransformer
+from fdml.features.base import BaseFeatureTransformer
 
 _NUMERIC_DTYPES = (
     "float64",

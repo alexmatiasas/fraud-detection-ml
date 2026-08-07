@@ -107,6 +107,9 @@ class OptunaCfg(BaseModel):
     study_name: str = Field(
         default="fraud_lgbm_v1", description="Optuna study name (persisted to DB)"
     )
+    save_best_params: bool = Field(
+        default=True, description="Save best HPO params to models/best_params_*.json"
+    )
 
 
 EvalMetric = Literal["auc", "average_precision"]
@@ -142,6 +145,17 @@ class MlflowCfg(BaseModel):
     log_model: bool = Field(default=True, description="Log model artifact to MLflow")
 
 
+class TrainingCallbacksCfg(BaseModel):
+    log_per_iteration: bool = Field(
+        default=True,
+        description="Log per-iteration validation metrics to MLflow + DVCLive",
+    )
+    dvclive: bool = Field(
+        default=False,
+        description="Log per-iteration metrics via DVCLive (separate from eval dvclive)",
+    )
+
+
 class TrainConfig(BaseModel):
     seed: int = Field(default=42, description="Global PRNG seed")
     data: DataPathsCfg = Field(
@@ -162,4 +176,8 @@ class TrainConfig(BaseModel):
     )
     shap: ShapCfg = Field(
         default_factory=ShapCfg, description="SHAP explainability configuration"
+    )
+    training_callbacks: TrainingCallbacksCfg = Field(
+        default_factory=TrainingCallbacksCfg,
+        description="Per-iteration training callbacks",
     )

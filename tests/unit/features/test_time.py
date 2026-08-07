@@ -1,9 +1,9 @@
 import pandas as pd
 from hypothesis import given
-from hypothesis.extra.pandas import data_frames, column, range_indexes
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.strategies import integers
 
-from src.features.time import TimeFeatureExtractor
+from fdml.features.time import TimeFeatureExtractor
 
 
 class TestTimeFeatures:

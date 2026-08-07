@@ -4,7 +4,7 @@ from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from src.schemas import DataConfig, FeaturesConfig, TrainConfig
+from fdml.schemas import DataConfig, FeaturesConfig, TrainConfig
 
 _CONFIGS = Path("configs")
 

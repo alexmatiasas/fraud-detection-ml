@@ -2,7 +2,7 @@ from typing import Optional
 
 import pandas as pd
 
-from src.features.base import BaseFeatureTransformer
+from fdml.features.base import BaseFeatureTransformer
 
 
 class CardAggregator(BaseFeatureTransformer):

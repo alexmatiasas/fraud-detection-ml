@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.split import (
+from fdml.models.split import (
     StratifiedKFoldSplitter,
     StratifiedSplitter,
     TemporalSplitter,

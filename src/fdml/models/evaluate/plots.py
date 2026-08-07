@@ -5,6 +5,7 @@ from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
+import mlflow
 import numpy as np
 import pandas as pd
 from sklearn.calibration import calibration_curve
@@ -17,6 +18,14 @@ from sklearn.metrics import (
 )
 
 matplotlib.use("Agg")
+
+
+def _maybe_log_figure(fig: plt.Figure, artifact_path: str) -> None:
+    if mlflow.active_run() is not None:
+        try:
+            mlflow.log_figure(fig, artifact_path)
+        except Exception:
+            pass
 
 
 class Plotter(ABC):
@@ -37,6 +46,7 @@ class Plotter(ABC):
         out = Path(output_dir) / self.filename()
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, bbox_inches="tight", dpi=100)
+        _maybe_log_figure(fig, f"plots/{self.filename()}")
         plt.close(fig)
         return out
 
@@ -148,6 +158,7 @@ class ErrorAnalysisPlotter:
             out = Path(output_dir) / f"error_analysis_{col}.png"
             out.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(out, bbox_inches="tight", dpi=100)
+            _maybe_log_figure(fig, f"plots/error_analysis_{col}.png")
             plt.close(fig)
             paths.append(out)
         return paths

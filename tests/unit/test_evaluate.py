@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.evaluate import (
+from fdml.models.evaluate import (
     bootstrap_ci,
     compute_metrics,
     per_segment_analysis,

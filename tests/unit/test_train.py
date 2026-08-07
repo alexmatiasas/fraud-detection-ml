@@ -4,12 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.categoricals import encode_categoricals
-from src.models.config import load_train_config
-from src.models.evaluate.metrics import compute_metrics
-from src.models.split import StratifiedSplitter, TemporalSplitter
-from src.models.train.model_builder import model_builder_registry
-from src.models.train.runner import _get_splitter
+from fdml.models.categoricals import encode_categoricals
+from fdml.models.config import load_train_config
+from fdml.models.evaluate.metrics import compute_metrics
+from fdml.models.split import StratifiedSplitter, TemporalSplitter
+from fdml.models.train.model_builder import model_builder_registry
+from fdml.models.train.runner import _get_splitter
 
 
 class TestGetSplitter:

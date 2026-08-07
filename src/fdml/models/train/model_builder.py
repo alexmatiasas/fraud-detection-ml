@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import lightgbm as lgb
+import optuna
 import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier
 
@@ -22,6 +23,13 @@ class ModelBuilder(ABC):
 
     def cleanup_params(self, params: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in params.items() if k not in ("n_jobs", "random_state")}
+
+    def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
+        """Return an Optuna search space dict for this model type.
+
+        Override in subclasses to define model-specific hyperparameter ranges.
+        """
+        return {}
 
 
 class LGBMBuilder(ModelBuilder):
@@ -47,6 +55,18 @@ class LGBMBuilder(ModelBuilder):
 
     def cleanup_params(self, params: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in params.items() if k not in ("n_jobs", "random_state")}
+
+    def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "num_leaves": trial.suggest_int("num_leaves", 31, 255, step=16),
+            "max_depth": trial.suggest_int("max_depth", 5, 15),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.3, 1.0),
+            "min_child_samples": trial.suggest_int("min_child_samples", 5, 200),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+        }
 
 
 class XGBoostBuilder(ModelBuilder):
@@ -75,6 +95,17 @@ class XGBoostBuilder(ModelBuilder):
             if k not in ("n_jobs", "random_state", "verbosity")
         }
 
+    def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "max_depth": trial.suggest_int("max_depth", 3, 12),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.3, 1.0),
+            "min_child_weight": trial.suggest_float("min_child_weight", 1.0, 10.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+        }
+
 
 class RFBuilder(ModelBuilder):
     def name(self) -> str:
@@ -99,6 +130,14 @@ class RFBuilder(ModelBuilder):
             f"min_samples_leaf={params.get('min_child_samples', 100)} "
             f"max_samples={params.get('subsample', 0.8):.1f}"
         )
+
+    def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 1000, step=100),
+            "max_depth": trial.suggest_int("max_depth", 3, 20),
+            "min_child_samples": trial.suggest_int("min_child_samples", 10, 500),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+        }
 
 
 class ModelBuilderRegistry:

@@ -115,6 +115,13 @@ class PlotCfg(BaseModel):
     )
 
 
+class DVCLiveCfg(BaseModel):
+    enabled: bool = Field(
+        default=True, description="Enable DVCLive logging for DVC metrics/plots"
+    )
+    dir: str = Field(default="dvclive", description="DVCLive output directory")
+
+
 class ReportCfg(BaseModel):
     path: str = Field(
         default="models/report.json",
@@ -146,6 +153,9 @@ class EvaluateConfig(BaseModel):
     )
     model_card: ModelCardCfg = Field(
         default_factory=ModelCardCfg, description="Model card configuration"
+    )
+    dvclive: DVCLiveCfg = Field(
+        default_factory=DVCLiveCfg, description="DVCLive logging configuration"
     )
     plots: PlotCfg = Field(default_factory=PlotCfg, description="Plot configuration")
     report: ReportCfg = Field(

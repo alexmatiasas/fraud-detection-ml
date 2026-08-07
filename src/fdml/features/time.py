@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.base import BaseFeatureTransformer
+from fdml.features.base import BaseFeatureTransformer
 
 _SECONDS_IN_HOUR = 3600
 _SECONDS_IN_DAY = 86400

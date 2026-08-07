@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.base import BaseFeatureTransformer
+from fdml.features.base import BaseFeatureTransformer
 
 # M4 is categorical: M0/M1/M2/NaN → "missing"
 _M4_CATEGORIES = frozenset({"M0", "M1", "M2"})

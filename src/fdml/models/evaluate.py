@@ -1,11 +1,10 @@
 """Backward-compatible shim: re-exports from the new evaluate/ subpackage."""
 
+import logging
 import sys
 from pathlib import Path
 
-import logging
-
-from src.models.evaluate.runner import evaluate
+from fdml.models.evaluate.runner import evaluate
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +25,8 @@ def run_evaluation(
     feature_names=None,
     output_dir="models/",
 ):
-    from src.models.evaluate.reporter import ConsoleReporter
-    from src.schemas.evaluate import EvaluateConfig
+    from fdml.models.evaluate.reporter import ConsoleReporter
+    from fdml.schemas.evaluate import EvaluateConfig
 
     y_proba = model.predict_proba(X_val)[:, 1]
     if feature_names is None:
@@ -68,7 +67,7 @@ def run_evaluation(
 
 
 def main() -> None:
-    from src.models.evaluate.runner import main as _main
+    from fdml.models.evaluate.runner import main as _main
 
     _main()
 

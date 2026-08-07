@@ -45,23 +45,39 @@ data-convert:  ## Convierte CSVs a Parquet con tipos optimizados
 
 ## ── Config schemas ────────────────────────────────────────────────────────────
 schemas:  ## Genera JSON Schema desde modelos Pydantic
-	$(PYTHON) -m src.schemas.generate
+	$(PYTHON) -m fdml.schemas.generate
 
 .PHONY: schemas
 
-## ── Pipeline ─────────────────────────────────────────────────────────────────
+## ── DVC Pipeline ────────────────────────────────────────────────────────────
+dvc-repro:  ## Corre el pipeline completo con DVC
+	uv run dvc repro
+
+dvc-exp-run:  ## Corre experimento DVC (comparable con dvc exp show)
+	uv run dvc exp run
+
+dvc-exp-show:  ## Muestra tabla comparativa de experimentos
+	uv run dvc exp show
+
+dvc-metrics-diff:  ## Compara métricas entre experimentos
+	uv run dvc metrics diff
+
+dvc-plots-diff:  ## Compara plots entre experimentos (abrir HTML)
+	uv run dvc plots diff
+
+## ── Pipeline (directo, sin DVC) ─────────────────────────────────────────────
 train:  ## Entrena modelo (pasa args via ARGS: make train ARGS="model.name=xgboost")
-	$(PYTHON) -m src.models.train $(ARGS)
+	$(PYTHON) -m fdml.models.train $(ARGS)
 
 evaluate:  ## Evaluación completa (métricas, plots, model card)
-	$(PYTHON) -m src.models.evaluate
+	$(PYTHON) -m fdml.models.evaluate
 
 ## ── API ──────────────────────────────────────────────────────────────────────
 serve:  ## Levanta la API localmente
-	uv run uvicorn src.api.main:app --reload --port 8000
+	uv run uvicorn fdml.api.main:app --reload --port 8000
 
 serve-prod:  ## Levanta la API en modo producción
-	uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2
+	uv run uvicorn fdml.api.main:app --host 0.0.0.0 --port 8000 --workers 2
 
 ## ── MLflow ───────────────────────────────────────────────────────────────────
 mlflow-ui:  ## Abre MLflow UI
@@ -69,10 +85,10 @@ mlflow-ui:  ## Abre MLflow UI
 
 ## ── Docker ───────────────────────────────────────────────────────────────────
 docker-build:  ## Construye imagen Docker (sin datos)
-	docker build -t fraud-detection-ml:latest .
+	docker build -t fdml:latest .
 
 docker-run:  ## Corre el contenedor de la API
-	docker run -p 8000:8000 fraud-detection-ml:latest
+	docker run -p 8000:8000 fdml:latest
 
 ## ── Limpieza ─────────────────────────────────────────────────────────────────
 clean:  ## Limpia caches y archivos temporales

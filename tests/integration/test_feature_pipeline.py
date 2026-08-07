@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from sklearn.pipeline import Pipeline
 
-from src.features.factory import create_pipeline, load_config
+from fdml.features.factory import create_pipeline, load_fe_config
 
 _NROWS = 200
 _RNG = np.random.default_rng(42)
@@ -11,7 +11,7 @@ _RNG = np.random.default_rng(42)
 
 @pytest.fixture(scope="module")
 def cfg():
-    return load_config()
+    return load_fe_config()
 
 
 @pytest.fixture(scope="module")

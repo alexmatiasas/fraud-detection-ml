@@ -5,12 +5,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.features.factory import create_pipeline, load_config as load_features_config
-from src.models.categoricals import encode_categoricals
-from src.models.config import load_train_config
-from src.models.evaluate.metrics import compute_metrics
-from src.models.train.model_builder import model_builder_registry
-from src.models.train.runner import _get_splitter
+from fdml.features.factory import create_pipeline
+from fdml.features.factory import load_fe_config as load_features_config
+from fdml.models.categoricals import encode_categoricals
+from fdml.models.config import load_train_config
+from fdml.models.evaluate.metrics import compute_metrics
+from fdml.models.train.model_builder import model_builder_registry
+from fdml.models.train.runner import _get_splitter
 
 
 @pytest.fixture()

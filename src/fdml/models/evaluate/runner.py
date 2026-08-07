@@ -7,19 +7,24 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.models.config import load_evaluation_config, load_train_config
-from src.models.evaluate.drift import adversarial_validation
-from src.models.evaluate.metrics import bootstrap_ci, compute_metrics, threshold_tuning
-from src.models.evaluate.model_card import generate_model_card
-from src.models.evaluate.plots import (
+from fdml.models.config import load_evaluation_config, load_train_config
+from fdml.models.evaluate.drift import adversarial_validation
+from fdml.models.evaluate.metrics import (
+    bootstrap_ci,
+    compute_metrics,
+    threshold_tuning,
+)
+from fdml.models.evaluate.model_card import generate_model_card
+from fdml.models.evaluate.plots import (
     CalibrationPlotter,
     ErrorAnalysisPlotter,
     PRCurvePlotter,
     ROCCurvePlotter,
 )
-from src.models.evaluate.reporter import (
+from fdml.models.evaluate.reporter import (
     CompositeReporter,
     ConsoleReporter,
+    DVCLiveReporter,
     EvaluationReport,
     JSONFileReporter,
     LoggingReporter,
@@ -27,9 +32,12 @@ from src.models.evaluate.reporter import (
     SegmentResult,
     ThresholdPoint,
 )
-from src.models.evaluate.segments import per_segment_analysis
-from src.models.evaluate.stability import feature_importance_stability, learning_curves
-from src.schemas.evaluate import EvaluateConfig
+from fdml.models.evaluate.segments import per_segment_analysis
+from fdml.models.evaluate.stability import (
+    feature_importance_stability,
+    learning_curves,
+)
+from fdml.schemas.evaluate import EvaluateConfig
 
 logger = logging.getLogger(__name__)
 
@@ -247,13 +255,15 @@ def main() -> None:
 
     import joblib
 
-    from src.features.factory import (
+    from fdml.features.factory import (
         load_data,
         load_data_config,
         merge_tables,
     )
-    from src.models.categoricals import encode_categoricals as _encode_categoricals
-    from src.models.split import TemporalSplitter
+    from fdml.models.categoricals import (
+        encode_categoricals as _encode_categoricals,
+    )
+    from fdml.models.split import TemporalSplitter
 
     train_cfg = load_train_config()
     eval_cfg = load_evaluation_config()
@@ -299,6 +309,13 @@ def main() -> None:
         ConsoleReporter(),
         JSONFileReporter(eval_cfg.report.path),
         LoggingReporter(),
+        DVCLiveReporter(
+            eval_cfg=eval_cfg,
+            y_true=y_true,
+            y_proba=y_proba,
+            model_name=model.__class__.__name__,
+            split_strategy="temporal",
+        ),
     ]
 
     report = evaluate(

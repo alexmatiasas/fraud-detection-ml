@@ -1,7 +1,7 @@
 import pytest
 from omegaconf import OmegaConf
 
-from src.models.config import load_train_config
+from fdml.models.config import load_train_config
 
 
 class TestLoadTrainConfig:

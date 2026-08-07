@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.vfilter import VFeatureFilter
+from fdml.features.vfilter import VFeatureFilter
 
 
 class TestVFeatureFilter:

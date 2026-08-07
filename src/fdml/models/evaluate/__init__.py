@@ -1,23 +1,28 @@
 from __future__ import annotations
 
-from src.models.evaluate.metrics import bootstrap_ci, compute_metrics, threshold_tuning
-from src.models.evaluate.segments import per_segment_analysis
-from src.models.evaluate.model_card import generate_model_card
-from src.models.evaluate.plots import (
+from fdml.models.evaluate.metrics import (
+    bootstrap_ci,
+    compute_metrics,
+    threshold_tuning,
+)
+from fdml.models.evaluate.model_card import generate_model_card
+from fdml.models.evaluate.plots import (
     CalibrationPlotter,
     ErrorAnalysisPlotter,
     PRCurvePlotter,
     ROCCurvePlotter,
 )
-from src.models.evaluate.reporter import (
+from fdml.models.evaluate.reporter import (
     CompositeReporter,
     ConsoleReporter,
     EvaluationReport,
     JSONFileReporter,
     LoggingReporter,
+    MLflowReporter,
     Reporter,
 )
-from src.models.evaluate.runner import evaluate, main
+from fdml.models.evaluate.runner import evaluate, main
+from fdml.models.evaluate.segments import per_segment_analysis
 
 __all__ = [
     "CalibrationPlotter",
@@ -27,6 +32,7 @@ __all__ = [
     "EvaluationReport",
     "JSONFileReporter",
     "LoggingReporter",
+    "MLflowReporter",
     "PRCurvePlotter",
     "ROCCurvePlotter",
     "Reporter",

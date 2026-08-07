@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 from sklearn.base import BaseEstimator
 
-from src.features.base import BaseFeatureTransformer
+from fdml.features.base import BaseFeatureTransformer
 
 
 class TestBaseFeatureTransformer:

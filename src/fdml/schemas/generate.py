@@ -3,11 +3,11 @@
 import json
 from pathlib import Path
 
-from src.schemas.data import DataConfig
-from src.schemas.evaluate import EvaluateConfig
-from src.schemas.features import FeaturesConfig
-from src.schemas.mlflow import MlflowFullConfig
-from src.schemas.train import TrainConfig
+from fdml.schemas.data import DataConfig
+from fdml.schemas.evaluate import EvaluateConfig
+from fdml.schemas.features import FeaturesConfig
+from fdml.schemas.mlflow import MlflowFullConfig
+from fdml.schemas.train import TrainConfig
 
 
 def generate_all(output_dir: str = "schemas") -> None:

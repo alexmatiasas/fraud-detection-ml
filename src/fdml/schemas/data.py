@@ -1,4 +1,9 @@
+from pathlib import Path
+
 from pydantic import BaseModel, Field
+
+# TODO: refactor dirs with Path class using the @model_validator
+# or @field_validator
 
 
 class FilesCfg(BaseModel):
@@ -34,13 +39,13 @@ class ValidationCfg(BaseModel):
 
 
 class DataConfig(BaseModel):
-    base_dir: str = Field(default="data", description="Root data directory")
-    raw_dir: str = Field(default="data/raw", description="Raw CSV directory")
-    processed_dir: str = Field(
-        default="data/processed", description="Processed Parquet directory"
+    base_dir: Path = Field(default=Path("data"), description="Root data directory")
+    raw_dir: Path = Field(default=Path("data/raw"), description="Raw CSV directory")
+    processed_dir: Path = Field(
+        default=Path("data/processed"), description="Processed Parquet directory"
     )
-    features_dir: str = Field(
-        default="data/features", description="Feature Feather directory"
+    features_dir: Path = Field(
+        default=Path("data/features"), description="Feature Feather directory"
     )
     files: FilesCfg = Field(description="Input/output filenames")
     join_key: str = Field(

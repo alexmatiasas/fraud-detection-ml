@@ -1,12 +1,42 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 from omegaconf import OmegaConf
 
-from src.schemas.evaluate import EvaluateConfig
-from src.schemas.mlflow import MlflowFullConfig
-from src.schemas.train import TrainConfig
+from fdml.schemas.evaluate import EvaluateConfig
+from fdml.schemas.mlflow import MlflowFullConfig
+from fdml.schemas.train import TrainConfig
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_mlflow_tracking(mlflow_cfg: MlflowFullConfig) -> MlflowFullConfig:
+    """Auto-detect DagsHub from .env and override tracking URI if found."""
+    env_path = Path(".env")
+    if env_path.exists():
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(env_path)
+            token = os.environ.get("DAGSHUB_TOKEN") or os.environ.get(
+                "DAGSHUB_USER_TOKEN"
+            )
+            user = os.environ.get("DAGSHUB_USERNAME")
+            repo = os.environ.get("DAGSHUB_REPO")
+            if token and user and repo:
+                dagshub_uri = f"https://{token}@dagshub.com/{user}/{repo}.mlflow"
+                mlflow_cfg.tracking.tracking_uri = dagshub_uri
+                mlflow_cfg.tracking.backend = "dagshub"
+                os.environ.setdefault("MLFLOW_TRACKING_URI", dagshub_uri)
+                os.environ.setdefault("MLFLOW_TRACKING_USERNAME", user)
+                os.environ.setdefault("MLFLOW_TRACKING_PASSWORD", token)
+                logger.info("  MLflow: DagsHub remote detected (%s/%s)", user, repo)
+        except Exception as exc:
+            logger.warning("  MLflow: could not load .env: %s", exc)
+    return mlflow_cfg
 
 
 def load_train_config(

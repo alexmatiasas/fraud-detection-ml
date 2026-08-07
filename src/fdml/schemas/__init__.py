@@ -1,9 +1,9 @@
-from src.schemas.data import DataConfig, FilesCfg, ValidationCfg
-from src.schemas.evaluate import (
+from fdml.schemas.data import DataConfig, FilesCfg, ValidationCfg
+from fdml.schemas.evaluate import (
     AdversarialValCfg,
     ErrorAnalysisCfg,
-    EvaluateConfig,
     EvalMetricName,
+    EvaluateConfig,
     LearningCurvesCfg,
     ModelCardCfg,
     PlotCfg,
@@ -12,7 +12,7 @@ from src.schemas.evaluate import (
     StabilityCfg,
     ThresholdCfg,
 )
-from src.schemas.features import (
+from fdml.schemas.features import (
     AggFunc,
     CardAggregationCfg,
     DateTimeFeature,
@@ -25,7 +25,7 @@ from src.schemas.features import (
     TransactionCfg,
     VestaCfg,
 )
-from src.schemas.mlflow import (
+from fdml.schemas.mlflow import (
     BackendType,
     CustomMetricCfg,
     DatasetCfg,
@@ -33,7 +33,7 @@ from src.schemas.mlflow import (
     RegistryCfg,
     TrackingCfg,
 )
-from src.schemas.train import (
+from fdml.schemas.train import (
     DataPathsCfg,
     EarlyStoppingCfg,
     EvalMetric,

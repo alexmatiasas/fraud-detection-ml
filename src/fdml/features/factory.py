@@ -1,31 +1,39 @@
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
-from omegaconf import OmegaConf
 from sklearn.pipeline import Pipeline
 
-from src.features.card import CardAggregator
-from src.features.device import DeviceFeatureExtractor
-from src.features.flags import MFlagEncoder
-from src.features.freq import FrequencyEncoder
-from src.features.imputer import MissingImputer
-from src.features.selector import FeatureSelector
-from src.features.time import TimeFeatureExtractor
-from src.features.vfilter import VFeatureFilter
-from src.schemas.data import DataConfig
-from src.schemas.features import FeaturesConfig
+from fdml.features.card import CardAggregator
+from fdml.features.device import DeviceFeatureExtractor
+from fdml.features.flags import MFlagEncoder
+from fdml.features.freq import FrequencyEncoder
+from fdml.features.imputer import MissingImputer
+from fdml.features.selector import FeatureSelector
+from fdml.features.time import TimeFeatureExtractor
+from fdml.features.vfilter import VFeatureFilter
+from fdml.schemas.data import DataConfig
+from fdml.schemas.features import FeaturesConfig
+from fdml.utils.paths import data_config, features_config
 
 
-def load_config(path: str = "configs/features.yaml") -> FeaturesConfig:
-    raw = OmegaConf.load(path)
-    data = OmegaConf.to_container(raw, resolve=True)
-    return FeaturesConfig.model_validate(data)
+def load_fe_config(config: Mapping[str, Any] = features_config) -> FeaturesConfig:
+    """This takes the configuration file [configs/features.yaml](configs/features.yaml) parsed as a only read dictionary
+    (:class:`~collections.abc.Mapping` class) loaded and solved with :mod:`~OmegaConfig` and validates against the :class:`~fdml.schemas.features.FeaturesConfig` pydantic model
+
+    Args:
+        config (Mapping[str, Any], optional): A configuration dictionary (loaded and solved with :mod:`~OmegaConfig`, check :mod:`~fdml.utils.paths` module). Defaults to features_config.
+
+    Returns:
+        FeaturesConfig: Pydantic model validated against the :class:`~fraud_detection.schemas.features.FeaturesConfig` pydantic model.
+    """
+    return FeaturesConfig.model_validate(config)
 
 
-def load_data_config(path: str = "configs/data.yaml") -> DataConfig:
-    raw = OmegaConf.load(path)
-    data = OmegaConf.to_container(raw, resolve=True)
-    return DataConfig.model_validate(data)
+def load_data_config(config: Mapping[str, Any] = data_config) -> DataConfig:
+
+    return DataConfig.model_validate(config)
 
 
 def _build_feature_columns(cfg: FeaturesConfig) -> list[str]:

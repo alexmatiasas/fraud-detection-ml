@@ -2,48 +2,40 @@ stages:
   download:
     cmd: uv run python scripts/download_data.py
     outs:
-    - data/raw:
-        persist: true
+      - data/raw:
+          persist: true
     frozen: true
   prepare:
     cmd: uv run python scripts/prepare_data.py
     deps:
-    - configs/data.yaml
-    - data/raw
+      - configs/data.yaml
+      - data/raw
     params:
-    - configs/data.yaml:
-      - base_dir
-      - files
-      - join_key
-      - target
+      - configs/data.yaml:
+          - base_dir
+          - files
+          - join_key
+          - target
     outs:
-    - data/processed:
-        persist: true
+      - data/processed:
+          persist: true
   train:
-    cmd: uv run python -m src.models.train
+    cmd: uv run python -m fdml.models.train
     deps:
-    - configs/train.yaml
-    - configs/features.yaml
-    - configs/data.yaml
-    - src/models/
-    - src/features/
-    - src/schemas/
-    - data/processed
+      - configs/train.yaml
+      - configs/features.yaml
+      - configs/data.yaml
+      - src/fdml/models/
+      - src/fdml/features/
+      - src/fdml/schemas/
+      - data/processed
     params:
-    - configs/train.yaml:
-      - model
-      - split
-      - early_stopping
+      - configs/train.yaml:
+          - model
+          - split
+          - early_stopping
     outs:
-    - models/pipeline.joblib
-  evaluate:
-    cmd: uv run python -m src.models.evaluate
-    deps:
-    - configs/train.yaml
-    - configs/features.yaml
-    - configs/data.yaml
-    - src/models/
-    - src/features/
-    - src/schemas/
-    - data/processed
-    - models/pipeline.joblib
+      - models/pipeline.joblib
+      - dvclive/metrics.json:
+          cache: false
+      - dvclive/plots

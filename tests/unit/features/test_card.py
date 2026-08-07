@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.card import CardAggregator
+from fdml.features.card import CardAggregator
 
 
 class TestCardAggregations:
