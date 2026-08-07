@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "CustomMetricCfg": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable mlflow.evaluate() with custom fraud metrics",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "fn_cost": {
+          "default": 1.0,
+          "description": "Cost per false negative (multiplier of transaction amount)",
+          "title": "Fn Cost",
+          "type": "number"
+        },
+        "fp_cost": {
+          "default": 25.0,
+          "description": "Cost per false positive (manual review cost in $)",
+          "title": "Fp Cost",
+          "type": "number"
+        }
+      },
+      "title": "CustomMetricCfg",
+      "type": "object"
+    },
+    "DatasetCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Log dataset information with mlflow.log_input",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "context": {
+          "default": "training",
+          "description": "Dataset context label (training, validation, testing)",
+          "title": "Context",
+          "type": "string"
+        }
+      },
+      "title": "DatasetCfg",
+      "type": "object"
+    },
+    "RegistryCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable Model Registry",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "model_name": {
+          "default": "fraud-detection-lgbm",
+          "description": "Registered model name in MLflow Model Registry",
+          "title": "Model Name",
+          "type": "string"
+        },
+        "alias": {
+          "default": "champion",
+          "description": "Model alias for registry (champion = production)",
+          "enum": [
+            "champion",
+            "challenger",
+            "candidate"
+          ],
+          "title": "Alias",
+          "type": "string"
+        }
+      },
+      "title": "RegistryCfg",
+      "type": "object"
+    },
+    "TrackingCfg": {
+      "properties": {
+        "experiment_name": {
+          "default": "fraud-detection",
+          "description": "MLflow experiment name",
+          "title": "Experiment Name",
+          "type": "string"
+        },
+        "run_name": {
+          "default": "lgbm_baseline",
+          "description": "MLflow run name",
+          "title": "Run Name",
+          "type": "string"
+        },
+        "tracking_uri": {
+          "default": "sqlite:///mlruns.db",
+          "description": "MLflow tracking URI (sqlite:///mlruns.db or DagsHub remote)",
+          "title": "Tracking Uri",
+          "type": "string"
+        },
+        "backend": {
+          "default": "local",
+          "description": "Backend type \u2014 auto-detected if dagshub credentials present",
+          "enum": [
+            "local",
+            "dagshub"
+          ],
+          "title": "Backend",
+          "type": "string"
+        }
+      },
+      "title": "TrackingCfg",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "tracking": {
+      "$ref": "#/$defs/TrackingCfg",
+      "description": "Tracking server configuration"
+    },
+    "registry": {
+      "$ref": "#/$defs/RegistryCfg",
+      "description": "Model Registry configuration"
+    },
+    "datasets": {
+      "$ref": "#/$defs/DatasetCfg",
+      "description": "Dataset lineage configuration"
+    },
+    "log_model": {
+      "default": true,
+      "description": "Log model artifact to MLflow",
+      "title": "Log Model",
+      "type": "boolean"
+    },
+    "log_feature_importance": {
+      "default": true,
+      "description": "Log feature importance plot",
+      "title": "Log Feature Importance",
+      "type": "boolean"
+    },
+    "custom_metrics": {
+      "$ref": "#/$defs/CustomMetricCfg",
+      "description": "Custom evaluation metrics for fraud"
+    }
+  },
+  "title": "MlflowFullConfig",
+  "type": "object"
+}

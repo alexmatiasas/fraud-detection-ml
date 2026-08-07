@@ -2,10 +2,10 @@
   "$defs": {
     "DataPathsCfg": {
       "properties": {
-        "features_dir": {
-          "default": "data/features",
-          "description": "Feature Feather directory",
-          "title": "Features Dir",
+        "raw_dir": {
+          "default": "data/raw",
+          "description": "Raw data directory",
+          "title": "Raw Dir",
           "type": "string"
         },
         "processed_dir": {
@@ -14,22 +14,16 @@
           "title": "Processed Dir",
           "type": "string"
         },
-        "raw_dir": {
-          "default": "data/raw",
-          "description": "Raw data directory",
-          "title": "Raw Dir",
+        "features_dir": {
+          "default": "data/features",
+          "description": "Feature Feather directory",
+          "title": "Features Dir",
           "type": "string"
         },
-        "test_identity": {
-          "default": "data/raw/test_identity.parquet",
-          "description": "Test identity file",
-          "title": "Test Identity",
-          "type": "string"
-        },
-        "test_transaction": {
-          "default": "data/raw/test_transaction.parquet",
-          "description": "Test transaction file",
-          "title": "Test Transaction",
+        "train_transaction": {
+          "default": "data/raw/train_transaction.parquet",
+          "description": "Training transaction file",
+          "title": "Train Transaction",
           "type": "string"
         },
         "train_identity": {
@@ -38,10 +32,16 @@
           "title": "Train Identity",
           "type": "string"
         },
-        "train_transaction": {
-          "default": "data/raw/train_transaction.parquet",
-          "description": "Training transaction file",
-          "title": "Train Transaction",
+        "test_transaction": {
+          "default": "data/raw/test_transaction.parquet",
+          "description": "Test transaction file",
+          "title": "Test Transaction",
+          "type": "string"
+        },
+        "test_identity": {
+          "default": "data/raw/test_identity.parquet",
+          "description": "Test identity file",
+          "title": "Test Identity",
           "type": "string"
         }
       },
@@ -56,6 +56,13 @@
           "title": "Enabled",
           "type": "boolean"
         },
+        "rounds": {
+          "default": 100,
+          "description": "Patience rounds",
+          "minimum": 1,
+          "title": "Rounds",
+          "type": "integer"
+        },
         "eval_metric": {
           "default": "auc",
           "description": "Early stopping evaluation metric",
@@ -65,56 +72,19 @@
           ],
           "title": "Eval Metric",
           "type": "string"
-        },
-        "rounds": {
-          "default": 100,
-          "description": "Patience rounds",
-          "minimum": 1,
-          "title": "Rounds",
-          "type": "integer"
         }
       },
       "title": "EarlyStoppingCfg",
       "type": "object"
     },
-    "EvaluationCfg": {
-      "properties": {
-        "metrics": {
-          "description": "Metrics computed at evaluation time",
-          "items": {
-            "enum": [
-              "roc_auc",
-              "average_precision",
-              "f1_score",
-              "precision",
-              "recall"
-            ],
-            "type": "string"
-          },
-          "title": "Metrics",
-          "type": "array"
-        },
-        "threshold": {
-          "default": 0.5,
-          "description": "Decision threshold for binary classification",
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "title": "Threshold",
-          "type": "number"
-        }
-      },
-      "title": "EvaluationCfg",
-      "type": "object"
-    },
     "LightGBMParams": {
       "properties": {
-        "colsample_bytree": {
-          "default": 0.8,
-          "description": "Column sampling ratio per tree",
-          "exclusiveMinimum": 0.0,
-          "maximum": 1.0,
-          "title": "Colsample Bytree",
-          "type": "number"
+        "n_estimators": {
+          "default": 1000,
+          "description": "Number of boosting rounds",
+          "minimum": 1,
+          "title": "N Estimators",
+          "type": "integer"
         },
         "learning_rate": {
           "default": 0.05,
@@ -130,26 +100,6 @@
           "title": "Max Depth",
           "type": "integer"
         },
-        "min_child_samples": {
-          "default": 100,
-          "description": "Minimum data per child node",
-          "minimum": 1,
-          "title": "Min Child Samples",
-          "type": "integer"
-        },
-        "n_estimators": {
-          "default": 1000,
-          "description": "Number of boosting rounds",
-          "minimum": 1,
-          "title": "N Estimators",
-          "type": "integer"
-        },
-        "n_jobs": {
-          "default": -1,
-          "description": "Parallel threads (-1 = all cores)",
-          "title": "N Jobs",
-          "type": "integer"
-        },
         "num_leaves": {
           "default": 127,
           "description": "Maximum tree leaves",
@@ -157,11 +107,28 @@
           "title": "Num Leaves",
           "type": "integer"
         },
-        "random_state": {
-          "default": 42,
-          "description": "PRNG seed",
-          "title": "Random State",
+        "min_child_samples": {
+          "default": 100,
+          "description": "Minimum data per child node",
+          "minimum": 1,
+          "title": "Min Child Samples",
           "type": "integer"
+        },
+        "subsample": {
+          "default": 0.8,
+          "description": "Row sampling ratio per tree",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Subsample",
+          "type": "number"
+        },
+        "colsample_bytree": {
+          "default": 0.8,
+          "description": "Column sampling ratio per tree",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Colsample Bytree",
+          "type": "number"
         },
         "reg_alpha": {
           "default": 0.1,
@@ -184,13 +151,17 @@
           "title": "Scale Pos Weight",
           "type": "number"
         },
-        "subsample": {
-          "default": 0.8,
-          "description": "Row sampling ratio per tree",
-          "exclusiveMinimum": 0.0,
-          "maximum": 1.0,
-          "title": "Subsample",
-          "type": "number"
+        "random_state": {
+          "default": 42,
+          "description": "PRNG seed",
+          "title": "Random State",
+          "type": "integer"
+        },
+        "n_jobs": {
+          "default": -1,
+          "description": "Parallel threads (-1 = all cores)",
+          "title": "N Jobs",
+          "type": "integer"
         }
       },
       "title": "LightGBMParams",
@@ -204,35 +175,17 @@
           "title": "Experiment Name",
           "type": "string"
         },
-        "log_feature_importance": {
-          "default": true,
-          "description": "Log feature importance plot",
-          "title": "Log Feature Importance",
-          "type": "boolean"
-        },
-        "log_model": {
-          "default": true,
-          "description": "Log model artifact to MLflow",
-          "title": "Log Model",
-          "type": "boolean"
-        },
-        "log_shap": {
-          "default": true,
-          "description": "Log SHAP summary plot",
-          "title": "Log Shap",
-          "type": "boolean"
-        },
         "run_name": {
           "default": "lgbm_baseline",
           "description": "MLflow run name",
           "title": "Run Name",
           "type": "string"
         },
-        "tracking_uri": {
-          "default": "mlruns/",
-          "description": "MLflow tracking URI (local dir or DagsHub remote)",
-          "title": "Tracking Uri",
-          "type": "string"
+        "log_model": {
+          "default": true,
+          "description": "Log model artifact to MLflow",
+          "title": "Log Model",
+          "type": "boolean"
         }
       },
       "title": "MlflowCfg",
@@ -240,12 +193,6 @@
     },
     "ModelCfg": {
       "properties": {
-        "artifact_dir": {
-          "default": "models/",
-          "description": "Directory for model artifacts",
-          "title": "Artifact Dir",
-          "type": "string"
-        },
         "name": {
           "default": "lightgbm",
           "description": "Model algorithm",
@@ -255,6 +202,12 @@
             "random_forest"
           ],
           "title": "Name",
+          "type": "string"
+        },
+        "artifact_dir": {
+          "default": "models/",
+          "description": "Directory for model artifacts",
+          "title": "Artifact Dir",
           "type": "string"
         },
         "params": {
@@ -267,31 +220,11 @@
     },
     "OptunaCfg": {
       "properties": {
-        "direction": {
-          "default": "maximize",
-          "description": "Optimisation direction",
-          "enum": [
-            "maximize",
-            "minimize"
-          ],
-          "title": "Direction",
-          "type": "string"
-        },
         "enabled": {
           "default": false,
           "description": "Enable Optuna hyperparameter optimisation",
           "title": "Enabled",
           "type": "boolean"
-        },
-        "metric": {
-          "default": "roc_auc",
-          "description": "Metric to optimise",
-          "enum": [
-            "roc_auc",
-            "average_precision"
-          ],
-          "title": "Metric",
-          "type": "string"
         },
         "n_trials": {
           "default": 50,
@@ -299,12 +232,6 @@
           "minimum": 1,
           "title": "N Trials",
           "type": "integer"
-        },
-        "study_name": {
-          "default": "fraud_lgbm_v1",
-          "description": "Optuna study name (persisted to DB)",
-          "title": "Study Name",
-          "type": "string"
         },
         "timeout_seconds": {
           "anyOf": [
@@ -319,6 +246,38 @@
           "default": 3600,
           "description": "HPO timeout (None = unlimited)",
           "title": "Timeout Seconds"
+        },
+        "metric": {
+          "default": "roc_auc",
+          "description": "Metric to optimise",
+          "enum": [
+            "roc_auc",
+            "average_precision"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "direction": {
+          "default": "maximize",
+          "description": "Optimisation direction",
+          "enum": [
+            "maximize",
+            "minimize"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "study_name": {
+          "default": "fraud_lgbm_v1",
+          "description": "Optuna study name (persisted to DB)",
+          "title": "Study Name",
+          "type": "string"
+        },
+        "save_best_params": {
+          "default": true,
+          "description": "Save best HPO params to models/best_params_*.json",
+          "title": "Save Best Params",
+          "type": "boolean"
         }
       },
       "title": "OptunaCfg",
@@ -362,6 +321,12 @@
           "title": "Strategy",
           "type": "string"
         },
+        "time_col": {
+          "default": "TransactionDT",
+          "description": "Column used for temporal split",
+          "title": "Time Col",
+          "type": "string"
+        },
         "test_size": {
           "default": 0.2,
           "description": "Fraction of data held out for validation",
@@ -369,34 +334,44 @@
           "minimum": 0.0,
           "title": "Test Size",
           "type": "number"
-        },
-        "time_col": {
-          "default": "TransactionDT",
-          "description": "Column used for temporal split",
-          "title": "Time Col",
-          "type": "string"
         }
       },
       "title": "SplitCfg",
       "type": "object"
+    },
+    "TrainingCallbacksCfg": {
+      "properties": {
+        "log_per_iteration": {
+          "default": true,
+          "description": "Log per-iteration validation metrics to MLflow + DVCLive",
+          "title": "Log Per Iteration",
+          "type": "boolean"
+        },
+        "dvclive": {
+          "default": false,
+          "description": "Log per-iteration metrics via DVCLive (separate from eval dvclive)",
+          "title": "Dvclive",
+          "type": "boolean"
+        }
+      },
+      "title": "TrainingCallbacksCfg",
+      "type": "object"
     }
   },
   "properties": {
+    "seed": {
+      "default": 42,
+      "description": "Global PRNG seed",
+      "title": "Seed",
+      "type": "integer"
+    },
     "data": {
       "$ref": "#/$defs/DataPathsCfg",
       "description": "Data file paths"
     },
-    "early_stopping": {
-      "$ref": "#/$defs/EarlyStoppingCfg",
-      "description": "Early stopping configuration"
-    },
-    "evaluation": {
-      "$ref": "#/$defs/EvaluationCfg",
-      "description": "Evaluation metrics configuration"
-    },
-    "mlflow": {
-      "$ref": "#/$defs/MlflowCfg",
-      "description": "MLflow tracking configuration"
+    "split": {
+      "$ref": "#/$defs/SplitCfg",
+      "description": "Train/validation split configuration"
     },
     "model": {
       "$ref": "#/$defs/ModelCfg",
@@ -406,19 +381,21 @@
       "$ref": "#/$defs/OptunaCfg",
       "description": "Optuna HPO configuration"
     },
-    "seed": {
-      "default": 42,
-      "description": "Global PRNG seed",
-      "title": "Seed",
-      "type": "integer"
+    "early_stopping": {
+      "$ref": "#/$defs/EarlyStoppingCfg",
+      "description": "Early stopping configuration"
+    },
+    "mlflow": {
+      "$ref": "#/$defs/MlflowCfg",
+      "description": "Minimal MLflow config"
     },
     "shap": {
       "$ref": "#/$defs/ShapCfg",
       "description": "SHAP explainability configuration"
     },
-    "split": {
-      "$ref": "#/$defs/SplitCfg",
-      "description": "Train/validation split configuration"
+    "training_callbacks": {
+      "$ref": "#/$defs/TrainingCallbacksCfg",
+      "description": "Per-iteration training callbacks"
     }
   },
   "title": "TrainConfig",

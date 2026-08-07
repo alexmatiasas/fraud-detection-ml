@@ -2,6 +2,14 @@
   "$defs": {
     "CardAggregationCfg": {
       "properties": {
+        "group_by": {
+          "description": "Columns to group by (e.g. card1 through card5)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
         "aggregations": {
           "additionalProperties": {
             "items": {
@@ -20,14 +28,6 @@
           "description": "Per-column aggregation functions",
           "title": "Aggregations",
           "type": "object"
-        },
-        "group_by": {
-          "description": "Columns to group by (e.g. card1 through card5)",
-          "items": {
-            "type": "string"
-          },
-          "title": "Group By",
-          "type": "array"
         }
       },
       "required": [
@@ -39,19 +39,19 @@
     },
     "EncodingCfg": {
       "properties": {
-        "high_cardinality_strategy": {
-          "const": "frequency",
-          "default": "frequency",
-          "description": "Encoding for high-cardinality columns",
-          "title": "High Cardinality Strategy",
-          "type": "string"
-        },
         "low_cardinality_max_values": {
           "default": 50,
           "description": "Max unique values for low-cardinality treatment",
           "minimum": 1,
           "title": "Low Cardinality Max Values",
           "type": "integer"
+        },
+        "high_cardinality_strategy": {
+          "const": "frequency",
+          "default": "frequency",
+          "description": "Encoding for high-cardinality columns",
+          "title": "High Cardinality Strategy",
+          "type": "string"
         },
         "match_flags_encoding": {
           "$ref": "#/$defs/MatchFlagsCfg",
@@ -63,18 +63,6 @@
     },
     "EngineeredCfg": {
       "properties": {
-        "card_aggregations": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CardAggregationCfg"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Group-by aggregations on card columns"
-        },
         "datetime": {
           "default": [
             "hour_of_day",
@@ -93,17 +81,17 @@
           "title": "Datetime",
           "type": "array"
         },
-        "device_brand": {
-          "default": true,
-          "description": "Extract brand from DeviceInfo (heuristic)",
-          "title": "Device Brand",
-          "type": "boolean"
-        },
-        "device_os": {
-          "default": true,
-          "description": "Extract OS from DeviceInfo (heuristic)",
-          "title": "Device Os",
-          "type": "boolean"
+        "card_aggregations": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CardAggregationCfg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Group-by aggregations on card columns"
         },
         "frequency_encoding": {
           "default": [
@@ -118,6 +106,18 @@
           },
           "title": "Frequency Encoding",
           "type": "array"
+        },
+        "device_os": {
+          "default": true,
+          "description": "Extract OS from DeviceInfo (heuristic)",
+          "title": "Device Os",
+          "type": "boolean"
+        },
+        "device_brand": {
+          "default": true,
+          "description": "Extract brand from DeviceInfo (heuristic)",
+          "title": "Device Brand",
+          "type": "boolean"
         }
       },
       "title": "EngineeredCfg",
@@ -191,17 +191,17 @@
     },
     "ImputationCfg": {
       "properties": {
-        "categorical": {
-          "default": "missing",
-          "description": "Sentinel for missing categorical values",
-          "title": "Categorical",
-          "type": "string"
-        },
         "numerical": {
           "default": -999,
           "description": "Sentinel for missing numerical values (LightGBM-native)",
           "title": "Numerical",
           "type": "integer"
+        },
+        "categorical": {
+          "default": "missing",
+          "description": "Sentinel for missing categorical values",
+          "title": "Categorical",
+          "type": "string"
         }
       },
       "title": "ImputationCfg",
@@ -209,16 +209,16 @@
     },
     "MatchFlagsCfg": {
       "properties": {
-        "F": {
-          "default": 0,
-          "description": "Mapping for False in binary M flags",
-          "title": "F",
-          "type": "integer"
-        },
         "T": {
           "default": 1,
           "description": "Mapping for True in binary M flags",
           "title": "T",
+          "type": "integer"
+        },
+        "F": {
+          "default": 0,
+          "description": "Mapping for False in binary M flags",
+          "title": "F",
           "type": "integer"
         },
         "nan": {
@@ -233,6 +233,26 @@
     },
     "TransactionCfg": {
       "properties": {
+        "target": {
+          "default": "isFraud",
+          "description": "Target column name",
+          "title": "Target",
+          "type": "string"
+        },
+        "numerical": {
+          "default": [
+            "TransactionAmt",
+            "TransactionDT",
+            "dist1",
+            "dist2"
+          ],
+          "description": "Direct numeric features selected from EDA",
+          "items": {
+            "type": "string"
+          },
+          "title": "Numerical",
+          "type": "array"
+        },
         "categorical": {
           "default": [
             "ProductCD",
@@ -255,6 +275,22 @@
             "type": "string"
           },
           "title": "Categorical",
+          "type": "array"
+        },
+        "high_cardinality": {
+          "default": [
+            "card1",
+            "card2",
+            "card3",
+            "card5",
+            "addr1",
+            "addr2"
+          ],
+          "description": "High-cardinality features (frequency-encoded)",
+          "items": {
+            "type": "string"
+          },
+          "title": "High Cardinality",
           "type": "array"
         },
         "count_features": {
@@ -298,42 +334,6 @@
           "title": "Delta Features",
           "type": "array"
         },
-        "high_cardinality": {
-          "default": [
-            "card1",
-            "card2",
-            "card3",
-            "card5",
-            "addr1",
-            "addr2"
-          ],
-          "description": "High-cardinality features (frequency-encoded)",
-          "items": {
-            "type": "string"
-          },
-          "title": "High Cardinality",
-          "type": "array"
-        },
-        "numerical": {
-          "default": [
-            "TransactionAmt",
-            "TransactionDT",
-            "dist1",
-            "dist2"
-          ],
-          "description": "Direct numeric features selected from EDA",
-          "items": {
-            "type": "string"
-          },
-          "title": "Numerical",
-          "type": "array"
-        },
-        "target": {
-          "default": "isFraud",
-          "description": "Target column name",
-          "title": "Target",
-          "type": "string"
-        },
         "vesta_features": {
           "anyOf": [
             {
@@ -352,13 +352,6 @@
     },
     "VestaCfg": {
       "properties": {
-        "correlation_threshold": {
-          "description": "Pearson r threshold \u2014 one of each correlated pair is dropped",
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "title": "Correlation Threshold",
-          "type": "number"
-        },
         "include": {
           "description": "Whether to include Vesta V features",
           "title": "Include",
@@ -368,6 +361,13 @@
           "description": "Variance floor \u2014 V columns below this are dropped",
           "minimum": 0.0,
           "title": "Variance Threshold",
+          "type": "number"
+        },
+        "correlation_threshold": {
+          "description": "Pearson r threshold \u2014 one of each correlated pair is dropped",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Correlation Threshold",
           "type": "number"
         }
       },
@@ -381,13 +381,9 @@
     }
   },
   "properties": {
-    "encoding": {
-      "$ref": "#/$defs/EncodingCfg",
-      "description": "Encoding strategy configuration"
-    },
-    "engineered": {
-      "$ref": "#/$defs/EngineeredCfg",
-      "description": "Engineered features created by the pipeline"
+    "transaction": {
+      "$ref": "#/$defs/TransactionCfg",
+      "description": "Transaction table feature selection"
     },
     "identity": {
       "anyOf": [
@@ -401,13 +397,17 @@
       "default": null,
       "description": "Identity table feature selection"
     },
+    "engineered": {
+      "$ref": "#/$defs/EngineeredCfg",
+      "description": "Engineered features created by the pipeline"
+    },
+    "encoding": {
+      "$ref": "#/$defs/EncodingCfg",
+      "description": "Encoding strategy configuration"
+    },
     "imputation": {
       "$ref": "#/$defs/ImputationCfg",
       "description": "Missing value imputation strategy"
-    },
-    "transaction": {
-      "$ref": "#/$defs/TransactionCfg",
-      "description": "Transaction table feature selection"
     }
   },
   "required": [

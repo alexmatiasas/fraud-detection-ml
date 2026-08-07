@@ -2,22 +2,10 @@
   "$defs": {
     "FilesCfg": {
       "properties": {
-        "sample_submission": {
-          "default": "sample_submission.csv",
-          "description": "Filename for sample submission CSV",
-          "title": "Sample Submission",
-          "type": "string"
-        },
-        "test_identity": {
-          "default": "test_identity.csv",
-          "description": "Filename for test identity CSV",
-          "title": "Test Identity",
-          "type": "string"
-        },
-        "test_transaction": {
-          "default": "test_transaction.csv",
-          "description": "Filename for test transaction CSV",
-          "title": "Test Transaction",
+        "train_transaction": {
+          "default": "train_transaction.csv",
+          "description": "Filename for training transaction CSV",
+          "title": "Train Transaction",
           "type": "string"
         },
         "train_identity": {
@@ -26,10 +14,22 @@
           "title": "Train Identity",
           "type": "string"
         },
-        "train_transaction": {
-          "default": "train_transaction.csv",
-          "description": "Filename for training transaction CSV",
-          "title": "Train Transaction",
+        "test_transaction": {
+          "default": "test_transaction.csv",
+          "description": "Filename for test transaction CSV",
+          "title": "Test Transaction",
+          "type": "string"
+        },
+        "test_identity": {
+          "default": "test_identity.csv",
+          "description": "Filename for test identity CSV",
+          "title": "Test Identity",
+          "type": "string"
+        },
+        "sample_submission": {
+          "default": "sample_submission.csv",
+          "description": "Filename for sample submission CSV",
+          "title": "Sample Submission",
           "type": "string"
         }
       },
@@ -50,12 +50,6 @@
           "title": "Target Values",
           "type": "array"
         },
-        "transaction_amt_positive": {
-          "default": true,
-          "description": "TransactionAmt must be positive",
-          "title": "Transaction Amt Positive",
-          "type": "boolean"
-        },
         "transaction_id_unique": {
           "default": true,
           "description": "TransactionID must be unique",
@@ -64,6 +58,12 @@
             false
           ],
           "title": "Transaction Id Unique",
+          "type": "boolean"
+        },
+        "transaction_amt_positive": {
+          "default": true,
+          "description": "TransactionAmt must be positive",
+          "title": "Transaction Amt Positive",
           "type": "boolean"
         }
       },
@@ -75,12 +75,28 @@
     "base_dir": {
       "default": "data",
       "description": "Root data directory",
+      "format": "path",
       "title": "Base Dir",
+      "type": "string"
+    },
+    "raw_dir": {
+      "default": "data/raw",
+      "description": "Raw CSV directory",
+      "format": "path",
+      "title": "Raw Dir",
+      "type": "string"
+    },
+    "processed_dir": {
+      "default": "data/processed",
+      "description": "Processed Parquet directory",
+      "format": "path",
+      "title": "Processed Dir",
       "type": "string"
     },
     "features_dir": {
       "default": "data/features",
       "description": "Feature Feather directory",
+      "format": "path",
       "title": "Features Dir",
       "type": "string"
     },
@@ -92,18 +108,6 @@
       "default": "TransactionID",
       "description": "Column used to merge transaction and identity tables",
       "title": "Join Key",
-      "type": "string"
-    },
-    "processed_dir": {
-      "default": "data/processed",
-      "description": "Processed Parquet directory",
-      "title": "Processed Dir",
-      "type": "string"
-    },
-    "raw_dir": {
-      "default": "data/raw",
-      "description": "Raw CSV directory",
-      "title": "Raw Dir",
       "type": "string"
     },
     "target": {

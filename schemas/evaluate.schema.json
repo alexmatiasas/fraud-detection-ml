@@ -1,0 +1,304 @@
+{
+  "$defs": {
+    "AdversarialValCfg": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable adversarial validation (trains RF to detect train/val drift)",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "seed": {
+          "default": 42,
+          "description": "Random seed for adversarial validation RF",
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "title": "AdversarialValCfg",
+      "type": "object"
+    },
+    "DVCLiveCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable DVCLive logging for DVC metrics/plots",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "dir": {
+          "default": "dvclive",
+          "description": "DVCLive output directory",
+          "title": "Dir",
+          "type": "string"
+        }
+      },
+      "title": "DVCLiveCfg",
+      "type": "object"
+    },
+    "ErrorAnalysisCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable error distribution analysis",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "features": {
+          "description": "Features to analyse for error distribution",
+          "items": {
+            "type": "string"
+          },
+          "title": "Features",
+          "type": "array"
+        }
+      },
+      "title": "ErrorAnalysisCfg",
+      "type": "object"
+    },
+    "LearningCurvesCfg": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable learning curves (re-trains model)",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "train_sizes": {
+          "description": "Training set size fractions",
+          "items": {
+            "type": "number"
+          },
+          "title": "Train Sizes",
+          "type": "array"
+        }
+      },
+      "title": "LearningCurvesCfg",
+      "type": "object"
+    },
+    "ModelCardCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Generate model card markdown",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "filename": {
+          "default": "model_card.md",
+          "description": "Output filename for model card (in plot output dir)",
+          "title": "Filename",
+          "type": "string"
+        }
+      },
+      "title": "ModelCardCfg",
+      "type": "object"
+    },
+    "PlotCfg": {
+      "properties": {
+        "output_dir": {
+          "default": "models/",
+          "description": "Directory for plot images",
+          "title": "Output Dir",
+          "type": "string"
+        },
+        "plots": {
+          "description": "Plots to generate",
+          "items": {
+            "enum": [
+              "roc_curve",
+              "pr_curve",
+              "calibration",
+              "error_analysis",
+              "learning_curves",
+              "feature_importance_stability",
+              "adversarial_validation"
+            ],
+            "type": "string"
+          },
+          "title": "Plots",
+          "type": "array"
+        },
+        "error_features": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Features for error analysis histograms (None = auto)",
+          "title": "Error Features"
+        }
+      },
+      "title": "PlotCfg",
+      "type": "object"
+    },
+    "ReportCfg": {
+      "properties": {
+        "path": {
+          "default": "models/report.json",
+          "description": "Path for JSON evaluation report",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "title": "ReportCfg",
+      "type": "object"
+    },
+    "SegmentsCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable per-segment analysis",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "columns": {
+          "description": "Columns for per-segment analysis",
+          "items": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "min_samples": {
+          "default": 50,
+          "description": "Minimum samples per segment",
+          "minimum": 10,
+          "title": "Min Samples",
+          "type": "integer"
+        }
+      },
+      "title": "SegmentsCfg",
+      "type": "object"
+    },
+    "StabilityCfg": {
+      "properties": {
+        "feature_importance": {
+          "default": false,
+          "description": "Enable feature importance stability analysis (re-trains model N times)",
+          "title": "Feature Importance",
+          "type": "boolean"
+        },
+        "n_iterations": {
+          "default": 10,
+          "description": "Number of re-fits for stability",
+          "maximum": 100,
+          "minimum": 3,
+          "title": "N Iterations",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 42,
+          "description": "Random seed for stability refits",
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "title": "StabilityCfg",
+      "type": "object"
+    },
+    "ThresholdCfg": {
+      "properties": {
+        "threshold": {
+          "default": 0.5,
+          "description": "Default decision threshold",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Threshold",
+          "type": "number"
+        },
+        "n_thresholds": {
+          "default": 100,
+          "description": "Number of thresholds for tuning",
+          "maximum": 1000,
+          "minimum": 10,
+          "title": "N Thresholds",
+          "type": "integer"
+        },
+        "bootstrap": {
+          "default": true,
+          "description": "Compute bootstrap confidence intervals",
+          "title": "Bootstrap",
+          "type": "boolean"
+        },
+        "bootstrap_metric": {
+          "default": "average_precision",
+          "description": "Metric for bootstrap CI",
+          "enum": [
+            "roc_auc",
+            "average_precision"
+          ],
+          "title": "Bootstrap Metric",
+          "type": "string"
+        },
+        "bootstrap_iterations": {
+          "default": 1000,
+          "description": "Bootstrap iterations",
+          "maximum": 10000,
+          "minimum": 50,
+          "title": "Bootstrap Iterations",
+          "type": "integer"
+        },
+        "bootstrap_seed": {
+          "default": 42,
+          "description": "Random seed for bootstrap resampling",
+          "title": "Bootstrap Seed",
+          "type": "integer"
+        }
+      },
+      "title": "ThresholdCfg",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "threshold": {
+      "$ref": "#/$defs/ThresholdCfg",
+      "description": "Threshold tuning configuration"
+    },
+    "segments": {
+      "$ref": "#/$defs/SegmentsCfg",
+      "description": "Per-segment analysis configuration"
+    },
+    "learning_curves": {
+      "$ref": "#/$defs/LearningCurvesCfg",
+      "description": "Learning curves configuration"
+    },
+    "stability": {
+      "$ref": "#/$defs/StabilityCfg",
+      "description": "Feature importance stability configuration"
+    },
+    "error_analysis": {
+      "$ref": "#/$defs/ErrorAnalysisCfg",
+      "description": "Error analysis configuration"
+    },
+    "adversarial_validation": {
+      "$ref": "#/$defs/AdversarialValCfg",
+      "description": "Adversarial validation configuration"
+    },
+    "model_card": {
+      "$ref": "#/$defs/ModelCardCfg",
+      "description": "Model card configuration"
+    },
+    "dvclive": {
+      "$ref": "#/$defs/DVCLiveCfg",
+      "description": "DVCLive logging configuration"
+    },
+    "plots": {
+      "$ref": "#/$defs/PlotCfg",
+      "description": "Plot configuration"
+    },
+    "report": {
+      "$ref": "#/$defs/ReportCfg",
+      "description": "Report output configuration"
+    }
+  },
+  "title": "EvaluateConfig",
+  "type": "object"
+}
