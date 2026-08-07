@@ -28,7 +28,7 @@ htmlcov/
 */.ipynb_checkpoints/
 
 # ── uv ───────────────────────────────────────────────────────────────────────
-# uv.lock SÍ se versiona (reproducibilidad)
+# uv.lock does versionate (reproducibility)
 .python-version
 
 # ── R ────────────────────────────────────────────────────────────────────────
@@ -53,18 +53,18 @@ notebooks/01_eda_r/01_EDA_in_R_files/
 *.sublime-workspace
 
 # ── Docker ───────────────────────────────────────────────────────────────────
-# docker-compose.override.yaml puede tener secrets locales
+# docker-compose.override.yaml may have local secrets
 docker-compose.override.yaml
 
-# ── Secrets y configuración local ────────────────────────────────────────────
+# ── Secrets and local configuration ────────────────────────────────────────────
 .env
 .env.local
 *.pem
 *.key
 secrets/
 
-# ── Reportes generados ───────────────────────────────────────────────────────
-reports/figures/*
+# ── Generated reports───────────────────────────────────────────────────────
+reports/
 !reports/figures/.gitkeep
 .Rproj.user
 .positai
@@ -73,3 +73,6 @@ reports/figures/*
 
 models/*
 mlflow.db
+
+# --- DVC -----------------------------------------------------------
+dvclive/
