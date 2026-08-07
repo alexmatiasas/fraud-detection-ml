@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import subprocess
+import time
 import warnings
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,6 @@ import pandas as pd
 from mlflow.models import infer_signature
 from pydantic import BaseModel, ConfigDict
 from sklearn.pipeline import Pipeline
-from tqdm import tqdm
 
 from fdml.features.factory import (
     create_pipeline,
@@ -43,6 +43,7 @@ from fdml.models.evaluate.reporter import (
 from fdml.models.evaluate.runner import evaluate
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
 from fdml.models.train.model_builder import model_builder_registry
+from fdml.utils.logging import ensure_logging, setup_logging, step
 
 logger = logging.getLogger(__name__)
 
@@ -73,92 +74,115 @@ def _get_splitter(split_cfg: Any) -> TemporalSplitter | StratifiedSplitter:
     raise ValueError(msg)
 
 
+def _fit_transform_steps(
+    pipeline: Pipeline, X: pd.DataFrame, y: pd.Series
+) -> pd.DataFrame:
+    """Run ``fit_transform`` step by step so each step's cost is visible."""
+    Xt = X.copy()
+    for name, transformer in pipeline.steps:
+        start = time.perf_counter()
+        if hasattr(transformer, "fit_transform"):
+            Xt = transformer.fit_transform(Xt, y)
+        else:
+            Xt = transformer.fit(Xt, y).transform(Xt)
+        elapsed = time.perf_counter() - start
+        logger.info(
+            "    step %-12s → %s rows × %s cols (%.2fs)",
+            name,
+            f"{Xt.shape[0]:,}",
+            Xt.shape[1],
+            elapsed,
+        )
+    return Xt
+
+
+def _transform_steps(pipeline: Pipeline, X: pd.DataFrame) -> pd.DataFrame:
+    """Run ``transform`` step by step over already-fitted transformers."""
+    Xt = X.copy()
+    for name, transformer in pipeline.steps:
+        Xt = transformer.transform(Xt)
+        logger.info("    step %-12s → %s cols", name, Xt.shape[1])
+    return Xt
+
+
 def _prepare_data(cfg: Any) -> tuple:
     """PHASES 1-3: load, split, feature engineering."""
 
     features_cfg = load_features_config()
     data_cfg = load_data_config()
 
-    logger.info("=" * 56)
-    logger.info("  PHASE 1: Load data")
-    logger.info("=" * 56)
-    train_df, identity_df = load_data(data_cfg)
-    df = merge_tables(train_df, identity_df)
-    logger.info("  Merged: %s rows x %s cols", f"{df.shape[0]:,}", df.shape[1])
-    logger.info(
-        "  Target: %.2f%% fraud (%.0f positives)",
-        df[_TARGET].mean() * 100,
-        df[_TARGET].sum(),
-    )
-
-    logger.info("")
-    logger.info("=" * 56)
-    logger.info("  PHASE 2: Train / validation split")
-    logger.info("=" * 56)
-    splitter = _get_splitter(cfg.split)
-    train_idx, val_idx = next(splitter.split(df, df[_TARGET]))
-
-    X = df.drop(columns=[_TARGET])
-    y = df[_TARGET]
-
-    X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
-    y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
-    logger.info(
-        "  Train: %s rows (fraud %.2f%%)", f"{len(X_train):,}", y_train.mean() * 100
-    )
-    logger.info(
-        "  Val:   %s rows (fraud %.2f%%)", f"{len(X_val):,}", y_val.mean() * 100
-    )
-
-    if cfg.split.strategy == "temporal" and cfg.split.time_col in X.columns:
-        train_tr = (
-            int(X_train[cfg.split.time_col].min()),
-            int(X_train[cfg.split.time_col].max()),
+    with step("PHASE 1: Load data"):
+        train_df, identity_df = load_data(data_cfg)
+        df = merge_tables(train_df, identity_df)
+        logger.info("  Merged: %s rows x %s cols", f"{df.shape[0]:,}", df.shape[1])
+        logger.info(
+            "  Target: %.2f%% fraud (%.0f positives)",
+            df[_TARGET].mean() * 100,
+            df[_TARGET].sum(),
         )
-        val_tr = (
-            int(X_val[cfg.split.time_col].min()),
-            int(X_val[cfg.split.time_col].max()),
+
+    with step("PHASE 2: Train / validation split"):
+        splitter = _get_splitter(cfg.split)
+        train_idx, val_idx = next(splitter.split(df, df[_TARGET]))
+
+        X = df.drop(columns=[_TARGET])
+        y = df[_TARGET]
+
+        X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+        y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+        logger.info(
+            "  Train: %s rows (fraud %.2f%%)", f"{len(X_train):,}", y_train.mean() * 100
         )
         logger.info(
-            "  Time range — train: [%d, %d]  val: [%d, %d]",
-            train_tr[0],
-            train_tr[1],
-            val_tr[0],
-            val_tr[1],
+            "  Val:   %s rows (fraud %.2f%%)", f"{len(X_val):,}", y_val.mean() * 100
         )
 
-    logger.info("")
-    logger.info("=" * 56)
-    logger.info("  PHASE 3: Feature engineering")
-    logger.info("=" * 56)
-    pipeline, _ = create_pipeline(features_cfg)
-    X_train_fe = pipeline.fit_transform(X_train, y_train)
-    X_val_fe = pipeline.transform(X_val)
+        if cfg.split.strategy == "temporal" and cfg.split.time_col in X.columns:
+            train_tr = (
+                int(X_train[cfg.split.time_col].min()),
+                int(X_train[cfg.split.time_col].max()),
+            )
+            val_tr = (
+                int(X_val[cfg.split.time_col].min()),
+                int(X_val[cfg.split.time_col].max()),
+            )
+            logger.info(
+                "  Time range — train: [%d, %d]  val: [%d, %d]",
+                train_tr[0],
+                train_tr[1],
+                val_tr[0],
+                val_tr[1],
+            )
 
-    logger.info(
-        "  Pipeline: %d steps → %s train, %s val",
-        len(pipeline.steps),
-        f"{X_train_fe.shape[1]} cols",
-        f"{X_val_fe.shape[1]} cols",
-    )
-    v_before, v_after = X_train.shape[1], X_train_fe.shape[1]
-    logger.info(
-        "  Feature delta: %+d (from %d to %d columns)",
-        v_after - v_before,
-        v_before,
-        v_after,
-    )
+    with step("PHASE 3: Feature engineering"):
+        pipeline, _ = create_pipeline(features_cfg)
+        X_train_fe = _fit_transform_steps(pipeline, X_train, y_train)
+        X_val_fe = _transform_steps(pipeline, X_val)
 
-    def _fmt_dtypes(df: pd.DataFrame) -> str:
-        return ", ".join(
-            f"{k}: {v}"
-            for k, v in df.dtypes.apply(lambda x: x.name).value_counts().items()
+        logger.info(
+            "  Pipeline: %d steps → %s train, %s val",
+            len(pipeline.steps),
+            f"{X_train_fe.shape[1]} cols",
+            f"{X_val_fe.shape[1]} cols",
+        )
+        v_before, v_after = X_train.shape[1], X_train_fe.shape[1]
+        logger.info(
+            "  Feature delta: %+d (from %d to %d columns)",
+            v_after - v_before,
+            v_before,
+            v_after,
         )
 
-    logger.info("  dtypes (pre-encode): %s", _fmt_dtypes(X_train_fe))
-    X_train_fe, X_val_fe = _encode_categoricals(X_train_fe, X_val_fe)
-    logger.info("  Final shape: train=%s, val=%s", X_train_fe.shape, X_val_fe.shape)
-    logger.info("  dtypes: %s", _fmt_dtypes(X_train_fe))
+        def _fmt_dtypes(df: pd.DataFrame) -> str:
+            return ", ".join(
+                f"{k}: {v}"
+                for k, v in df.dtypes.apply(lambda x: x.name).value_counts().items()
+            )
+
+        logger.info("  dtypes (pre-encode): %s", _fmt_dtypes(X_train_fe))
+        X_train_fe, X_val_fe = _encode_categoricals(X_train_fe, X_val_fe)
+        logger.info("  Final shape: train=%s, val=%s", X_train_fe.shape, X_val_fe.shape)
+        logger.info("  dtypes: %s", _fmt_dtypes(X_train_fe))
 
     return X_train_fe, X_val_fe, y_train, y_val, pipeline, X_train_fe.columns.tolist()
 
@@ -169,55 +193,52 @@ def train(
     callbacks: list | None = None,
     hpo_strategy: Any = None,
 ) -> TrainResult:
+    ensure_logging()
+
     if cfg is None:
         cfg = load_train_config(cli_args=cli_args)
 
     X_train_fe, X_val_fe, y_train, y_val, pipeline, feature_names = _prepare_data(cfg)
 
-    logger.info("")
-    logger.info("=" * 56)
-    logger.info("  PHASE 4: Model training")
-    logger.info("=" * 56)
+    with step("PHASE 4: Model training"):
+        builder = model_builder_registry.get(cfg.model.name)
+        logger.info("Model: %s", cfg.model.name)
 
-    builder = model_builder_registry.get(cfg.model.name)
-    logger.info("Model: %s", cfg.model.name)
+        params = cfg.model.params.model_dump()
 
-    params = cfg.model.params.model_dump()
+        if hpo_strategy is not None:
+            logger.info("  Running HPO before final training ...")
+            best_params = hpo_strategy.search(
+                X_train_fe,
+                y_train,
+                X_val_fe,
+                y_val,
+                builder=builder,
+                base_params=params,
+                es_rounds=cfg.early_stopping.rounds,
+                es_metric=cfg.early_stopping.eval_metric,
+                seed=cfg.seed,
+            )
+            logger.info("  Best HPO params: %s", builder.format_params(best_params))
+            params = best_params
 
-    if hpo_strategy is not None:
-        logger.info("  Running HPO before final training ...")
-        best_params = hpo_strategy.search(
-            X_train_fe,
-            y_train,
-            X_val_fe,
-            y_val,
-            builder=builder,
-            base_params=params,
-            es_rounds=cfg.early_stopping.rounds,
-            es_metric=cfg.early_stopping.eval_metric,
-            seed=cfg.seed,
-        )
-        logger.info("  Best HPO params: %s", builder.format_params(best_params))
-        params = best_params
+        logger.info("  params: %s", builder.format_params(params))
 
-    logger.info("  params: %s", builder.format_params(params))
+        model = builder.build(params)
+        use_es = cfg.early_stopping.enabled and hasattr(model, "early_stopping_rounds")
 
-    model = builder.build(params)
-    use_es = cfg.early_stopping.enabled and hasattr(model, "early_stopping_rounds")
+        if use_es:
+            logger.info(
+                "  Early stopping: %d rounds on %s",
+                cfg.early_stopping.rounds,
+                cfg.early_stopping.eval_metric,
+            )
 
-    if use_es:
-        logger.info(
-            "  Early stopping: %d rounds on %s",
-            cfg.early_stopping.rounds,
-            cfg.early_stopping.eval_metric,
-        )
+        import lightgbm as lgb  # noqa: PLC0415
+        import xgboost as xgb  # noqa: PLC0415
 
-    import lightgbm as lgb  # noqa: PLC0415
-    import xgboost as xgb  # noqa: PLC0415
+        eval_set = [(X_val_fe, y_val)] if use_es else None
 
-    eval_set = [(X_val_fe, y_val)] if use_es else None
-
-    with tqdm(total=1, desc="Training", leave=False):
         if eval_set is not None:
             if isinstance(model, lgb.LGBMClassifier):
                 model.fit(
@@ -241,7 +262,7 @@ def train(
         else:
             model.fit(X_train_fe, y_train)
 
-    logger.info("  ✓ Training complete")
+        logger.info("  ✓ Training complete")
 
     return TrainResult(
         model=model,
@@ -312,6 +333,7 @@ def _build_callbacks(cfg: Any) -> list | None:
         IterationCallback(
             log_mlflow=True,
             log_dvclive=cfg.training_callbacks.dvclive,
+            log_console=True,
         )
     ]
 
@@ -350,6 +372,8 @@ def _log_git_tags() -> None:
 
 def main() -> None:
     cfg = load_train_config()
+    run_name = f"{cfg.model.name}_s{cfg.seed}"
+    log_path = setup_logging(log_path=f"train_{run_name}.log")
     eval_cfg = load_evaluation_config()
     mlflow_cfg = resolve_mlflow_tracking(load_mlflow_config())
 
@@ -364,109 +388,107 @@ def main() -> None:
         mlflow.set_tracking_uri("sqlite:///mlruns.db")
         mlflow.set_experiment(mlflow_cfg.tracking.experiment_name)
 
-    run_name = f"{cfg.model.name}_s{cfg.seed}"
-    hpo_strategy = None
-    if cfg.optuna.enabled:
-        from fdml.models.train.hpo import OptunaHPO
-
-        hpo_strategy = OptunaHPO(
-            n_trials=cfg.optuna.n_trials,
-            timeout_seconds=cfg.optuna.timeout_seconds,
-            direction=cfg.optuna.direction,
-            study_name=cfg.optuna.study_name,
-            save_best=cfg.optuna.save_best_params,
-        )
-
     with mlflow.start_run(run_name=run_name) as run:
         run_id = run.info.run_id
 
         _log_git_tags()
 
+        hpo_strategy = None
+        if cfg.optuna.enabled:
+            from fdml.models.train.hpo import OptunaHPO
+
+            hpo_strategy = OptunaHPO(
+                n_trials=cfg.optuna.n_trials,
+                timeout_seconds=cfg.optuna.timeout_seconds,
+                direction=cfg.optuna.direction,
+                study_name=cfg.optuna.study_name,
+                save_best=cfg.optuna.save_best_params,
+            )
+
         callbacks = _build_callbacks(cfg)
         result = train(cfg, callbacks=callbacks, hpo_strategy=hpo_strategy)
 
-        logger.info("")
-        logger.info("=" * 56)
-        logger.info("  PHASE 5: Evaluation + MLflow tracking")
-        logger.info("=" * 56)
-        model = result.model
-        y_proba = model.predict_proba(result.X_val)[:, 1]
-        y_pred = model.predict(result.X_val)
+        with step("PHASE 5: Evaluation + MLflow tracking"):
+            model = result.model
+            y_proba = model.predict_proba(result.X_val)[:, 1]
+            y_pred = model.predict(result.X_val)
 
-        reporters = [
-            ConsoleReporter(),
-            JSONFileReporter(eval_cfg.report.path),
-            LoggingReporter(),
-            DVCLiveReporter(
-                eval_cfg=eval_cfg,
+            reporters = [
+                ConsoleReporter(),
+                JSONFileReporter(eval_cfg.report.path),
+                LoggingReporter(),
+                DVCLiveReporter(
+                    eval_cfg=eval_cfg,
+                    y_true=result.y_val.values,
+                    y_proba=y_proba,
+                    model_name=cfg.model.name,
+                    split_strategy=cfg.split.strategy,
+                ),
+                MLflowReporter(
+                    mlflow_cfg=mlflow_cfg,
+                    eval_cfg=eval_cfg,
+                    X_train=result.X_train,
+                    y_train=result.y_train,
+                    model_name=cfg.model.name,
+                    split_strategy=cfg.split.strategy,
+                ),
+            ]
+
+            report = evaluate(
+                model_name=cfg.model.name,
                 y_true=result.y_val.values,
                 y_proba=y_proba,
-                model_name=cfg.model.name,
-                split_strategy=cfg.split.strategy,
-            ),
-            MLflowReporter(
-                mlflow_cfg=mlflow_cfg,
-                eval_cfg=eval_cfg,
+                model=model,
+                pipeline=result.pipeline,
                 X_train=result.X_train,
                 y_train=result.y_train,
-                model_name=cfg.model.name,
+                X_val=result.X_val,
+                feature_names=result.feature_names,
                 split_strategy=cfg.split.strategy,
-            ),
-        ]
-
-        report = evaluate(
-            model_name=cfg.model.name,
-            y_true=result.y_val.values,
-            y_proba=y_proba,
-            model=model,
-            pipeline=result.pipeline,
-            X_train=result.X_train,
-            y_train=result.y_train,
-            X_val=result.X_val,
-            feature_names=result.feature_names,
-            split_strategy=cfg.split.strategy,
-            eval_cfg=eval_cfg,
-            reporters=reporters,
-        )
-
-        logger.info("")
-        logger.info("=" * 56)
-        logger.info("  PHASE 6: Save artifacts + log model")
-        logger.info("=" * 56)
-        full_pipeline = Pipeline([("features", result.pipeline), ("model", model)])
-        artifact_dir = Path(cfg.model.artifact_dir)
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        pipeline_path = artifact_dir / "pipeline.joblib"
-        joblib.dump(full_pipeline, pipeline_path)
-        size_mb = pipeline_path.stat().st_size / (1024 * 1024)
-        logger.info("  Pipeline saved: %s (%.1f MB)", pipeline_path, size_mb)
-
-        _log_configs_and_env()
-
-        if Path("dvc.lock").exists():
-            lock_hash = hashlib.md5(Path("dvc.lock").read_bytes()).hexdigest()
-            mlflow.log_param("dataset_hash", lock_hash)
-            mlflow.set_tag("dataset_hash", lock_hash)
-
-        if mlflow_cfg.log_model:
-            sig_input = result.X_val.astype(
-                {c: "float64" for c in result.X_val.select_dtypes("int").columns}
+                eval_cfg=eval_cfg,
+                reporters=reporters,
             )
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", message="Hint: Inferred schema contains integer column"
+
+        with step("PHASE 6: Save artifacts + log model"):
+            full_pipeline = Pipeline([("features", result.pipeline), ("model", model)])
+            artifact_dir = Path(cfg.model.artifact_dir)
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            pipeline_path = artifact_dir / "pipeline.joblib"
+            joblib.dump(full_pipeline, pipeline_path)
+            size_mb = pipeline_path.stat().st_size / (1024 * 1024)
+            logger.info("  Pipeline saved: %s (%.1f MB)", pipeline_path, size_mb)
+
+            _log_configs_and_env()
+
+            mlflow.log_artifact(str(log_path))
+
+            if Path("dvc.lock").exists():
+                lock_hash = hashlib.md5(Path("dvc.lock").read_bytes()).hexdigest()
+                mlflow.log_param("dataset_hash", lock_hash)
+                mlflow.set_tag("dataset_hash", lock_hash)
+
+            if mlflow_cfg.log_model:
+                sig_input = result.X_val.astype(
+                    {c: "float64" for c in result.X_val.select_dtypes("int").columns}
                 )
-                logging.getLogger("mlflow").setLevel(logging.ERROR)
-                signature = infer_signature(sig_input, y_pred.astype("int64"))
-                mlflow.sklearn.log_model(full_pipeline, "model", signature=signature)
-            logger.info("  ✓ Model logged to MLflow")
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message="Hint: Inferred schema contains integer column",
+                    )
+                    logging.getLogger("mlflow").setLevel(logging.ERROR)
+                    signature = infer_signature(sig_input, y_pred.astype("int64"))
+                    mlflow.sklearn.log_model(
+                        full_pipeline, "model", signature=signature
+                    )
+                logger.info("  ✓ Model logged to MLflow")
 
-        if mlflow_cfg.registry.enabled:
-            _register_model(
-                mlflow_cfg,
-                ap=report.average_precision,
-                run_id=run_id,
-            )
+            if mlflow_cfg.registry.enabled:
+                _register_model(
+                    mlflow_cfg,
+                    ap=report.average_precision,
+                    run_id=run_id,
+                )
 
     logger.info("")
     logger.info("Done.")
