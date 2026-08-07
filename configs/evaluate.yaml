@@ -55,6 +55,11 @@ plots:
     - calibration
   error_features: null
 
+# ── DVCLive (métricas para DVC: dvc metrics show, dvc plots diff) ──────────
+dvclive:
+  enabled: true
+  dir: dvclive
+
 # ── Report (JSON, sin dependencia de MLflow) ─────────────────────────────────
 report:
   path: models/report.json
