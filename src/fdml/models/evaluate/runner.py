@@ -245,13 +245,9 @@ def evaluate(
 
 
 def main() -> None:
-    import sys
+    from fdml.utils.logging import setup_logging
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(message)s",
-        stream=sys.stdout,
-    )
+    setup_logging(log_path="evaluate.log")
 
     import joblib
 
