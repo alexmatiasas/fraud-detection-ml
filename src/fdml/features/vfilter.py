@@ -6,7 +6,7 @@ import pandas as pd
 from fdml.features.base import BaseFeatureTransformer
 
 
-def _pairwise_corr(X: np.ndarray) -> np.ndarray:
+def _pairwise_corr(X: np.ndarray | pd.DataFrame) -> np.ndarray:
     """Pairwise Pearson correlation using only rows where both columns are
     present (the semantics of ``pandas.DataFrame.corr``) computed with masked
     matrix multiplications.
@@ -44,7 +44,7 @@ def _pairwise_corr(X: np.ndarray) -> np.ndarray:
 
 
 class VFeatureFilter(BaseFeatureTransformer):
-    """Filter V features by variance then correlation.
+    """Filter prefix-matched columns by variance then correlation.
 
     Learns which columns to keep from ``fit()`` (on the training set) and
     applies the same mask in ``transform()``.
@@ -55,6 +55,7 @@ class VFeatureFilter(BaseFeatureTransformer):
         correlation_threshold: Maximum absolute Pearson correlation to keep
             both features of a pair.  When two features are correlated above
             this threshold the one with lower variance is dropped.
+        prefixes: Column prefixes to filter (e.g. ``("V",)`` or ``("C",)``).
     """
 
     def __init__(
@@ -62,16 +63,21 @@ class VFeatureFilter(BaseFeatureTransformer):
         enabled: bool = True,
         variance_threshold: float = 0.01,
         correlation_threshold: float = 0.95,
+        prefixes: tuple[str, ...] = ("V",),
     ):
         self.enabled = enabled
         self.variance_threshold = variance_threshold
         self.correlation_threshold = correlation_threshold
+        self.prefixes = list(prefixes)
+
+    def _matching(self, X: pd.DataFrame) -> list[str]:
+        return [c for c in X.columns if c.startswith(tuple(self.prefixes))]
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "VFeatureFilter":
         if not self.enabled:
             self._fitted_ = True
             return self
-        v_cols = [c for c in X.columns if c.startswith("V")]
+        v_cols = self._matching(X)
         if not v_cols:
             self._keep_cols: list[str] = []
             return self
@@ -79,11 +85,11 @@ class VFeatureFilter(BaseFeatureTransformer):
         keep = list(v_cols)
         v_data = X[v_cols]
 
-        var = v_data.var()
-        keep = [c for c in keep if var.get(c, 0) > self.variance_threshold]
+        variances = {c: float(v_data[c].var()) for c in keep}
+        keep = [c for c in keep if variances[c] > self.variance_threshold]
 
         if len(keep) > 1:
-            corr = _pairwise_corr(v_data[keep].to_numpy())
+            corr = _pairwise_corr(v_data[keep])
             upper = np.abs(corr)
             upper[np.tril_indices_from(upper)] = np.nan
             to_drop = [
@@ -103,6 +109,6 @@ class VFeatureFilter(BaseFeatureTransformer):
             return X
         if not self._keep_cols:
             return X
-        v_cols = [c for c in X.columns if c.startswith("V")]
+        v_cols = self._matching(X)
         drop_cols = [c for c in v_cols if c not in self._keep_cols]
         return X.drop(columns=drop_cols, errors="ignore")
