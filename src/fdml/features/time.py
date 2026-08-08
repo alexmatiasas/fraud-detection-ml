@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 from fdml.features.base import BaseFeatureTransformer
@@ -17,6 +18,7 @@ class TimeFeatureExtractor(BaseFeatureTransformer):
         use_hour: Create ``hour_of_day`` column.
         use_dow: Create ``day_of_week`` column.
         use_dom: Create ``day_of_month`` column.
+        use_sin_cos: Add cyclic sin/cos encodings of the created columns.
     """
 
     def __init__(
@@ -25,11 +27,13 @@ class TimeFeatureExtractor(BaseFeatureTransformer):
         use_hour: bool = True,
         use_dow: bool = True,
         use_dom: bool = True,
+        use_sin_cos: bool = True,
     ):
         self.enabled = enabled
         self.use_hour = use_hour
         self.use_dow = use_dow
         self.use_dom = use_dom
+        self.use_sin_cos = use_sin_cos
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self.enabled:
@@ -46,5 +50,17 @@ class TimeFeatureExtractor(BaseFeatureTransformer):
             X["day_of_week"] = (dt // _SECONDS_IN_DAY) % 7
         if self.use_dom:
             X["day_of_month"] = (dt // _SECONDS_IN_DAY) % 30
+
+        if self.use_sin_cos:
+            for source, period in [
+                ("hour_of_day", 24),
+                ("day_of_week", 7),
+                ("day_of_month", 30),
+            ]:
+                if source not in X.columns:
+                    continue
+                angle = 2 * np.pi * X[source] / period
+                X[f"{source}_sin"] = np.sin(angle)
+                X[f"{source}_cos"] = np.cos(angle)
 
         return X
