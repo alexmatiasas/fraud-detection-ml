@@ -75,6 +75,15 @@ transaction:
     variance_threshold: 0.01
     correlation_threshold: 0.95   # drops one per correlated pair
 
+  # Correlation filter for C count features — EDA 5.7.6: C7↔C12 and C8↔C10
+  # are almost perfectly correlated (r > 0.99), one of each pair is dropped.
+  # The threshold is tunable; 0.99 keeps 9 of the 13 C features (the broader
+  # 0.95 level collapses them to 5).
+  count_corr_filter:
+    include: true
+    variance_threshold: 0.01
+    correlation_threshold: 0.99
+
 # ── Identity table features ─────────────────────────────────────────────────────
 identity:
   categorical:
@@ -127,6 +136,17 @@ engineered:
     - hour_of_day          # fraud has clear time-of-day patterns
     - day_of_week
     - day_of_month
+  cyclical: true           # sin/cos encodings (23h↔0h wrap continuity)
+
+  # Binary flag: does the identity record exist? (EDA 4)
+  has_identity: true
+
+  # TransactionAmt derived features (EDA 5.1)
+  log_amount: true         # log1p — bimodal fraud/non-fraud separation
+  is_round_amount: true    # whole-number amounts are more common in fraud
+
+  # Email domains (EDA 5.4): Microsoft grouping + payer/recipient match
+  email_domain: true
 
   # Device info extracted from DeviceInfo via heuristics (OS + brand)
   device_os: true
@@ -144,6 +164,11 @@ engineered:
     - R_emaildomain
     - DeviceInfo
     - card1
+    - card2
+    - card3
+    - card5
+    - addr1
+    - addr2
 
 # ── Encoding strategy ─────────────────────────────────────────────────────────
 encoding:
