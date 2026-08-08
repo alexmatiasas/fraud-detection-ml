@@ -20,6 +20,24 @@ class VestaCfg(BaseModel):
     )
 
 
+class CountCorrFilterCfg(BaseModel):
+    include: bool = Field(
+        default=True,
+        description="Whether to correlation-filter C count features",
+    )
+    variance_threshold: float = Field(
+        ge=0.0,
+        default=0.01,
+        description="Variance floor — C columns below this are dropped",
+    )
+    correlation_threshold: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.99,
+        description="Pearson r threshold — one of each correlated pair is dropped",
+    )
+
+
 class TransactionCfg(BaseModel):
     target: str = Field(default="isFraud", description="Target column name")
     numerical: list[str] = Field(
@@ -75,6 +93,10 @@ class TransactionCfg(BaseModel):
         default=None,
         description="Vesta engineered V features config",
     )
+    count_corr_filter: CountCorrFilterCfg | None = Field(
+        default=None,
+        description="Correlation filter for C count features",
+    )
 
 
 class IdentityCfg(BaseModel):
@@ -107,7 +129,17 @@ class EngineeredCfg(BaseModel):
         description="Group-by aggregations on card columns",
     )
     frequency_encoding: list[str] = Field(
-        default=["P_emaildomain", "R_emaildomain", "DeviceInfo", "card1"],
+        default=[
+            "P_emaildomain",
+            "R_emaildomain",
+            "DeviceInfo",
+            "card1",
+            "card2",
+            "card3",
+            "card5",
+            "addr1",
+            "addr2",
+        ],
         description="Columns to frequency-encode",
     )
     device_os: bool = Field(
@@ -117,6 +149,26 @@ class EngineeredCfg(BaseModel):
     device_brand: bool = Field(
         default=True,
         description="Extract brand from DeviceInfo (heuristic)",
+    )
+    cyclical: bool = Field(
+        default=True,
+        description="Cyclic sin/cos encoding of the datetime features",
+    )
+    has_identity: bool = Field(
+        default=True,
+        description="Binary flag for presence of an identity record",
+    )
+    log_amount: bool = Field(
+        default=True,
+        description="log1p transform of TransactionAmt",
+    )
+    is_round_amount: bool = Field(
+        default=True,
+        description="Flag for whole-number TransactionAmt",
+    )
+    email_domain: bool = Field(
+        default=True,
+        description="Normalize email domains and add payer/recipient match flag",
     )
 
 
