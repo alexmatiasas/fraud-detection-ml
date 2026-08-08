@@ -66,6 +66,27 @@ def raw_df() -> pd.DataFrame:
                 "object"
             ),
             "id_03": _RNG.uniform(0, 1, n).round(4),
+            "id_30": _RNG.choice(
+                ["Windows 10", "Windows 7", "iOS 11.2.1", "Android 7.0", None],
+                n,
+                p=[0.3, 0.25, 0.2, 0.15, 0.1],
+            ),
+            "id_31": _RNG.choice(
+                [
+                    "chrome 63.0",
+                    "mobile safari 11.0",
+                    "ie 11.0 for desktop",
+                    "opera",
+                    None,
+                ],
+                n,
+                p=[0.35, 0.3, 0.2, 0.1, 0.05],
+            ),
+            "id_33": _RNG.choice(
+                ["1920x1080", "1366x768", "1334x750", None],
+                n,
+                p=[0.4, 0.3, 0.2, 0.1],
+            ),
             # ── M flags ─────────────────────────────────────
             "M1": _RNG.choice(["T", "F", None], n),
             "M2": _RNG.choice(["T", "F", None], n),
@@ -151,6 +172,23 @@ class TestEngineeredFeatures:
         X = pipeline.fit_transform(raw_df)
         freq_cols = [c for c in X.columns if c.endswith("_freq")]
         assert len(freq_cols) >= 3
+
+    def test_numeric_code_freq_not_created(
+        self, pipeline: Pipeline, raw_df: pd.DataFrame
+    ):
+        X = pipeline.fit_transform(raw_df)
+        assert "card3_freq" not in X.columns
+        assert "addr2_freq" not in X.columns
+
+    def test_identity_ua_freq_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "id_30_freq" in X.columns
+        assert "id_31_freq" in X.columns
+        assert "id_33_freq" in X.columns
+
+    def test_d2_dropped(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "D2" not in X.columns
 
     def test_has_identity_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)

@@ -134,13 +134,14 @@ class EngineeredCfg(BaseModel):
             "R_emaildomain",
             "DeviceInfo",
             "card1",
-            "card2",
-            "card3",
-            "card5",
-            "addr1",
-            "addr2",
+            "id_30",
+            "id_31",
+            "id_33",
         ],
-        description="Columns to frequency-encode",
+        description=(
+            "True categorical columns to frequency-encode. Numeric codes with "
+            "centralized distributions (card2/3/5, addr1/2) are excluded "
+        ),
     )
     device_os: bool = Field(
         default=True,

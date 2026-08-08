@@ -59,9 +59,10 @@ transaction:
 
   # Features D — time delta between events (captures speed of fraud)
   # D6–D9, D12–D14: DROPPED per EDA Section 5.6 — 87–94% missing
+  # D2: DROPPED — r = 0.98 with D1 (pairwise-complete); when both are present,
+  # 92.8% of rows have exactly equal values. Near-duplicate of D1.
   delta_features:
     - D1
-    - D2
     - D3
     - D4
     - D5
@@ -158,17 +159,24 @@ engineered:
     aggregations:
       TransactionAmt: [mean, std, max, count]
 
-  # Frequency encoding for high-cardinality categorical columns
+  # Frequency encoding for high-cardinality CATEGORICAL columns.
+  # card2/card3/card5/addr1/addr2 were dropped here: they are integer-coded
+  # numeric codes with centralized distributions, where the relative frequency
+  # is near-constant and anti-predictive (top-1 share: card3=88.5%, addr2=99.2%;
+  # AUC of the freq alone: 0.37–0.49). They stay as raw numerics — card3's raw
+  # value alone reaches AUC 0.63, and cards additionally get the amount-based
+  # CardAggregator statistics.
+  # id_30/id_31/id_33 are true categoricals (OS/browser/screen family, same
+  # semantics as DeviceInfo) — id_31 has 97.3% coverage and clear browser-level
+  # signal, so it joins the frequency strategy.
   frequency_encoding:
     - P_emaildomain
     - R_emaildomain
     - DeviceInfo
     - card1
-    - card2
-    - card3
-    - card5
-    - addr1
-    - addr2
+    - id_30
+    - id_31
+    - id_33
 
 # ── Encoding strategy ─────────────────────────────────────────────────────────
 encoding:
