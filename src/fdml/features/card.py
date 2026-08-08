@@ -1,3 +1,4 @@
+from collections.abc import Mapping, Sequence
 from typing import Optional
 
 import pandas as pd
@@ -15,7 +16,7 @@ class CardAggregator(BaseFeatureTransformer):
     Args:
         enabled: When False the transform returns X unchanged.
         group_by: List of columns to group by.
-        aggregations: Dict mapping column name to list of aggregation
+        aggregations: Mapping of column name to list of aggregation
             functions, e.g. ``{"TransactionAmt": ["mean", "std", "max", "count"]}``.
     """
 
@@ -23,7 +24,7 @@ class CardAggregator(BaseFeatureTransformer):
         self,
         enabled: bool = True,
         group_by: Optional[list[str]] = None,
-        aggregations: Optional[dict[str, list[str]]] = None,
+        aggregations: Optional[Mapping[str, Sequence[str]]] = None,
     ):
         self.enabled = enabled
         self.group_by = group_by or ["card1", "card2", "card3", "card5"]
@@ -65,9 +66,8 @@ class CardAggregator(BaseFeatureTransformer):
                 name = f"card_{stat}_{col.lower()}"
                 if stat not in agg_df.columns:
                     continue
-                merge_cols = valid_groups + [stat]
                 X = X.merge(
-                    agg_df[merge_cols].rename(columns={stat: name}),
+                    agg_df.rename(columns={stat: name})[valid_groups + [name]],
                     on=valid_groups,
                     how="left",
                 )

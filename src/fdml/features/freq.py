@@ -41,5 +41,5 @@ class FrequencyEncoder(BaseFeatureTransformer):
             if col not in X.columns:
                 continue
             name = f"{col}_freq"
-            X[name] = X[col].map(mapping).fillna(1).astype("int32")
+            X[name] = X[col].map(mapping.get).fillna(1).astype("int32")
         return X
