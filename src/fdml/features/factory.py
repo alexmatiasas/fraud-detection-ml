@@ -5,10 +5,14 @@ from typing import Any
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
+from fdml.features.amount import AmountFeatureExtractor
 from fdml.features.card import CardAggregator
 from fdml.features.device import DeviceFeatureExtractor
+from fdml.features.dtypes import DtypeOptimizer
+from fdml.features.email import EmailFeatureExtractor
 from fdml.features.flags import MFlagEncoder
 from fdml.features.freq import FrequencyEncoder
+from fdml.features.identity import IdentityFlagExtractor
 from fdml.features.imputer import MissingImputer
 from fdml.features.selector import FeatureSelector
 from fdml.features.time import TimeFeatureExtractor
@@ -53,8 +57,26 @@ def _build_feature_columns(cfg: FeaturesConfig) -> list[str]:
     eng = cfg.engineered
     cols.extend(eng.datetime)
 
-    cols.append("device_os")
-    cols.append("device_brand")
+    if eng.cyclical:
+        for feature in eng.datetime:
+            cols.append(f"{feature}_sin")
+            cols.append(f"{feature}_cos")
+
+    if eng.has_identity:
+        cols.append("has_identity")
+
+    if eng.log_amount:
+        cols.append("TransactionAmt_log")
+    if eng.is_round_amount:
+        cols.append("is_round_amount")
+
+    if eng.email_domain:
+        cols.append("p_r_domain_match")
+
+    if eng.device_os:
+        cols.append("device_os")
+    if eng.device_brand:
+        cols.append("device_brand")
 
     for freq_col in eng.frequency_encoding:
         cols.append(f"{freq_col}_freq")
@@ -80,15 +102,30 @@ def create_pipeline(cfg: FeaturesConfig) -> tuple[Pipeline, list[str]]:
     eng = cfg.engineered
     t_cfg = cfg.transaction
 
-    steps = [
-        ("device", DeviceFeatureExtractor()),
-        ("mflags", MFlagEncoder()),
-        ("time", TimeFeatureExtractor()),
-    ]
+    steps: list[tuple[str, Any]] = []
+
+    if eng.has_identity:
+        steps.append(("identity", IdentityFlagExtractor()))
+
+    if eng.email_domain:
+        steps.append(("email", EmailFeatureExtractor()))
 
     freq_cols = eng.frequency_encoding
     if freq_cols:
         steps.append(("freq", FrequencyEncoder(columns=list(freq_cols))))
+
+    # freq must run before device: it encodes DeviceInfo which device drops.
+    steps.append(
+        (
+            "device",
+            DeviceFeatureExtractor(
+                use_os=eng.device_os,
+                use_brand=eng.device_brand,
+            ),
+        )
+    )
+    steps.append(("mflags", MFlagEncoder()))
+    steps.append(("time", TimeFeatureExtractor(use_sin_cos=eng.cyclical)))
 
     if eng.card_aggregations:
         steps.append(
@@ -96,25 +133,51 @@ def create_pipeline(cfg: FeaturesConfig) -> tuple[Pipeline, list[str]]:
                 "card",
                 CardAggregator(
                     group_by=list(eng.card_aggregations.group_by),
-                    aggregations=dict(eng.card_aggregations.aggregations),
+                    aggregations=eng.card_aggregations.aggregations,
+                ),
+            )
+        )
+
+    if eng.log_amount or eng.is_round_amount:
+        steps.append(
+            (
+                "amount",
+                AmountFeatureExtractor(
+                    use_log=eng.log_amount,
+                    use_round=eng.is_round_amount,
                 ),
             )
         )
 
     v_cfg = t_cfg.vesta_features
     include_v = v_cfg is not None and v_cfg.include
-    if include_v:
+    if v_cfg is not None and v_cfg.include:
         steps.append(
             (
                 "vfilter",
                 VFeatureFilter(
                     variance_threshold=v_cfg.variance_threshold,
                     correlation_threshold=v_cfg.correlation_threshold,
+                    prefixes=("V",),
+                ),
+            )
+        )
+
+    c_cfg = t_cfg.count_corr_filter
+    if c_cfg is not None and c_cfg.include:
+        steps.append(
+            (
+                "vfilter_c",
+                VFeatureFilter(
+                    variance_threshold=c_cfg.variance_threshold,
+                    correlation_threshold=c_cfg.correlation_threshold,
+                    prefixes=("C",),
                 ),
             )
         )
 
     steps.append(("imputer", MissingImputer()))
+    steps.append(("dtypes", DtypeOptimizer()))
 
     feature_columns = _build_feature_columns(cfg)
     steps.append(
