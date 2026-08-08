@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import cast
 
 from fdml.features.base import BaseFeatureTransformer
 
@@ -30,10 +31,11 @@ class MFlagEncoder(BaseFeatureTransformer):
         m_cols = [c for c in X.columns if c.startswith("M")]
 
         for col in m_cols:
+            series = cast(pd.Series, X[col])
             if col == "M4":
-                X[col] = self._encode_m4(X[col])
+                X[col] = self._encode_m4(series)
             else:
-                X[col] = X[col].map({"T": 1, "F": 0}).fillna(-1).astype("int8")
+                X[col] = series.replace({"T": 1, "F": 0}).fillna(-1).astype("int8")
 
         return X
 

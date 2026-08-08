@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import cast
 
 from fdml.features.base import BaseFeatureTransformer
 
@@ -48,19 +49,19 @@ class MissingImputer(BaseFeatureTransformer):
         cat_cols = X.select_dtypes(include=_CATEGORY_DTYPES).columns
 
         for col in num_cols:
-            if X[col].isna().any():
-                X[col] = X[col].fillna(self.numerical_value)
+            series = cast(pd.Series, X[col])
+            if series.isna().any():
+                X[col] = series.fillna(self.numerical_value)
 
         for col in cat_cols:
-            if not X[col].isna().any():
+            series = cast(pd.Series, X[col])
+            if not series.isna().any():
                 continue
-            if isinstance(X[col].dtype, pd.CategoricalDtype):
-                X[col] = (
-                    X[col]
-                    .cat.add_categories([self.categorical_value])
-                    .fillna(self.categorical_value)
+            if isinstance(series.dtype, pd.CategoricalDtype):
+                X[col] = series.cat.add_categories([self.categorical_value]).fillna(
+                    self.categorical_value
                 )
             else:
-                X[col] = X[col].fillna(self.categorical_value)
+                X[col] = series.fillna(self.categorical_value)
 
         return X

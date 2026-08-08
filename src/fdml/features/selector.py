@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, cast
 
 import pandas as pd
 
@@ -45,4 +45,4 @@ class FeatureSelector(BaseFeatureTransformer):
         if self.target and self.target in cols:
             cols.remove(self.target)
 
-        return X[cols]
+        return cast(pd.DataFrame, X[cols])
