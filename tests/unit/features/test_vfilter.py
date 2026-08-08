@@ -86,3 +86,20 @@ class TestPairwiseCorr:
         result = vf.transform(df)
         assert "V1" in result.columns
         assert "V2" not in result.columns
+
+    def test_c_prefix_filters_c_columns(self):
+        rng = np.random.default_rng(3)
+        c1 = rng.normal(0, 1, 200)
+        df = pd.DataFrame(
+            {
+                "C1": c1,
+                "C2": c1 + rng.normal(0, 0.001, 200),
+                "V1": rng.normal(0, 1, 200),
+            }
+        )
+        vf = VFeatureFilter(prefixes=("C",))
+        vf.fit(df)
+        result = vf.transform(df)
+        assert "C1" in result.columns
+        assert "C2" not in result.columns  # one of the correlated pair dropped
+        assert "V1" in result.columns  # untouched by a C-only filter

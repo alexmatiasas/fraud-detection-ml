@@ -152,6 +152,25 @@ class TestEngineeredFeatures:
         freq_cols = [c for c in X.columns if c.endswith("_freq")]
         assert len(freq_cols) >= 3
 
+    def test_has_identity_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "has_identity" in X.columns
+        assert set(X["has_identity"].unique()) <= {0, 1}
+
+    def test_amount_features_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "TransactionAmt_log" in X.columns
+        assert "is_round_amount" in X.columns
+
+    def test_cyclic_encoding_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "hour_of_day_sin" in X.columns
+        assert "hour_of_day_cos" in X.columns
+
+    def test_email_match_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "p_r_domain_match" in X.columns
+
     def test_card_aggregation_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
         card_cols = [c for c in X.columns if c.startswith("card_")]
