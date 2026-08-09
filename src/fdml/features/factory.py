@@ -12,6 +12,7 @@ from fdml.features.dtypes import DtypeOptimizer
 from fdml.features.email import EmailFeatureExtractor
 from fdml.features.flags import MFlagEncoder
 from fdml.features.freq import FrequencyEncoder
+from fdml.features.id_encoder import IdCodeEncoder
 from fdml.features.identity import IdentityFlagExtractor
 from fdml.features.imputer import MissingImputer
 from fdml.features.selector import FeatureSelector
@@ -126,6 +127,9 @@ def create_pipeline(cfg: FeaturesConfig) -> tuple[Pipeline, list[str]]:
     )
     steps.append(("mflags", MFlagEncoder()))
     steps.append(("time", TimeFeatureExtractor(use_sin_cos=eng.cyclical)))
+
+    if eng.id_codes_encoding and eng.id_codes:
+        steps.append(("idcodes", IdCodeEncoder(columns=list(eng.id_codes))))
 
     if eng.card_aggregations:
         steps.append(

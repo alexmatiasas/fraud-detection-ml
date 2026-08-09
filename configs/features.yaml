@@ -149,6 +149,37 @@ engineered:
   # Email domains (EDA 5.4): Microsoft grouping + payer/recipient match
   email_domain: true
 
+  # ── Experiment: re-encode integer id_# codes as categorical ────────────────
+  # OFF by default (ablación Group B). Several numeric id_# columns are integer
+  # codes (browser version, screen size, match counters), not measurements.
+  # LightGBM already splits on integer codes natively, so the hypothesis is ~0
+  # signal — this flag lets the ablation measure it empirically. id_02 is
+  # excluded: 115k unique values, essentially a row identifier.
+  id_codes_encoding: false
+  id_codes:
+    - id_01
+    - id_03
+    - id_04
+    - id_05
+    - id_06
+    - id_07
+    - id_08
+    - id_09
+    - id_10
+    - id_11
+    - id_13
+    - id_14
+    - id_17
+    - id_18
+    - id_19
+    - id_20
+    - id_21
+    - id_22
+    - id_24
+    - id_25
+    - id_26
+    - id_32
+
   # Device info extracted from DeviceInfo via heuristics (OS + brand)
   device_os: true
   device_brand: true

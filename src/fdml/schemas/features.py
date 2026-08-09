@@ -171,6 +171,17 @@ class EngineeredCfg(BaseModel):
         default=True,
         description="Normalize email domains and add payer/recipient match flag",
     )
+    id_codes_encoding: bool = Field(
+        default=False,
+        description=(
+            "Re-cast integer id_# code columns to categorical (experiment: "
+            "expected ~0 signal for LightGBM)"
+        ),
+    )
+    id_codes: list[str] = Field(
+        default_factory=list,
+        description="Numeric id_# columns treated as unordered codes when id_codes_encoding is on",
+    )
 
 
 class MatchFlagsCfg(BaseModel):
