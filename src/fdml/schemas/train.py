@@ -156,6 +156,22 @@ class TrainingCallbacksCfg(BaseModel):
     )
 
 
+class AblationCfg(BaseModel):
+    enabled: bool = Field(
+        default=False,
+        description="Run the feature ablation study instead of a single fit",
+    )
+    max_train_rows: int = Field(
+        default=0,
+        ge=0,
+        description="Cap train rows per variant to keep the study fast (0 = all)",
+    )
+    report_path: str = Field(
+        default="models/feature_ablation.csv",
+        description="Where to save the per-variant results table",
+    )
+
+
 class TrainConfig(BaseModel):
     seed: int = Field(default=42, description="Global PRNG seed")
     data: DataPathsCfg = Field(
@@ -180,4 +196,8 @@ class TrainConfig(BaseModel):
     training_callbacks: TrainingCallbacksCfg = Field(
         default_factory=TrainingCallbacksCfg,
         description="Per-iteration training callbacks",
+    )
+    ablation: AblationCfg = Field(
+        default_factory=AblationCfg,
+        description="Feature ablation study configuration",
     )

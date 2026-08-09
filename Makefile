@@ -1,4 +1,4 @@
-.PHONY: help setup install lint test train serve docker-build clean
+.PHONY: help setup install lint test train ablation serve docker-build clean
 
 # Variables
 PYTHON := uv run python
@@ -68,6 +68,9 @@ dvc-plots-diff:  ## Compara plots entre experimentos (abrir HTML)
 ## ── Pipeline (directo, sin DVC) ─────────────────────────────────────────────
 train:  ## Entrena modelo (pasa args via ARGS: make train ARGS="model.name=xgboost")
 	$(PYTHON) -m fdml.models.train $(ARGS)
+
+ablation:  ## Feature ablation study (leave-one-group-out, ver make train ablation.enabled=true)
+	$(PYTHON) -m fdml.models.train.ablation $(ARGS)
 
 evaluate:  ## Evaluación completa (métricas, plots, model card)
 	$(PYTHON) -m fdml.models.evaluate

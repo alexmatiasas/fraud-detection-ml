@@ -67,3 +67,13 @@ mlflow:
   experiment_name: fraud-detection
   run_name: lgbm_baseline
   log_model: true
+
+# ── Feature ablation study ────────────────────────────────────────────────────
+# Leave-one-group-out: fixed model params (no Optuna), same temporal split for
+# every variant. Compares AUC/AP of the full feature set against each variant
+# with one engineered/selection group toggled OFF. Set enabled: true and run
+# `make train`. max_train_rows caps the training set (temporal order kept).
+ablation:
+  enabled: false
+  max_train_rows: 0
+  report_path: models/feature_ablation.csv

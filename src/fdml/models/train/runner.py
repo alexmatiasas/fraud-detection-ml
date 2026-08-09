@@ -74,7 +74,7 @@ def _get_splitter(split_cfg: Any) -> TemporalSplitter | StratifiedSplitter:
     raise ValueError(msg)
 
 
-def _fit_transform_steps(
+def fit_transform_steps(
     pipeline: Pipeline, X: pd.DataFrame, y: pd.Series
 ) -> pd.DataFrame:
     """Run ``fit_transform`` step by step so each step's cost is visible."""
@@ -96,7 +96,7 @@ def _fit_transform_steps(
     return Xt
 
 
-def _transform_steps(pipeline: Pipeline, X: pd.DataFrame) -> pd.DataFrame:
+def transform_steps(pipeline: Pipeline, X: pd.DataFrame) -> pd.DataFrame:
     """Run ``transform`` step by step over already-fitted transformers."""
     Xt = X.copy()
     for name, transformer in pipeline.steps:
@@ -105,10 +105,9 @@ def _transform_steps(pipeline: Pipeline, X: pd.DataFrame) -> pd.DataFrame:
     return Xt
 
 
-def _prepare_data(cfg: Any) -> tuple:
-    """PHASES 1-3: load, split, feature engineering."""
+def load_split(cfg: Any) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """PHASES 1-2: load the merged data and produce the train/val split."""
 
-    features_cfg = load_features_config()
     data_cfg = load_data_config()
 
     with step("PHASE 1: Load data"):
@@ -154,10 +153,21 @@ def _prepare_data(cfg: Any) -> tuple:
                 val_tr[1],
             )
 
+    return X_train, X_val, y_train, y_val
+
+
+def featurize(
+    X_train: pd.DataFrame,
+    X_val: pd.DataFrame,
+    y_train: pd.Series,
+    features_cfg: Any,
+) -> tuple[pd.DataFrame, pd.DataFrame, Pipeline, list[str]]:
+    """PHASE 3: run the feature pipeline over an already-split dataset."""
+
     with step("PHASE 3: Feature engineering"):
         pipeline, _ = create_pipeline(features_cfg)
-        X_train_fe = _fit_transform_steps(pipeline, X_train, y_train)
-        X_val_fe = _transform_steps(pipeline, X_val)
+        X_train_fe = fit_transform_steps(pipeline, X_train, y_train)
+        X_val_fe = transform_steps(pipeline, X_val)
 
         logger.info(
             "  Pipeline: %d steps → %s train, %s val",
@@ -184,7 +194,18 @@ def _prepare_data(cfg: Any) -> tuple:
         logger.info("  Final shape: train=%s, val=%s", X_train_fe.shape, X_val_fe.shape)
         logger.info("  dtypes: %s", _fmt_dtypes(X_train_fe))
 
-    return X_train_fe, X_val_fe, y_train, y_val, pipeline, X_train_fe.columns.tolist()
+    return X_train_fe, X_val_fe, pipeline, X_train_fe.columns.tolist()
+
+
+def _prepare_data(cfg: Any) -> tuple:
+    """PHASES 1-3: load, split, feature engineering."""
+
+    X_train, X_val, y_train, y_val = load_split(cfg)
+    X_train_fe, X_val_fe, pipeline, feature_names = featurize(
+        X_train, X_val, y_train, load_features_config()
+    )
+
+    return X_train_fe, X_val_fe, y_train, y_val, pipeline, feature_names
 
 
 def train(
@@ -374,6 +395,18 @@ def main() -> None:
     cfg = load_train_config()
     run_name = f"{cfg.model.name}_s{cfg.seed}"
     log_path = setup_logging(log_path=f"train_{run_name}.log")
+
+    if cfg.ablation.enabled:
+        from fdml.models.train.ablation import run_ablation
+
+        results = run_ablation(cfg, max_train_rows=cfg.ablation.max_train_rows)
+        report_path = Path(cfg.ablation.report_path)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        results.to_csv(report_path, index=False)
+        logger.info("Ablation report saved to %s", report_path)
+        logger.info("\n%s", results.to_string(index=False))
+        return
+
     eval_cfg = load_evaluation_config()
     mlflow_cfg = resolve_mlflow_tracking(load_mlflow_config())
 
