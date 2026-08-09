@@ -14,6 +14,11 @@ def generate_model_card(
     split_strategy: str,
     feature_importance: list[tuple[str, float]] | None = None,
     auc_adv: float | None = None,
+    brier: float | None = None,
+    f_beta: float | None = None,
+    cost_best_threshold: float | None = None,
+    expected_cost: float | None = None,
+    recall_at_k: dict[str, float] | None = None,
 ) -> str:
     lines = [
         "# Model Card",
@@ -42,6 +47,18 @@ def generate_model_card(
         f"| Recall | {metrics['recall']:.4f} |",
     ]
 
+    if f_beta is not None:
+        lines.append(f"| F2 (default threshold) | {f_beta:.4f} |")
+    if brier is not None:
+        lines.append(f"| Brier | {brier:.4f} |")
+    if expected_cost is not None and cost_best_threshold is not None:
+        lines.append(
+            f"| Expected cost/transaction | {expected_cost:.4f} @ thr={cost_best_threshold:.2f} |"
+        )
+    if recall_at_k:
+        for k, v in sorted(recall_at_k.items(), key=lambda kv: float(kv[0])):
+            lines.append(f"| Recall@top {float(k):.0%} | {v:.4f} |")
+
     if auc_adv is not None:
         drift_text = (
             "possible drift detected" if auc_adv > 0.8 else "no significant drift"
@@ -69,8 +86,9 @@ def generate_model_card(
         "## Notes",
         "",
         "- Average Precision (PR AUC) is the primary metric due to 3.5% fraud rate",
+        "- Expected cost uses FN = 10×FP (fraud lost vs. manual review)",
         "- Threshold tuned to maximize F1 on validation set",
-        "- See `configs/train.yaml` for model hyperparameters",
+        "- See `configs/evaluate.yaml` for evaluation settings",
         "",
     ]
     return "\n".join(lines)

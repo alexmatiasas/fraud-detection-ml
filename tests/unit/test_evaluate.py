@@ -6,8 +6,12 @@ import pytest
 
 from fdml.models.evaluate import (
     bootstrap_ci,
+    brier_score,
     compute_metrics,
+    expected_cost,
+    f_beta_score,
     per_segment_analysis,
+    recall_at_top_k,
     threshold_tuning,
 )
 
@@ -113,6 +117,134 @@ class TestThresholdTuning:
             default_f1 = max(default_f1, f1_score(y_true, yp))
 
         assert best_f1 >= default_f1
+
+
+class TestBrierScore:
+    def test_perfect_prediction_is_zero(self):
+        y_true = np.array([0, 0, 1, 1])
+        y_proba = np.array([0.0, 0.0, 1.0, 1.0])
+        assert brier_score(y_true, y_proba) == pytest.approx(0.0)
+
+    def test_always_fraud_rate_baseline(self):
+        y_true = np.array([0, 0, 0, 1])
+        p = np.full(4, 0.25)
+        assert brier_score(y_true, p) == pytest.approx(0.1875)
+
+    def test_worse_than_perfect(self):
+        y_true = np.array([0, 0, 1, 1])
+        good = brier_score(y_true, np.array([0.1, 0.2, 0.8, 0.9]))
+        bad = brier_score(y_true, np.array([0.9, 0.8, 0.2, 0.1]))
+        assert bad > good
+
+
+class TestFBeta:
+    def test_beta_one_equals_f1(self):
+        from sklearn.metrics import f1_score
+
+        y_true = np.array([0, 1, 0, 1])
+        y_proba = np.array([0.4, 0.6, 0.4, 0.6])
+        expected = f1_score(y_true, (y_proba >= 0.5).astype(int))
+        assert f_beta_score(y_true, y_proba, beta=1.0) == pytest.approx(expected)
+
+    def test_higher_beta_rewards_recall(self):
+        y_true = np.array([0, 1, 1, 1, 1])
+        y_proba = np.array([0.9, 0.51, 0.51, 0.51, 0.51])
+        f1 = f_beta_score(y_true, y_proba, beta=1.0)
+        f2 = f_beta_score(y_true, y_proba, beta=2.0)
+        assert f2 > f1
+
+    def test_in_range(self, y_true, y_proba):
+        assert 0.0 <= f_beta_score(y_true, y_proba, beta=2.0) <= 1.0
+
+
+class TestExpectedCost:
+    def test_returns_best_threshold_cost_and_curve(self, y_true, y_proba):
+        best_thr, best_cost, curve = expected_cost(y_true, y_proba, n_thresholds=20)
+        assert 0.01 <= best_thr <= 0.99
+        assert best_cost >= 0.0
+        assert len(curve) == 20
+        for entry in curve:
+            assert set(entry.keys()) == {
+                "threshold",
+                "expected_cost",
+                "precision",
+                "recall",
+            }
+
+    def test_best_cost_is_minimal(self, y_true, y_proba):
+        best_thr, best_cost, curve = expected_cost(y_true, y_proba, n_thresholds=100)
+        assert best_cost <= min(c["expected_cost"] for c in curve)
+
+    def test_expensive_false_negatives_lower_threshold(self, y_true, y_proba):
+        thr_fp, _, _ = expected_cost(
+            y_true, y_proba, fp_cost=100.0, fn_cost=1.0, n_thresholds=50
+        )
+        thr_fn, _, _ = expected_cost(
+            y_true, y_proba, fp_cost=1.0, fn_cost=100.0, n_thresholds=50
+        )
+        assert thr_fn <= thr_fp
+
+    def test_perfect_separation_zero_cost(self):
+        y_true = np.array([0, 0, 1, 1])
+        y_proba = np.array([0.1, 0.2, 0.8, 0.9])
+        _, best_cost, _ = expected_cost(y_true, y_proba, n_thresholds=50)
+        assert best_cost == pytest.approx(0.0)
+
+
+class TestRecallAtTopK:
+    def test_perfect_ranking_captures_all_frauds(self):
+        y_true = np.array([0, 1, 0, 1, 0, 1, 0, 1])
+        y_proba = np.array([0.1, 0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6])
+        assert recall_at_top_k(y_true, y_proba, k_fraction=0.5) == 1.0
+
+    def test_reversed_ranking_captures_nothing(self):
+        y_true = np.array([0, 1, 0, 1, 0, 1, 0, 1])
+        y_proba = np.array([0.9, 0.1, 0.8, 0.2, 0.7, 0.3, 0.6, 0.4])
+        assert recall_at_top_k(y_true, y_proba, k_fraction=0.5) == 0.0
+
+    def test_top_quarter_captures_half_the_frauds(self):
+        y_true = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1])
+        y_proba = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 0.95, 0.7, 0.65])
+        assert recall_at_top_k(y_true, y_proba, k_fraction=0.25) == 0.5
+
+    def test_no_positives_is_zero(self):
+        y_true = np.zeros(10, dtype=int)
+        y_proba = np.ones(10)
+        assert recall_at_top_k(y_true, y_proba, k_fraction=0.1) == 0.0
+
+
+class TestEvaluationReport:
+    def test_accepts_extended_fields(self):
+        from fdml.models.evaluate.reporter import CostPoint, EvaluationReport
+
+        report = EvaluationReport(
+            model_name="LGBM",
+            split_strategy="temporal",
+            n_features=10,
+            n_train=100,
+            n_val=50,
+            fraud_rate=0.04,
+            roc_auc=0.9,
+            average_precision=0.5,
+            f1=0.4,
+            precision=0.5,
+            recall=0.3,
+            best_threshold=0.1,
+            best_f1=0.4,
+            brier=0.1,
+            f_beta=0.35,
+            cost_best_threshold=0.08,
+            expected_cost=0.03,
+            recall_at_k={"0.0100": 0.6},
+            cost_curve=[
+                CostPoint(threshold=0.5, expected_cost=0.5, precision=0.4, recall=0.3)
+            ],
+        )
+        dumped = report.model_dump(mode="json")
+        assert dumped["brier"] == 0.1
+        assert dumped["expected_cost"] == 0.03
+        assert dumped["recall_at_k"] == {"0.0100": 0.6}
+        assert dumped["cost_curve"][0]["expected_cost"] == 0.5
 
 
 class TestPerSegmentAnalysis:

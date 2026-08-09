@@ -10,8 +10,12 @@ import pandas as pd
 from fdml.models.config import load_evaluation_config, load_train_config
 from fdml.models.evaluate.drift import adversarial_validation
 from fdml.models.evaluate.metrics import (
+    brier_score,
     bootstrap_ci,
     compute_metrics,
+    expected_cost,
+    f_beta_score,
+    recall_at_top_k,
     threshold_tuning,
 )
 from fdml.models.evaluate.model_card import generate_model_card
@@ -24,6 +28,7 @@ from fdml.models.evaluate.plots import (
 from fdml.models.evaluate.reporter import (
     CompositeReporter,
     ConsoleReporter,
+    CostPoint,
     DVCLiveReporter,
     EvaluationReport,
     JSONFileReporter,
@@ -62,6 +67,38 @@ def evaluate(
 ) -> EvaluationReport:
     default_thr = eval_cfg.threshold.threshold
     metrics = compute_metrics(y_true, y_proba, threshold=default_thr)
+
+    brier_val: float | None = None
+    if eval_cfg.brier:
+        try:
+            brier_val = brier_score(y_true, y_proba)
+        except ValueError:
+            logger.warning("  Brier score failed (single-class sample)")
+
+    f_beta_val: float | None = None
+    if eval_cfg.f_beta.enabled:
+        f_beta_val = f_beta_score(
+            y_true, y_proba, beta=eval_cfg.f_beta.beta, threshold=default_thr
+        )
+
+    cost_thr: float | None = None
+    cost_val: float | None = None
+    cost_curve_list: list[dict[str, float]] = []
+    if eval_cfg.costs.enabled:
+        cost_thr, cost_val, cost_curve_list = expected_cost(
+            y_true,
+            y_proba,
+            fp_cost=eval_cfg.costs.false_positive_cost,
+            fn_cost=eval_cfg.costs.false_negative_cost,
+            n_thresholds=eval_cfg.costs.n_thresholds,
+        )
+
+    recall_at_k: dict[str, float] = {}
+    if eval_cfg.recall_at_k.enabled:
+        for fraction in eval_cfg.recall_at_k.fractions:
+            recall_at_k[f"{fraction:.4f}"] = recall_at_top_k(
+                y_true, y_proba, k_fraction=fraction
+            )
 
     ci: tuple[float, float] | None = None
     if eval_cfg.threshold.bootstrap:
@@ -199,6 +236,20 @@ def evaluate(
         ci_upper=float(ci[1]) if ci else None,
         best_threshold=best_thr,
         best_f1=best_f1,
+        brier=brier_val,
+        f_beta=f_beta_val,
+        cost_best_threshold=cost_thr,
+        expected_cost=cost_val,
+        recall_at_k=recall_at_k,
+        cost_curve=[
+            CostPoint(
+                threshold=float(p["threshold"]),
+                expected_cost=float(p["expected_cost"]),
+                precision=float(p["precision"]),
+                recall=float(p["recall"]),
+            )
+            for p in cost_curve_list
+        ],
         threshold_curve=[
             ThresholdPoint(
                 threshold=float(p["threshold"]),
@@ -230,6 +281,11 @@ def evaluate(
                 (ft["feature"], ft["importance"]) for ft in top_features
             ],
             auc_adv=auc_adv,
+            brier=brier_val,
+            f_beta=f_beta_val,
+            cost_best_threshold=cost_thr,
+            expected_cost=cost_val,
+            recall_at_k=recall_at_k,
         )
         card_path = Path(output_dir) / eval_cfg.model_card.filename
         card_path.parent.mkdir(parents=True, exist_ok=True)

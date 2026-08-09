@@ -16,10 +16,59 @@ PlotName = Literal[
 ]
 
 EvalMetricName = Literal[
-    "roc_auc", "average_precision", "f1_score", "precision", "recall"
+    "roc_auc",
+    "average_precision",
+    "f1_score",
+    "precision",
+    "recall",
+    "f_beta",
+    "brier",
+    "expected_cost",
 ]
 
 BootstrapMetric = Literal["roc_auc", "average_precision"]
+
+
+class CostsCfg(BaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="Optimize decision threshold on expected cost instead of F1",
+    )
+    false_positive_cost: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Cost of a false positive (manual review of a normal transaction)",
+    )
+    false_negative_cost: float = Field(
+        default=10.0,
+        gt=0.0,
+        description="Cost of a false negative (fraud that is not blocked)",
+    )
+    n_thresholds: int = Field(
+        default=100, ge=10, le=1000, description="Threshold grid for cost search"
+    )
+
+
+class FBetaCfg(BaseModel):
+    enabled: bool = Field(
+        default=True, description="Compute F-beta at the default threshold"
+    )
+    beta: float = Field(
+        default=2.0,
+        ge=0.0,
+        description="Beta > 1 weights recall more than precision (fraud-friendly)",
+    )
+
+
+class RecallAtKCfg(BaseModel):
+    enabled: bool = Field(
+        default=True,
+        description="Compute recall captured in the top-k% of highest scores",
+    )
+    fractions: list[float] = Field(
+        default_factory=lambda: [0.01, 0.05],
+        description="Fractions of the validation set to review (top-k)",
+    )
 
 
 class ThresholdCfg(BaseModel):
@@ -160,4 +209,17 @@ class EvaluateConfig(BaseModel):
     plots: PlotCfg = Field(default_factory=PlotCfg, description="Plot configuration")
     report: ReportCfg = Field(
         default_factory=ReportCfg, description="Report output configuration"
+    )
+    costs: CostsCfg = Field(
+        default_factory=CostsCfg, description="Expected-cost threshold optimization"
+    )
+    f_beta: FBetaCfg = Field(
+        default_factory=FBetaCfg, description="F-beta (fraud-friendly) metric"
+    )
+    recall_at_k: RecallAtKCfg = Field(
+        default_factory=RecallAtKCfg,
+        description="Recall captured in the top-k% of highest scores",
+    )
+    brier: bool = Field(
+        default=True, description="Compute Brier score (probability calibration)"
     )

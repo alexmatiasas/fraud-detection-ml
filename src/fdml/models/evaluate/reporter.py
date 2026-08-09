@@ -27,6 +27,13 @@ class ThresholdPoint(BaseModel):
     recall: float
 
 
+class CostPoint(BaseModel):
+    threshold: float
+    expected_cost: float
+    precision: float
+    recall: float
+
+
 class SegmentResult(BaseModel):
     segment_col: str
     segment_value: str | float | int
@@ -54,6 +61,12 @@ class EvaluationReport(BaseModel):
     ci_upper: float | None = None
     best_threshold: float
     best_f1: float
+    brier: float | None = None
+    f_beta: float | None = None
+    cost_best_threshold: float | None = None
+    expected_cost: float | None = None
+    recall_at_k: dict[str, float] = {}
+    cost_curve: list[CostPoint] = []
     threshold_curve: list[ThresholdPoint] = []
     segments: list[SegmentResult] = []
     top_features: list[dict[str, Any]] = []
@@ -86,8 +99,19 @@ class ConsoleReporter(Reporter):
             table.add_row("AP 95% CI", ci_str)
         table.add_row("Best thr", f"{report.best_threshold:.2f}")
         table.add_row("F1 (best)", f"{report.best_f1:.4f}")
+        if report.f_beta is not None:
+            table.add_row("F2 (default thr)", f"{report.f_beta:.4f}")
+        if report.brier is not None:
+            table.add_row("Brier", f"{report.brier:.4f}")
         table.add_row("Precision", f"{report.precision:.4f}")
         table.add_row("Recall", f"{report.recall:.4f}")
+        if report.expected_cost is not None:
+            table.add_row(
+                "Cost/thr (FN=10×FP)",
+                f"{report.expected_cost:.4f} @ {report.cost_best_threshold:.2f}",
+            )
+        for k, v in report.recall_at_k.items():
+            table.add_row(f"Recall@top {float(k):.0%}", f"{v:.4f}")
         table.add_row("Features", str(report.n_features))
         table.add_row("Train/Val", f"{report.n_train:,} / {report.n_val:,}")
         table.add_row("Fraud rate", f"{report.fraud_rate:.2%}")
@@ -196,10 +220,28 @@ class MLflowReporter(Reporter):
             }
         )
 
+        extra: dict[str, float] = {}
+        if report.brier is not None:
+            extra["brier"] = report.brier
+        if report.f_beta is not None:
+            extra["f_beta"] = report.f_beta
+        if report.expected_cost is not None:
+            extra["expected_cost"] = report.expected_cost
+            extra["cost_best_threshold"] = report.cost_best_threshold or 0.0
+        for k, v in report.recall_at_k.items():
+            extra[f"recall_at_top_{float(k):.0%}"] = v
+        if extra:
+            mlflow.log_metrics(extra)
+
         if report.threshold_curve:
             mlflow.log_table(
                 pd.DataFrame([t.model_dump() for t in report.threshold_curve]),
                 "segments/threshold_curve.json",
+            )
+        if report.cost_curve:
+            mlflow.log_table(
+                pd.DataFrame([c.model_dump() for c in report.cost_curve]),
+                "segments/cost_curve.json",
             )
         if report.segments:
             mlflow.log_table(
@@ -288,6 +330,19 @@ class DVCLiveReporter(Reporter):
                 live.log_metric("f1", report.f1)
                 live.log_metric("precision", report.precision)
                 live.log_metric("recall", report.recall)
+
+                if report.brier is not None:
+                    live.log_metric("brier", report.brier)
+                if report.f_beta is not None:
+                    live.log_metric("f_beta", report.f_beta)
+                if report.expected_cost is not None:
+                    live.log_metric("expected_cost", report.expected_cost)
+                    live.log_metric(
+                        "cost_best_threshold",
+                        report.cost_best_threshold or 0.0,
+                    )
+                for k, v in report.recall_at_k.items():
+                    live.log_metric(f"recall_at_top_{float(k):.0%}", v)
 
                 if report.ci_lower is not None:
                     live.log_metric("ap_ci_lower", report.ci_lower)

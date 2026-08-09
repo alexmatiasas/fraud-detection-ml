@@ -63,3 +63,27 @@ dvclive:
 # ── Report (JSON, sin dependencia de MLflow) ─────────────────────────────────
 report:
   path: models/report.json
+
+# ── Costo esperado ────────────────────────────────────────────────────────────
+# Umbral de decisión que minimiza coste medio por transacción (no F1).
+# FN = fraude no bloqueado (10×), FP = revisión manual de transacción normal.
+costs:
+  enabled: true
+  false_positive_cost: 1.0
+  false_negative_cost: 10.0
+  n_thresholds: 100
+
+# ── F-beta ────────────────────────────────────────────────────────────────────
+# beta=2: el recall pesa 2× la precisión (fraude-friendly).
+f_beta:
+  enabled: true
+  beta: 2.0
+
+# ── Recall@top-k ──────────────────────────────────────────────────────────────
+# % de fraude capturado si se revisa el top-k% de mayor riesgo.
+recall_at_k:
+  enabled: true
+  fractions: [0.01, 0.05]
+
+# ── Brier (calibración de probabilidades) ─────────────────────────────────────
+brier: true
