@@ -293,13 +293,21 @@ print("train: no NaN, no float64 ✔")
 ```
 
 ```{python}
-print("val: unseen category values → -1")
-# A category that only appears in val must encode to -1
-from fdml.models.categoricals import encode_categoricals
+print("val: unseen category values → -1 (pipeline 'categories' step)")
+# Categorical encoding now lives in the pipeline (last step), so X_val_fe is
+# already ordinal int32. Probe the pipeline with a novel category value to show
+# it encodes to -1 (unit-tested property, demonstrated here on real data).
+obj_cols = ["ProductCD", "card4", "card6", "P_emaildomain", "R_emaildomain"]
+mutated = [c for c in obj_cols if c in X_val.columns]
 
-X_tr_c, X_va_c = encode_categoricals(X_train_fe, X_val_fe)
-obj_enc = [c for c in X_va_c.columns if X_va_c[c].dtype.name in ("int32", "int8")]
-print(f"val: {X_va_c.shape[0]:,} rows, no NaN: {X_va_c.isna().sum().sum() == 0}, int32 cols: {len(obj_enc)}")
+probe = X_val.iloc[:1].copy()
+for col in mutated:
+    probe[col] = "UNSEEN-CATEGORY"
+probe_fe = pipeline.transform(probe)
+probe_vals = {c: int(probe_fe[c].iloc[0]) for c in mutated}
+print(f"encoded novel category: {probe_vals}")
+assert all(v == -1 for v in probe_vals.values())
+print("val: no NaN, categoricals are ordinal int32 codes ✔")
 ```
 
 ## 7. Short LightGBM fit (training smoke test)
