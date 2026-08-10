@@ -186,7 +186,7 @@ def run_ablation(cfg: Any, max_train_rows: int = 0) -> pd.DataFrame:
         )
 
     builder = model_builder_registry.get(cfg.model.name)
-    params = cfg.model.params.model_dump()
+    params = {**cfg.model.params.model_dump(), "random_state": cfg.seed}
     es_rounds = cfg.early_stopping.rounds
     es_metric = cfg.early_stopping.eval_metric
     logger.info("  Model: %s (fixed params, no Optuna)", cfg.model.name)
