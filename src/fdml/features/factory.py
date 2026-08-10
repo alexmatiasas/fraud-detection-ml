@@ -7,6 +7,7 @@ from sklearn.pipeline import Pipeline
 
 from fdml.features.amount import AmountFeatureExtractor
 from fdml.features.card import CardAggregator
+from fdml.features.category_encoder import CategoryEncoder
 from fdml.features.device import DeviceFeatureExtractor
 from fdml.features.dtypes import DtypeOptimizer
 from fdml.features.email import EmailFeatureExtractor
@@ -194,6 +195,10 @@ def create_pipeline(cfg: FeaturesConfig) -> tuple[Pipeline, list[str]]:
             ),
         )
     )
+
+    # Last step: the model is fitted on ordinal codes, so the encoding must be
+    # part of the pipeline for the logged model to be self-contained at serving.
+    steps.append(("categories", CategoryEncoder()))
 
     pipeline = Pipeline(steps)
     return pipeline, feature_columns
