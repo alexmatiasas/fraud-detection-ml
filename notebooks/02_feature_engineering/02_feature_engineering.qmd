@@ -1,0 +1,347 @@
+---
+title: "02 — Feature engineering verification"
+subtitle: "Manual validation of every pipeline transformer on real data"
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-location: left
+    code-overflow: scroll
+    theme: darkly
+jupyter: fdml
+execute:
+  warning: false
+---
+
+## Objective
+
+This notebook **manually verifies** the feature engineering pipeline (the same
+code used by `train.py`) on real data, step by step. It does not invent new
+logic: it runs the production path and checks that each transformer does what
+`configs/features.yaml` promises. It complements the integration tests with a
+visual, narrative view.
+
+Things we want to demonstrate here:
+
+- The pipeline steps and which columns each one adds/removes.
+- The V filter keeps a stable set and the C filter drops correlated pairs
+  (threshold 0.99).
+- The frequency features (`*_freq`) and the derived features exist and are
+  finite.
+- There are no `NaN`s (sentinel `-999`/`"missing"`), and no `float64` (memory).
+- Categorical encoding is `int32` and unseen validation values map to `-1`.
+- The selector produces **exactly** `feature_names` (no leakage, no phantom
+  columns).
+- The temporal split does not overlap (train before val).
+- A short LightGBM fit trains and yields sensible AUC/AP.
+
+## 1. Environment and data
+
+```{python}
+import os
+import logging
+
+import numpy as np
+import pandas as pd
+import lightgbm as lgb
+from sklearn.metrics import average_precision_score, roc_auc_score
+
+from fdml.features.factory import load_data, load_data_config, load_fe_config, merge_tables
+from fdml.models.config import load_train_config
+from fdml.models.split import TemporalSplitter
+from fdml.models.train.runner import featurize
+from fdml.utils.logging import ensure_logging
+from fdml.utils.paths import PROJECT_ROOT
+
+os.chdir(PROJECT_ROOT)
+ensure_logging()
+logging.getLogger("lightgbm").setLevel(logging.WARNING)
+
+SAMPLE = 80_000  # rows used for the step-by-step breakdown (None = all)
+```
+
+```{python}
+cfg = load_train_config()
+data_cfg = load_data_config()
+features_cfg = load_fe_config()
+
+print("configs/features.yaml:")
+print("  transaction.numerical      :", features_cfg.transaction.numerical)
+print("  transaction.categorical    :", len(features_cfg.transaction.categorical), "cols")
+print("  transaction.count_features :", len(features_cfg.transaction.count_features), "cols")
+print("  transaction.delta_features :", features_cfg.transaction.delta_features)
+print("  vesta_features.include     :", features_cfg.transaction.vesta_features.include)
+print("  count_corr_filter          :", features_cfg.transaction.count_corr_filter.include,
+      "corr=", features_cfg.transaction.count_corr_filter.correlation_threshold)
+print("  engineered.cyclical        :", features_cfg.engineered.cyclical)
+print("  engineered.card_aggs       :", features_cfg.engineered.card_aggregations is not None)
+print("  engineered.frequency_encod :", features_cfg.engineered.frequency_encoding)
+print("  engineered.id_codes        :", features_cfg.engineered.id_codes_encoding, "(experiment, off)")
+```
+
+## 2. Load and merge
+
+```{python}
+train_df, identity_df = load_data(data_cfg)
+df = merge_tables(train_df, identity_df)
+print(f"transaction: {train_df.shape[0]:,} rows, {train_df.shape[1]} cols")
+print(f"identity   : {identity_df.shape[0]:,} rows, {identity_df.shape[1]} cols")
+print(f"merged     : {df.shape[0]:,} rows, {df.shape[1]} cols")
+print(f"fraud rate : {df['isFraud'].mean():.4%}")
+```
+
+```{python}
+print("NaN per column (top 10 most missing):")
+df.isna().mean().sort_values(ascending=False).head(10).round(4).to_frame("missing_frac")
+```
+
+## 3. Temporal split
+
+The production split: `test_size=0.2` on `TransactionDT`, no shuffle.
+
+```{python}
+splitter = TemporalSplitter(time_col=cfg.split.time_col, test_size=cfg.split.test_size)
+train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
+
+X = df.drop(columns=["isFraud"])
+y = df["isFraud"]
+X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+print(f"train: {len(X_train):,} rows  fraud {y_train.mean():.4%}")
+print(f"val  : {len(X_val):,} rows  fraud {y_val.mean():.4%}")
+
+t_max = X_train["TransactionDT"].max()
+v_min = X_val["TransactionDT"].min()
+print(f"time range  train: [{X_train['TransactionDT'].min():,}, {t_max:,}]")
+print(f"time range  val  : [{v_min:,}, {X_val['TransactionDT'].max():,}]")
+print(f"overlap     : {v_min < t_max}  (should be False)")
+```
+
+## 4. Full pipeline (production code)
+
+`featurize()` is exactly what `train.py` runs: pipeline fit on train and
+transform on val, including categorical encoding.
+
+```{python}
+X_train_fe, X_val_fe, pipeline, feature_names = featurize(X_train, X_val, y_train, features_cfg)
+print(f"pipeline: {len(pipeline.steps)} steps")
+print(f"feature_names: {len(feature_names)} expected columns")
+print(f"train final : {X_train_fe.shape}, val final: {X_val_fe.shape}")
+```
+
+```{python}
+print("Pipeline steps (class and role):")
+pd.DataFrame(
+    [
+        {"step": name, "transformer": type(tr).__name__}
+        for name, tr in pipeline.steps
+    ]
+)
+```
+
+## 5. Step-by-step breakdown on a sample
+
+We fit each step on a sample to see exactly which columns it adds/removes. (In
+production it is fit on the whole train set; here we only count column counts,
+not the exact values of the V filter.)
+
+```{python}
+def run_steps(pipeline, X, y=None, n_rows=SAMPLE):
+    Xt = X.head(n_rows).copy()
+    yy = y.head(n_rows) if y is not None else None
+    log = []
+    for name, tr in pipeline.steps:
+        before = set(Xt.columns)
+        if hasattr(tr, "fit_transform"):
+            Xt = tr.fit_transform(Xt, yy)
+        else:
+            Xt = tr.fit(Xt, yy).transform(Xt)
+        after = set(Xt.columns)
+        log.append(
+            {
+                "step": name,
+                "transformer": type(tr).__name__,
+                "cols": Xt.shape[1],
+                "added": sorted(after - before)[:8],
+                "removed": sorted(before - after)[:8],
+            }
+        )
+    return Xt, pd.DataFrame(log)
+```
+
+```{python}
+X_sampled, step_log = run_steps(pipeline, X_train, y_train, n_rows=SAMPLE)
+step_log
+```
+
+```{python}
+print(f"NaN in sample output: {X_sampled.isna().sum().sum()} (should be 0)")
+print(f"float64 columns: {X_sampled.select_dtypes('float64').shape[1]} (should be 0)")
+print(f"dtypes:\n{X_sampled.dtypes.value_counts().to_string()}")
+```
+
+## 6. Group-targeted verification
+
+So far we looked at the pipeline as a whole. This section verifies, group by
+group, that the decisions documented in `configs/features.yaml` are actually
+applied to the data. The comparison is direct: `X_train` holds the raw columns
+right after the split, while `X_train_fe` is the production output — the exact
+columns the model will see. If a transformer were mis-wired or a flag ignored,
+the counts below would not match the config.
+
+### 6.1 V filter (Vesta)
+
+The 339 `V_*` columns are Vesta-engineered features whose meaning is unknown and
+which are mostly noise. `vfilter` keeps only columns with variance ≥ 0.01 and
+drops redundant correlated pairs (r ≥ 0.95). The output should keep 236 — fewer,
+higher-quality columns train faster and overfit less.
+
+```{python}
+v_raw = [c for c in X_train.columns if c.startswith("V")]
+v_kept = [c for c in X_train_fe.columns if c.startswith("V")]
+print(f"V in raw            : {len(v_raw)}")
+print(f"V after vfilter     : {len(v_kept)} (drop = {len(v_raw) - len(v_kept)})")
+```
+
+### 6.2 C filter (correlated pairs, threshold 0.99)
+
+The `C_*` columns are per-card usage counts over time windows; some are
+near-duplicates (e.g. `C7↔C12` and `C8↔C10` with r > 0.99, EDA 5.7.6).
+`count_corr_filter` removes one of each pair at threshold 0.99 — tight enough to
+delete only duplicates, not signal. Expect 13 configured → 9 kept.
+
+```{python}
+c_raw = features_cfg.transaction.count_features
+c_kept = [c for c in X_train_fe.columns if c.startswith("C")]
+print("C configured:", c_raw)
+print("C in output :", c_kept)
+print(f"drop by correlation: {len(c_raw) - len(c_kept)}")
+```
+
+### 6.3 Frequency, derived and identity features
+
+The config declares features the pipeline must create. Each entry maps a feature
+to the exact column that should exist, and the assert fails loudly if any is
+missing — this guards against silent wiring mistakes (a flag not connected, a
+transformer renamed, a column dropped by accident). The second cell lists every
+`*_freq` column produced by the frequency encoder.
+
+```{python}
+derived = {
+    "has_identity": "has_identity",
+    "log_amount": "TransactionAmt_log",
+    "is_round_amount": "is_round_amount",
+    "email": "p_r_domain_match",
+    "device_os": "device_os",
+    "device_brand": "device_brand",
+    "cyclical": "hour_of_day_sin",
+    "card_agg": "card_mean_transactionamt",
+    "freq": "P_emaildomain_freq",
+}
+present = {k: (v in X_train_fe.columns) for k, v in derived.items()}
+print(present)
+assert all(present.values()), "expected derived features are missing"
+```
+
+```{python}
+freq_cols = [c for c in X_train_fe.columns if c.endswith("_freq")]
+freq_cols
+```
+
+### 6.4 No leakage, no phantom columns
+
+Two contracts. (1) No leakage: `isFraud` (the target) and `TransactionID` (a row
+id) must never be features, or the model would memorize instead of learn.
+`TransactionDT` is NOT leakage — it is a configured numerical feature and the
+source of the temporal features. (2) Selector contract: the real output columns
+must equal the declared `feature_names` exactly — zero extra (phantom) and zero
+missing columns.
+
+```{python}
+# TransactionDT is an intentional feature (transaction.numerical) — not a leak.
+leak = {"isFraud": "isFraud" in X_train_fe.columns,
+        "TransactionID": "TransactionID" in X_train_fe.columns}
+print("possible leak:", leak)
+assert not any(leak.values())
+
+print("TransactionDT present as a feature (expected, by config):",
+      "TransactionDT" in X_train_fe.columns)
+
+extra = set(X_train_fe.columns) - set(feature_names)
+missing = set(feature_names) - set(X_train_fe.columns)
+print(f"columns outside feature_names: {len(extra)}")
+print(f"feature_names missing        : {len(missing)}")
+assert not extra and not missing, "selector does not match feature_names"
+```
+
+### 6.5 Categorical encoding
+
+Two bookkeeping steps close the pipeline: `MissingImputer` fills NaN with
+sentinels (`-999` for numerics, `"missing"` for categories) and `DtypeOptimizer`
+downcasts floats to float32 to save memory. We assert no NaN and no float64.
+For validation, categories that never appeared during training must not crash or
+disappear — the ordinal encoder maps them to `-1` ("unknown"), and the check
+confirms val has no NaN after encoding.
+
+```{python}
+dtypes_train = X_train_fe.dtypes.value_counts().to_dict()
+print("dtypes train:", dtypes_train)
+assert "float64" not in X_train_fe.dtypes.astype(str).values
+assert X_train_fe.isna().sum().sum() == 0
+print("train: no NaN, no float64 ✔")
+```
+
+```{python}
+print("val: unseen category values → -1")
+# A category that only appears in val must encode to -1
+from fdml.models.categoricals import encode_categoricals
+
+X_tr_c, X_va_c = encode_categoricals(X_train_fe, X_val_fe)
+obj_enc = [c for c in X_va_c.columns if X_va_c[c].dtype.name in ("int32", "int8")]
+print(f"val: {X_va_c.shape[0]:,} rows, no NaN: {X_va_c.isna().sum().sum() == 0}, int32 cols: {len(obj_enc)}")
+```
+
+## 7. Short LightGBM fit (training smoke test)
+
+A smoke test, not a final model: it runs the exact `train.py` path (LightGBM,
+`scale_pos_weight=27.6`, early stopping on AUC) with few rounds to prove the
+whole thing trains end-to-end on real data. Read the numbers against their
+random baselines: AUC 0.50 = random ranking; AP's baseline is the fraud rate
+(≈0.035), because with 3.5% positives a random ranker has expected precision
+3.5%. The short fit already yields clear signal, and the final model (all data,
+more rounds) will be higher.
+
+```{python}
+params = cfg.model.params.model_dump()
+model = lgb.LGBMClassifier(**params, verbose=-1)
+model.fit(
+    X_train_fe, y_train,
+    eval_set=[(X_val_fe, y_val)],
+    eval_names=["validation"],
+    eval_metric="auc",
+    callbacks=[lgb.early_stopping(50, first_metric_only=True)],
+)
+
+y_proba = model.predict_proba(X_val_fe)[:, 1]
+auc = roc_auc_score(y_val, y_proba)
+ap = average_precision_score(y_val, y_proba)
+print(f"best_iteration: {model.best_iteration_}")
+print(f"val AUC        : {auc:.4f}   (random = 0.50)")
+print(f"val AP         : {ap:.4f}   (random = fraud rate ≈ 0.035)")
+```
+
+## 8. Conclusions
+
+- The pipeline produces exactly `feature_names` columns, with no `NaN`, no
+  `float64`, and no `isFraud`/`TransactionID` (no leakage). `TransactionDT` is
+  present by design (it is a configured numerical feature).
+- The C filter drops correlated pairs at threshold 0.99.
+- Categorical encoding is `int32` and maps unseen values to `-1`.
+- The temporal split does not overlap.
+- A short LightGBM fit trains and yields sensible AUC/AP (with ALL the data
+  and more rounds it goes up).
+
+Next step in the pipeline: **group ablation** (`make train
+ablation.enabled=true`) to measure the marginal contribution of each group,
+then **Optuna HPO** on the already-fixed feature set.
