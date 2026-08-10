@@ -229,7 +229,7 @@ class MLflowReporter(Reporter):
             extra["expected_cost"] = report.expected_cost
             extra["cost_best_threshold"] = report.cost_best_threshold or 0.0
         for k, v in report.recall_at_k.items():
-            extra[f"recall_at_top_{float(k):.0%}"] = v
+            extra[f"recall_at_top_{float(k):.2f}"] = v
         if extra:
             mlflow.log_metrics(extra)
 
@@ -342,7 +342,7 @@ class DVCLiveReporter(Reporter):
                         report.cost_best_threshold or 0.0,
                     )
                 for k, v in report.recall_at_k.items():
-                    live.log_metric(f"recall_at_top_{float(k):.0%}", v)
+                    live.log_metric(f"recall_at_top_{float(k):.2f}", v)
 
                 if report.ci_lower is not None:
                     live.log_metric("ap_ci_lower", report.ci_lower)
