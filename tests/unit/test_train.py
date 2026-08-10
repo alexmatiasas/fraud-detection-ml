@@ -18,6 +18,7 @@ class TestGetSplitter:
         s = _get_splitter(cfg)
         assert isinstance(s, TemporalSplitter)
         assert s.time_col == "TransactionDT"
+        assert s.embargo_seconds == cfg.embargo_seconds
 
     def test_random(self):
         cfg = load_train_config(cli_args=["split.strategy=random"]).split

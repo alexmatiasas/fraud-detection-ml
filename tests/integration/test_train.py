@@ -46,7 +46,7 @@ def small_data() -> pd.DataFrame:
 class TestTrainIntegration:
     def test_end_to_end_lightgbm(self, small_data: pd.DataFrame):
         df = small_data.head(5000)
-        cfg = load_train_config()
+        cfg = load_train_config(cli_args=["split.embargo_seconds=0"])
         splitter = _get_splitter(cfg.split)
         train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
 
@@ -73,7 +73,9 @@ class TestTrainIntegration:
     @pytest.mark.parametrize("model_name", ["xgboost", "random_forest"])
     def test_end_to_end_other_models(self, small_data: pd.DataFrame, model_name: str):
         df = small_data.head(5000)
-        cfg = load_train_config(cli_args=[f"model.name={model_name}"])
+        cfg = load_train_config(
+            cli_args=[f"model.name={model_name}", "split.embargo_seconds=0"]
+        )
         splitter = _get_splitter(cfg.split)
         train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
 
@@ -109,7 +111,7 @@ class TestTrainIntegration:
         from sklearn.pipeline import Pipeline
 
         df = small_data.head(5000)
-        cfg = load_train_config()
+        cfg = load_train_config(cli_args=["split.embargo_seconds=0"])
         splitter = _get_splitter(cfg.split)
         train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
 

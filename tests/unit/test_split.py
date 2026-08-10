@@ -68,6 +68,34 @@ class TestTemporalSplitter:
         X = ts_data.drop(columns=["isFraud"])
         assert TemporalSplitter().get_n_splits(X) == 1
 
+    def test_split_embargo_zero_keeps_all_rows(self, ts_data: pd.DataFrame):
+        # Arrange
+        X = ts_data.drop(columns=["isFraud"])
+        y = ts_data["isFraud"].values
+        splitter = TemporalSplitter(test_size=0.2, embargo_seconds=0)
+
+        # Act
+        train_idx, val_idx = next(splitter.split(X, y))
+
+        # Assert
+        assert len(train_idx) + len(val_idx) == len(X)
+
+    def test_split_embargo_drops_boundary_rows(self, ts_data: pd.DataFrame):
+        # Arrange
+        X = ts_data.drop(columns=["isFraud"])
+        y = ts_data["isFraud"].values
+        embargo = 86400  # one day in the fixture
+        splitter = TemporalSplitter(test_size=0.2, embargo_seconds=embargo)
+
+        # Act
+        train_idx, val_idx = next(splitter.split(X, y))
+
+        # Assert — the embargo window right before val is dropped
+        train_dt_max = X.iloc[train_idx]["TransactionDT"].max()
+        val_dt_min = X.iloc[val_idx]["TransactionDT"].min()
+        assert val_dt_min - train_dt_max >= embargo
+        assert len(train_idx) + len(val_idx) < len(X), "embargo must drop rows"
+
 
 class TestStratifiedSplitter:
     def test_split_preserves_class_ratio(self, ts_data: pd.DataFrame):
