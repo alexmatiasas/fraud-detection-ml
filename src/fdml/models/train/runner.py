@@ -60,6 +60,7 @@ class TrainResult(BaseModel):
     y_train: pd.Series
     y_val: pd.Series
     cfg: Any
+    params: dict[str, Any]
     feature_names: list[str]
 
 
@@ -293,11 +294,12 @@ def train(
         y_train=y_train,
         y_val=y_val,
         cfg=cfg,
+        params=params,
         feature_names=feature_names,
     )
 
 
-def _register_model(mlflow_cfg: Any, ap: float, run_id: str) -> None:
+def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
     from mlflow import MlflowClient
 
     client = MlflowClient()
@@ -313,28 +315,28 @@ def _register_model(mlflow_cfg: Any, ap: float, run_id: str) -> None:
     try:
         mv = client.create_model_version(model_name, model_uri, run_id)
         version = mv.version
-        logger.info("  Registry: created version %s (AP=%.4f)", version, ap)
+        logger.info("  Registry: created version %s (AUC=%.4f)", version, auc)
 
         try:
             champion_mv = client.get_model_version_by_alias(model_name, "champion")
             champion_run = client.get_run(champion_mv.run_id)
-            champion_ap = champion_run.data.metrics.get("average_precision", 0.0)
+            champion_auc = champion_run.data.metrics.get("roc_auc", 0.0)
 
-            if ap > champion_ap:
+            if auc > champion_auc:
                 client.set_registered_model_alias(model_name, "champion", version)
                 logger.info(
-                    "  Registry: alias 'champion' → v%s (AP=%.4f > %.4f)",
+                    "  Registry: alias 'champion' → v%s (AUC=%.4f > %.4f)",
                     version,
-                    ap,
-                    champion_ap,
+                    auc,
+                    champion_auc,
                 )
             else:
                 client.set_registered_model_alias(model_name, "challenger", version)
                 logger.info(
-                    "  Registry: alias 'challenger' → v%s (AP=%.4f ≤ champion %.4f)",
+                    "  Registry: alias 'challenger' → v%s (AUC=%.4f ≤ champion %.4f)",
                     version,
-                    ap,
-                    champion_ap,
+                    auc,
+                    champion_auc,
                 )
         except Exception:
             client.set_registered_model_alias(model_name, "champion", version)
@@ -439,9 +441,34 @@ def main() -> None:
             )
 
         callbacks = _build_callbacks(cfg)
+        train_start = time.perf_counter()
         result = train(cfg, callbacks=callbacks, hpo_strategy=hpo_strategy)
+        train_elapsed_s = time.perf_counter() - train_start
 
         with step("PHASE 5: Evaluation + MLflow tracking"):
+            mlflow.log_params(result.params)
+            mlflow.log_params(
+                {"seed": cfg.seed, "training_elapsed_s": round(train_elapsed_s, 1)}
+            )
+
+            if (
+                cfg.split.strategy == "temporal"
+                and cfg.split.time_col in result.X_train.columns
+            ):
+                mlflow.log_params(
+                    {
+                        "train_dt_min": int(result.X_train[cfg.split.time_col].min()),
+                        "train_dt_max": int(result.X_train[cfg.split.time_col].max()),
+                        "val_dt_min": int(result.X_val[cfg.split.time_col].min()),
+                        "val_dt_max": int(result.X_val[cfg.split.time_col].max()),
+                    }
+                )
+
+            best_iter = getattr(result.model, "best_iteration_", None)
+            if best_iter is None:
+                best_iter = getattr(result.model, "best_iteration", None)
+            if best_iter is not None:
+                mlflow.log_param("best_iteration", int(best_iter))
             model = result.model
             y_proba = model.predict_proba(result.X_val)[:, 1]
             y_pred = model.predict(result.X_val)
@@ -519,7 +546,7 @@ def main() -> None:
             if mlflow_cfg.registry.enabled:
                 _register_model(
                     mlflow_cfg,
-                    ap=report.average_precision,
+                    auc=report.roc_auc,
                     run_id=run_id,
                 )
 
