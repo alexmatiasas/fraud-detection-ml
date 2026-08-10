@@ -66,7 +66,10 @@ class CardAggregator(BaseFeatureTransformer):
                 name = f"card_{stat}_{col.lower()}"
                 if stat not in agg_df.columns:
                     continue
-                X = X.merge(
+                # Idempotent transform: re-merging a column already produced on
+                # a previous pass would add a `_x`/`_y` suffix and break the
+                # selector contract. Drop the existing column first.
+                X = X.drop(columns=[name], errors="ignore").merge(
                     agg_df.rename(columns={stat: name})[valid_groups + [name]],
                     on=valid_groups,
                     how="left",
