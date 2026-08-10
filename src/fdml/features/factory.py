@@ -217,4 +217,14 @@ def load_data(data_cfg: DataConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
 def merge_tables(
     transaction: pd.DataFrame, identity: pd.DataFrame, join_key: str = "TransactionID"
 ) -> pd.DataFrame:
+    """Merge transaction e identity on TransactionID column
+
+    Args:
+        transaction (pd.DataFrame): transaction dataset
+        identity (pd.DataFrame): identity datasat
+        join_key (str, optional): column to use as merge join key. Defaults to "TransactionID".
+
+    Returns:
+        pd.DataFrame: Merged dataset
+    """
     return transaction.merge(identity, on=join_key, how="left")
