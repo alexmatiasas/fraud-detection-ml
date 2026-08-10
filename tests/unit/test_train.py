@@ -50,6 +50,18 @@ class TestBuildModel:
         with pytest.raises(ValueError, match="Unknown model"):
             model_builder_registry.build("unknown_model", {})
 
+    @pytest.mark.parametrize(
+        "name",
+        ["lightgbm", "xgboost", "random_forest"],
+    )
+    def test_builder_honors_random_state(self, name: str):
+        model = model_builder_registry.build(name, {"random_state": 7})
+        assert model.random_state == 7
+
+    def test_builder_default_random_state(self):
+        model = model_builder_registry.build("lightgbm", {})
+        assert model.random_state == 42
+
 
 class TestEncodeCategoricals:
     @pytest.fixture()
