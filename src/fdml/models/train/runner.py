@@ -225,7 +225,7 @@ def train(
         builder = model_builder_registry.get(cfg.model.name)
         logger.info("Model: %s", cfg.model.name)
 
-        params = cfg.model.params.model_dump()
+        params = {**cfg.model.params.model_dump(), "random_state": cfg.seed}
 
         if hpo_strategy is not None:
             logger.info("  Running HPO before final training ...")
