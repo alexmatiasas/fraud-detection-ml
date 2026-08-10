@@ -38,9 +38,8 @@ class LGBMBuilder(ModelBuilder):
 
     def build(self, params: dict[str, Any]) -> lgb.LGBMClassifier:
         cleaned = self.cleanup_params(params)
-        return lgb.LGBMClassifier(
-            **cleaned, n_jobs=-1, verbose=-1, random_state=_RANDOM_STATE
-        )
+        seed = params.get("random_state", _RANDOM_STATE)
+        return lgb.LGBMClassifier(**cleaned, n_jobs=-1, verbose=-1, random_state=seed)
 
     def format_params(self, params: dict[str, Any]) -> str:
         return (
@@ -75,9 +74,8 @@ class XGBoostBuilder(ModelBuilder):
 
     def build(self, params: dict[str, Any]) -> xgb.XGBClassifier:
         cleaned = self.cleanup_params(params)
-        return xgb.XGBClassifier(
-            **cleaned, verbosity=0, random_state=_RANDOM_STATE, n_jobs=-1
-        )
+        seed = params.get("random_state", _RANDOM_STATE)
+        return xgb.XGBClassifier(**cleaned, verbosity=0, random_state=seed, n_jobs=-1)
 
     def format_params(self, params: dict[str, Any]) -> str:
         return (
@@ -112,6 +110,7 @@ class RFBuilder(ModelBuilder):
         return "random_forest"
 
     def build(self, params: dict[str, Any]) -> RandomForestClassifier:
+        seed = params.get("random_state", _RANDOM_STATE)
         return RandomForestClassifier(
             n_estimators=params.get("n_estimators", 1000),
             max_depth=params.get("max_depth", 8),
@@ -119,7 +118,7 @@ class RFBuilder(ModelBuilder):
             max_samples=params.get("subsample", 0.8),
             max_features=params.get("colsample_bytree", 0.8),
             class_weight="balanced_subsample",
-            random_state=_RANDOM_STATE,
+            random_state=seed,
             n_jobs=-1,
             verbose=0,
         )
