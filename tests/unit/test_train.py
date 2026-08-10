@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fdml.models.categoricals import encode_categoricals
+from fdml.features.category_encoder import CategoryEncoder
 from fdml.models.config import load_train_config
 from fdml.models.evaluate.metrics import compute_metrics
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
@@ -63,7 +63,7 @@ class TestBuildModel:
         assert model.random_state == 42
 
 
-class TestEncodeCategoricals:
+class TestCategoryEncoder:
     @pytest.fixture()
     def df_with_cats(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         train = pd.DataFrame(
@@ -84,15 +84,22 @@ class TestEncodeCategoricals:
 
     def test_encodes_object_and_category(self, df_with_cats):
         train, val = df_with_cats
-        result_train, result_val = encode_categoricals(train, val)
+        encoder = CategoryEncoder().fit(train)
+        result_train = encoder.transform(train)
+        result_val = encoder.transform(val)
 
         assert result_train["num"].dtype.name == "int64"
         assert result_train["obj"].dtype.name == "int32"
         assert result_train["cat"].dtype.name == "int32"
+        assert result_train["obj"].tolist() == [0, 1, 2]
+        assert result_train["cat"].tolist() == [0, 1, 2]
+        assert result_val["obj"].dtype.name == "int32"
+        assert result_val["cat"].dtype.name == "int32"
 
     def test_unknown_category_maps_to_neg_one(self, df_with_cats):
         train, val = df_with_cats
-        _, result_val = encode_categoricals(train, val)
+        encoder = CategoryEncoder().fit(train)
+        result_val = encoder.transform(val)
 
         assert result_val["obj"].iloc[1] == -1
         assert result_val["cat"].iloc[1] == -1
@@ -100,9 +107,15 @@ class TestEncodeCategoricals:
     def test_no_cat_cols_returns_unchanged(self):
         train = pd.DataFrame({"a": [1, 2], "b": [3.0, 4.0]})
         val = pd.DataFrame({"a": [5], "b": [6.0]})
-        t, v = encode_categoricals(train, val)
-        pd.testing.assert_frame_equal(t, train)
-        pd.testing.assert_frame_equal(v, val)
+        encoder = CategoryEncoder().fit(train)
+        pd.testing.assert_frame_equal(encoder.transform(train), train)
+        pd.testing.assert_frame_equal(encoder.transform(val), val)
+
+    def test_deterministic_sorted_categories(self):
+        train = pd.DataFrame({"obj": ["c", "a", "b", "a"]})
+        first = CategoryEncoder().fit(train).transform(train)["obj"].tolist()
+        second = CategoryEncoder().fit(train).transform(train)["obj"].tolist()
+        assert first == second == [2, 0, 1, 0]
 
 
 class TestComputeMetrics:
