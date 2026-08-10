@@ -334,6 +334,13 @@
           "minimum": 0.0,
           "title": "Test Size",
           "type": "number"
+        },
+        "embargo_seconds": {
+          "default": 0,
+          "description": "Time gap (in time_col units) dropped between train and validation to prevent leakage from aggregate features; the Kaggle train/test windows are ~30 days apart",
+          "minimum": 0,
+          "title": "Embargo Seconds",
+          "type": "integer"
         }
       },
       "title": "SplitCfg",

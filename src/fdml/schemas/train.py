@@ -43,6 +43,15 @@ class SplitCfg(BaseModel):
         le=1.0,
         description="Fraction of data held out for validation",
     )
+    embargo_seconds: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Time gap (in time_col units) dropped between train and validation "
+            "to prevent leakage from aggregate features; the Kaggle train/test "
+            "windows are ~30 days apart"
+        ),
+    )
 
 
 ModelName = Literal["lightgbm", "xgboost", "random_forest"]
