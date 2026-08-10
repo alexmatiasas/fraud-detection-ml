@@ -97,10 +97,16 @@ df.isna().mean().sort_values(ascending=False).head(10).round(4).to_frame("missin
 
 ## 3. Temporal split
 
-The production split: `test_size=0.2` on `TransactionDT`, no shuffle.
+The production split: `test_size=0.2` on `TransactionDT`, no shuffle, plus the
+`embargo_seconds` gap dropped before validation to avoid aggregate-feature
+leakage.
 
 ```{python}
-splitter = TemporalSplitter(time_col=cfg.split.time_col, test_size=cfg.split.test_size)
+splitter = TemporalSplitter(
+    time_col=cfg.split.time_col,
+    test_size=cfg.split.test_size,
+    embargo_seconds=cfg.split.embargo_seconds,
+)
 train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
 
 X = df.drop(columns=["isFraud"])
@@ -115,7 +121,8 @@ t_max = X_train["TransactionDT"].max()
 v_min = X_val["TransactionDT"].min()
 print(f"time range  train: [{X_train['TransactionDT'].min():,}, {t_max:,}]")
 print(f"time range  val  : [{v_min:,}, {X_val['TransactionDT'].max():,}]")
-print(f"overlap     : {v_min < t_max}  (should be False)")
+print(f"embargo     : {cfg.split.embargo_seconds:,}s  gap={v_min - t_max:,}s")
+print(f"overlap     : {v_min - t_max < cfg.split.embargo_seconds}  (should be False)")
 ```
 
 ## 4. Full pipeline (production code)
