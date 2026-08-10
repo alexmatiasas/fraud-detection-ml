@@ -312,9 +312,6 @@ def main() -> None:
         load_data_config,
         merge_tables,
     )
-    from fdml.models.categoricals import (
-        encode_categoricals as _encode_categoricals,
-    )
     from fdml.models.split import TemporalSplitter
 
     train_cfg = load_train_config()
@@ -350,7 +347,6 @@ def main() -> None:
 
     X_train_fe = fe_pipeline.fit_transform(X_train, y_train)
     X_val_fe = fe_pipeline.transform(X_val)
-    X_train_fe, X_val_fe = _encode_categoricals(X_train_fe, X_val_fe)
     logger.info("  Features: %s", X_train_fe.shape[1])
 
     y_proba = model.predict_proba(X_val_fe)[:, 1]

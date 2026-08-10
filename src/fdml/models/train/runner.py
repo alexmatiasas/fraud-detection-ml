@@ -24,9 +24,6 @@ from fdml.features.factory import (
 from fdml.features.factory import (
     load_fe_config as load_features_config,
 )
-from fdml.models.categoricals import (
-    encode_categoricals as _encode_categoricals,
-)
 from fdml.models.config import (
     load_evaluation_config,
     load_mlflow_config,
@@ -190,9 +187,6 @@ def featurize(
                 for k, v in df.dtypes.apply(lambda x: x.name).value_counts().items()
             )
 
-        logger.info("  dtypes (pre-encode): %s", _fmt_dtypes(X_train_fe))
-        X_train_fe, X_val_fe = _encode_categoricals(X_train_fe, X_val_fe)
-        logger.info("  Final shape: train=%s, val=%s", X_train_fe.shape, X_val_fe.shape)
         logger.info("  dtypes: %s", _fmt_dtypes(X_train_fe))
 
     return X_train_fe, X_val_fe, pipeline, X_train_fe.columns.tolist()
