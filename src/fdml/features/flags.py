@@ -35,7 +35,7 @@ class MFlagEncoder(BaseFeatureTransformer):
             if col == "M4":
                 X[col] = self._encode_m4(series)
             else:
-                X[col] = series.replace({"T": 1, "F": 0}).fillna(-1).astype("int8")
+                X[col] = series.map({"T": 1, "F": 0}).fillna(-1).astype("int8")
 
         return X
 
