@@ -332,7 +332,9 @@ def main() -> None:
     df = merge_tables(train_df, identity_df)
 
     splitter = TemporalSplitter(
-        time_col=train_cfg.split.time_col, test_size=train_cfg.split.test_size
+        time_col=train_cfg.split.time_col,
+        test_size=train_cfg.split.test_size,
+        embargo_seconds=train_cfg.split.embargo_seconds,
     )
     train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
 

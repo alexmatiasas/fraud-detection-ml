@@ -64,7 +64,9 @@ class TrainResult(BaseModel):
 def _get_splitter(split_cfg: Any) -> TemporalSplitter | StratifiedSplitter:
     if split_cfg.strategy == "temporal":
         return TemporalSplitter(
-            time_col=split_cfg.time_col, test_size=split_cfg.test_size
+            time_col=split_cfg.time_col,
+            test_size=split_cfg.test_size,
+            embargo_seconds=split_cfg.embargo_seconds,
         )
     if split_cfg.strategy == "random":
         return StratifiedSplitter(test_size=split_cfg.test_size)
