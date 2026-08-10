@@ -161,7 +161,10 @@ class TestEngineeredFeatures:
 
     def test_m4_preserved_as_category(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
-        assert isinstance(X["M4"].dtype, pd.CategoricalDtype)
+        # M4 stays categorical through the mflags step (M0/M1/M2/None) and is
+        # ordinal-encoded by the pipeline's `categories` step into int32 codes.
+        assert X["M4"].dtype.name == "int32"
+        assert set(X["M4"].unique()) == {0, 1, 2, 3}
 
     def test_hour_of_day_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
@@ -243,7 +246,11 @@ class TestFeatureToggle:
         p, _ = create_pipeline(cfg)
         p.set_params(mflags__enabled=False)
         X = p.fit_transform(raw_df)
-        assert X["M1"].dtype.name == "object"  # still T/F/None
+        # The flags step is off, so raw T/F/None survive to the `categories`
+        # step, which ordinal-encodes the raw strings (3 codes) instead of the
+        # binary T→1/F→0/NaN→-1 mapping.
+        assert X["M1"].dtype.name == "int32"
+        assert set(X["M1"].unique()) == {0, 1, 2}
 
 
 class TestTrainTestConsistency:
