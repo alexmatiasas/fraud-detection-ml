@@ -68,6 +68,13 @@
           "description": "Test identity file",
           "title": "Test Identity",
           "type": "string"
+        },
+        "max_train_rows": {
+          "default": 0,
+          "description": "Cap the training fold to the earliest N rows by time (validation stays untouched). 0 = use all rows",
+          "minimum": 0,
+          "title": "Max Train Rows",
+          "type": "integer"
         }
       },
       "title": "DataPathsCfg",
@@ -211,6 +218,12 @@
           "description": "Log model artifact to MLflow",
           "title": "Log Model",
           "type": "boolean"
+        },
+        "experiment_tag": {
+          "default": "",
+          "description": "Experiment group label (e.g. 'A_baseline', 'B_reg'). Empty = no tag. Used to filter/compare runs across seeds and variants",
+          "title": "Experiment Tag",
+          "type": "string"
         }
       },
       "title": "MlflowCfg",
