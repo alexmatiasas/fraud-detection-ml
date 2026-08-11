@@ -3,13 +3,22 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from mlflow import MlflowClient
+from sklearn.datasets import make_classification
 
+import mlflow
 from fdml.features.category_encoder import CategoryEncoder
 from fdml.models.config import load_train_config
 from fdml.models.evaluate.metrics import compute_metrics
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
+from fdml.models.train.callbacks import IterationCallback
 from fdml.models.train.model_builder import model_builder_registry
-from fdml.models.train.runner import _cap_train_fold, _get_splitter
+from fdml.models.train.runner import (
+    _cap_train_fold,
+    _fit_model,
+    _get_splitter,
+    _sample_eval_set,
+)
 
 
 class TestCapTrainFold:
@@ -102,6 +111,98 @@ class TestBuildModel:
     def test_builder_default_random_state(self):
         model = model_builder_registry.build("lightgbm", {})
         assert model.random_state == 42
+
+
+class TestSampleEvalSet:
+    @staticmethod
+    def _val() -> tuple[pd.DataFrame, pd.Series]:
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame({"a": rng.normal(size=5000), "b": rng.normal(size=5000)})
+        y = pd.Series((rng.random(5000) < 0.035).astype(int))
+        return X, y
+
+    def test_subsample_respects_max_rows(self):
+        X, y = self._val()
+        X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
+        assert len(y_es) == 2000
+
+    def test_stratified_keeps_class_ratio(self):
+        X, y = self._val()
+        X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
+        assert y.mean() > 0
+        assert np.isclose(y_es.mean(), y.mean(), atol=0.01)
+
+    def test_fixed_seed_deterministic(self):
+        X, y = self._val()
+        first = _sample_eval_set(X, y, max_rows=2000)
+        second = _sample_eval_set(X, y, max_rows=2000)
+        pd.testing.assert_frame_equal(first[0], second[0])
+        pd.testing.assert_series_equal(first[1], second[1])
+
+    def test_returns_full_when_smaller_or_zero(self):
+        X, y = self._val()
+        X_es, y_es = _sample_eval_set(X, y, max_rows=0)
+        assert len(y_es) == 5000
+        X_es, y_es = _sample_eval_set(X, y, max_rows=99999)
+        assert len(y_es) == 5000
+
+
+class TestFitModel:
+    @staticmethod
+    def _synth() -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+        X, y = make_classification(
+            n_samples=800, n_features=10, weights=[0.95, 0.05], random_state=0
+        )
+        Xv, yv = make_classification(
+            n_samples=300, n_features=10, weights=[0.95, 0.05], random_state=1
+        )
+        return (
+            pd.DataFrame(X),
+            pd.Series(y),
+            pd.DataFrame(Xv),
+            pd.Series(yv),
+        )
+
+    def test_lgbm_early_stopping_sets_best_iteration(self):
+        cfg = load_train_config(
+            cli_args=["model.n_estimators=200", "early_stopping.rounds=20"]
+        )
+        X, y, Xv, yv = self._synth()
+        model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
+        model = _fit_model(model, X, y, Xv, yv, cfg, callbacks=None)
+        assert model.best_iteration_ > 0
+        assert model.n_estimators_ < 200
+
+    def test_lgbm_logs_iteration_metrics_to_mlflow(self, tmp_path):
+        cfg = load_train_config(
+            cli_args=["model.n_estimators=50", "early_stopping.rounds=10"]
+        )
+        X, y, Xv, yv = self._synth()
+        model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
+
+        uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+        mlflow.set_tracking_uri(uri)
+        mlflow.set_experiment("test-fit")
+        client = MlflowClient(tracking_uri=uri)
+        with mlflow.start_run():
+            _fit_model(
+                model,
+                X,
+                y,
+                Xv,
+                yv,
+                cfg,
+                callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
+            )
+            hist = client.get_metric_history(mlflow.active_run().info.run_id, "val/auc")
+        assert len(hist) > 0
+
+    def test_disabled_early_stopping_fits_plain(self):
+        cfg = load_train_config(cli_args=["early_stopping.enabled=false"])
+        X, y, Xv, yv = self._synth()
+        model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
+        model = _fit_model(model, X, y, Xv, yv, cfg, callbacks=None)
+        assert model.n_estimators_ == cfg.model.params.n_estimators
 
 
 class TestCategoryEncoder:
