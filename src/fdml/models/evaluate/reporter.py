@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -322,9 +323,14 @@ def log_dataset_lineage(
         try:
             df = X.copy()
             df["isFraud"] = y.astype("int32")
-            dataset = mlflow.data.from_pandas(
-                df, targets="isFraud", name="transactions"
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Hint: Inferred schema contains integer column",
+                )
+                dataset = mlflow.data.from_pandas(
+                    df, targets="isFraud", name="transactions"
+                )
             mlflow.log_input(dataset, context=context)
             logger.info("  MLflow: dataset lineage logged (context=%s)", context)
         except Exception as exc:
@@ -354,7 +360,12 @@ class DVCLiveReporter(Reporter):
             from dvclive import Live
 
             dvclive_dir = eval_cfg.dvclive.dir
-            with Live(dir=dvclive_dir, dvcyaml=False, report="notebook") as live:
+            with Live(
+                dir=dvclive_dir,
+                dvcyaml=False,
+                report=eval_cfg.dvclive.report,
+                save_dvc_exp=False,
+            ) as live:
                 live.log_params(
                     {
                         "model_name": self._model_name,
