@@ -27,7 +27,12 @@ def resolve_mlflow_tracking(mlflow_cfg: MlflowFullConfig) -> MlflowFullConfig:
             user = os.environ.get("DAGSHUB_USERNAME")
             repo = os.environ.get("DAGSHUB_REPO")
             if token and user and repo:
-                dagshub_uri = f"https://{token}@dagshub.com/{user}/{repo}.mlflow"
+                # Token deliberately NOT embedded in the URI: MLflow echoes the
+                # tracking URI in the run/experiment URLs it prints, so a token
+                # in the URI would leak the credential into every log/CI output.
+                # Auth comes from MLFLOW_TRACKING_USERNAME / _PASSWORD env vars,
+                # which mlflow's HTTP store reads for basic auth.
+                dagshub_uri = f"https://dagshub.com/{user}/{repo}.mlflow"
                 mlflow_cfg.tracking.tracking_uri = dagshub_uri
                 mlflow_cfg.tracking.backend = "dagshub"
                 os.environ.setdefault("MLFLOW_TRACKING_URI", dagshub_uri)
