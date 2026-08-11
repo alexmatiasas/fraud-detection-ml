@@ -1,5 +1,30 @@
 {
   "$defs": {
+    "AblationCfg": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Run the feature ablation study instead of a single fit",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_train_rows": {
+          "default": 0,
+          "description": "Cap train rows per variant to keep the study fast (0 = all)",
+          "minimum": 0,
+          "title": "Max Train Rows",
+          "type": "integer"
+        },
+        "report_path": {
+          "default": "models/feature_ablation.csv",
+          "description": "Where to save the per-variant results table",
+          "title": "Report Path",
+          "type": "string"
+        }
+      },
+      "title": "AblationCfg",
+      "type": "object"
+    },
     "DataPathsCfg": {
       "properties": {
         "raw_dir": {
@@ -403,6 +428,10 @@
     "training_callbacks": {
       "$ref": "#/$defs/TrainingCallbacksCfg",
       "description": "Per-iteration training callbacks"
+    },
+    "ablation": {
+      "$ref": "#/$defs/AblationCfg",
+      "description": "Feature ablation study configuration"
     }
   },
   "title": "TrainConfig",

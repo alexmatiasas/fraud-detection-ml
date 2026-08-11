@@ -53,6 +53,8 @@ plots:
     - roc_curve
     - pr_curve
     - calibration
+  output_format: webp  # png | webp (webp for web embedding)
+  dpi: 150
   error_features: null
 
 # ── DVCLive (métricas para DVC: dvc metrics show, dvc plots diff) ──────────

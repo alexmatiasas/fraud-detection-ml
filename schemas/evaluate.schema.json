@@ -18,6 +18,40 @@
       "title": "AdversarialValCfg",
       "type": "object"
     },
+    "CostsCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Optimize decision threshold on expected cost instead of F1",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "false_positive_cost": {
+          "default": 1.0,
+          "description": "Cost of a false positive (manual review of a normal transaction)",
+          "exclusiveMinimum": 0.0,
+          "title": "False Positive Cost",
+          "type": "number"
+        },
+        "false_negative_cost": {
+          "default": 10.0,
+          "description": "Cost of a false negative (fraud that is not blocked)",
+          "exclusiveMinimum": 0.0,
+          "title": "False Negative Cost",
+          "type": "number"
+        },
+        "n_thresholds": {
+          "default": 100,
+          "description": "Threshold grid for cost search",
+          "maximum": 1000,
+          "minimum": 10,
+          "title": "N Thresholds",
+          "type": "integer"
+        }
+      },
+      "title": "CostsCfg",
+      "type": "object"
+    },
     "DVCLiveCfg": {
       "properties": {
         "enabled": {
@@ -54,6 +88,25 @@
         }
       },
       "title": "ErrorAnalysisCfg",
+      "type": "object"
+    },
+    "FBetaCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Compute F-beta at the default threshold",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "beta": {
+          "default": 2.0,
+          "description": "Beta > 1 weights recall more than precision (fraud-friendly)",
+          "minimum": 0.0,
+          "title": "Beta",
+          "type": "number"
+        }
+      },
+      "title": "FBetaCfg",
       "type": "object"
     },
     "LearningCurvesCfg": {
@@ -119,6 +172,24 @@
           "title": "Plots",
           "type": "array"
         },
+        "output_format": {
+          "default": "webp",
+          "description": "Image format for saved plots (webp for web embedding)",
+          "enum": [
+            "png",
+            "webp"
+          ],
+          "title": "Output Format",
+          "type": "string"
+        },
+        "dpi": {
+          "default": 150,
+          "description": "DPI for saved plot images",
+          "maximum": 600,
+          "minimum": 72,
+          "title": "Dpi",
+          "type": "integer"
+        },
         "error_features": {
           "anyOf": [
             {
@@ -137,6 +208,26 @@
         }
       },
       "title": "PlotCfg",
+      "type": "object"
+    },
+    "RecallAtKCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Compute recall captured in the top-k% of highest scores",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "fractions": {
+          "description": "Fractions of the validation set to review (top-k)",
+          "items": {
+            "type": "number"
+          },
+          "title": "Fractions",
+          "type": "array"
+        }
+      },
+      "title": "RecallAtKCfg",
       "type": "object"
     },
     "ReportCfg": {
@@ -297,6 +388,24 @@
     "report": {
       "$ref": "#/$defs/ReportCfg",
       "description": "Report output configuration"
+    },
+    "costs": {
+      "$ref": "#/$defs/CostsCfg",
+      "description": "Expected-cost threshold optimization"
+    },
+    "f_beta": {
+      "$ref": "#/$defs/FBetaCfg",
+      "description": "F-beta (fraud-friendly) metric"
+    },
+    "recall_at_k": {
+      "$ref": "#/$defs/RecallAtKCfg",
+      "description": "Recall captured in the top-k% of highest scores"
+    },
+    "brier": {
+      "default": true,
+      "description": "Compute Brier score (probability calibration)",
+      "title": "Brier",
+      "type": "boolean"
     }
   },
   "title": "EvaluateConfig",

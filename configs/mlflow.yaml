@@ -25,9 +25,3 @@ datasets:
 # ── Artifacts ─────────────────────────────────────────────────────────────────
 log_model: true
 log_feature_importance: true
-
-# ── Custom metrics (mlflow.evaluate) ──────────────────────────────────────────
-custom_metrics:
-  enabled: false
-  fn_cost: 1.0    # multiplicador del transaction_amt por FN
-  fp_cost: 25.0   # costo estimado de revisión manual por FP

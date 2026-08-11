@@ -1,29 +1,5 @@
 {
   "$defs": {
-    "CustomMetricCfg": {
-      "properties": {
-        "enabled": {
-          "default": false,
-          "description": "Enable mlflow.evaluate() with custom fraud metrics",
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "fn_cost": {
-          "default": 1.0,
-          "description": "Cost per false negative (multiplier of transaction amount)",
-          "title": "Fn Cost",
-          "type": "number"
-        },
-        "fp_cost": {
-          "default": 25.0,
-          "description": "Cost per false positive (manual review cost in $)",
-          "title": "Fp Cost",
-          "type": "number"
-        }
-      },
-      "title": "CustomMetricCfg",
-      "type": "object"
-    },
     "DatasetCfg": {
       "properties": {
         "enabled": {
@@ -130,10 +106,6 @@
       "description": "Log feature importance plot",
       "title": "Log Feature Importance",
       "type": "boolean"
-    },
-    "custom_metrics": {
-      "$ref": "#/$defs/CustomMetricCfg",
-      "description": "Custom evaluation metrics for fraud"
     }
   },
   "title": "MlflowFullConfig",

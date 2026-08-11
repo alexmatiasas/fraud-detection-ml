@@ -37,6 +37,33 @@
       "title": "CardAggregationCfg",
       "type": "object"
     },
+    "CountCorrFilterCfg": {
+      "properties": {
+        "include": {
+          "default": true,
+          "description": "Whether to correlation-filter C count features",
+          "title": "Include",
+          "type": "boolean"
+        },
+        "variance_threshold": {
+          "default": 0.01,
+          "description": "Variance floor \u2014 C columns below this are dropped",
+          "minimum": 0.0,
+          "title": "Variance Threshold",
+          "type": "number"
+        },
+        "correlation_threshold": {
+          "default": 0.99,
+          "description": "Pearson r threshold \u2014 one of each correlated pair is dropped",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Correlation Threshold",
+          "type": "number"
+        }
+      },
+      "title": "CountCorrFilterCfg",
+      "type": "object"
+    },
     "EncodingCfg": {
       "properties": {
         "low_cardinality_max_values": {
@@ -98,9 +125,12 @@
             "P_emaildomain",
             "R_emaildomain",
             "DeviceInfo",
-            "card1"
+            "card1",
+            "id_30",
+            "id_31",
+            "id_33"
           ],
-          "description": "Columns to frequency-encode",
+          "description": "True categorical columns to frequency-encode. Numeric codes with centralized distributions (card2/3/5, addr1/2) are excluded ",
           "items": {
             "type": "string"
           },
@@ -118,6 +148,50 @@
           "description": "Extract brand from DeviceInfo (heuristic)",
           "title": "Device Brand",
           "type": "boolean"
+        },
+        "cyclical": {
+          "default": true,
+          "description": "Cyclic sin/cos encoding of the datetime features",
+          "title": "Cyclical",
+          "type": "boolean"
+        },
+        "has_identity": {
+          "default": true,
+          "description": "Binary flag for presence of an identity record",
+          "title": "Has Identity",
+          "type": "boolean"
+        },
+        "log_amount": {
+          "default": true,
+          "description": "log1p transform of TransactionAmt",
+          "title": "Log Amount",
+          "type": "boolean"
+        },
+        "is_round_amount": {
+          "default": true,
+          "description": "Flag for whole-number TransactionAmt",
+          "title": "Is Round Amount",
+          "type": "boolean"
+        },
+        "email_domain": {
+          "default": true,
+          "description": "Normalize email domains and add payer/recipient match flag",
+          "title": "Email Domain",
+          "type": "boolean"
+        },
+        "id_codes_encoding": {
+          "default": false,
+          "description": "Re-cast integer id_# code columns to categorical (experiment: expected ~0 signal for LightGBM)",
+          "title": "Id Codes Encoding",
+          "type": "boolean"
+        },
+        "id_codes": {
+          "description": "Numeric id_# columns treated as unordered codes when id_codes_encoding is on",
+          "items": {
+            "type": "string"
+          },
+          "title": "Id Codes",
+          "type": "array"
         }
       },
       "title": "EngineeredCfg",
@@ -345,6 +419,18 @@
           ],
           "default": null,
           "description": "Vesta engineered V features config"
+        },
+        "count_corr_filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CountCorrFilterCfg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Correlation filter for C count features"
         }
       },
       "title": "TransactionCfg",
