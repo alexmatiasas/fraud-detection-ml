@@ -24,6 +24,9 @@ from fdml.models.evaluate.plots import (
     ErrorAnalysisPlotter,
     PRCurvePlotter,
     ROCCurvePlotter,
+    calibration_curve_table,
+    pr_curve_table,
+    roc_curve_table,
 )
 from fdml.models.evaluate.reporter import (
     CompositeReporter,
@@ -137,23 +140,32 @@ def evaluate(
 
     plot_paths: list[str] = []
     output_dir = eval_cfg.plots.output_dir
+    fmt = eval_cfg.plots.output_format
+    dpi = eval_cfg.plots.dpi
+
+    roc_curve_data: list[dict[str, float]] = []
+    pr_curve_data: list[dict[str, float]] = []
+    calibration_data: list[dict[str, float]] = []
 
     if _has_plot(eval_cfg, "roc_curve"):
-        path = ROCCurvePlotter().plot(y_true, y_proba, output_dir)
+        path = ROCCurvePlotter().plot(y_true, y_proba, output_dir, fmt=fmt, dpi=dpi)
         plot_paths.append(str(path))
+        roc_curve_data = roc_curve_table(y_true, y_proba)
     if _has_plot(eval_cfg, "pr_curve"):
-        path = PRCurvePlotter().plot(y_true, y_proba, output_dir)
+        path = PRCurvePlotter().plot(y_true, y_proba, output_dir, fmt=fmt, dpi=dpi)
         plot_paths.append(str(path))
+        pr_curve_data = pr_curve_table(y_true, y_proba)
     if _has_plot(eval_cfg, "calibration"):
-        path = CalibrationPlotter().plot(y_true, y_proba, output_dir)
+        path = CalibrationPlotter().plot(y_true, y_proba, output_dir, fmt=fmt, dpi=dpi)
         plot_paths.append(str(path))
+        calibration_data = calibration_curve_table(y_true, y_proba)
 
     if _has_plot(eval_cfg, "error_analysis") and X_val is not None:
         error_features = (
             eval_cfg.plots.error_features or eval_cfg.error_analysis.features
         )
         paths = ErrorAnalysisPlotter(features_to_plot=error_features).plot(
-            y_true, y_proba, X_val, output_dir
+            y_true, y_proba, X_val, output_dir, fmt=fmt, dpi=dpi
         )
         plot_paths.extend(str(p) for p in paths)
 
@@ -259,6 +271,9 @@ def evaluate(
             )
             for p in thr_curve
         ],
+        roc_curve=roc_curve_data,
+        pr_curve=pr_curve_data,
+        calibration_curve=calibration_data,
         segments=segments_list,
         top_features=top_features,
         auc_adv=auc_adv,
