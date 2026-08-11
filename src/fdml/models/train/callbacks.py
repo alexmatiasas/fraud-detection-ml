@@ -49,6 +49,9 @@ class IterationCallback:
         log_console: Print a progress line every ``console_every`` iterations
             plus a line each time a metric reaches a new best value.
         console_every: Print cadence when ``log_console`` is enabled.
+        mlflow_every: Send one MLflow metric per this many iterations. Remote
+            log_metric calls (DagsHub) cost ~1.5s each, so throttling keeps
+            experiments fast without losing the curve shape.
     """
 
     def __init__(
@@ -57,10 +60,12 @@ class IterationCallback:
         log_dvclive: bool = False,
         log_console: bool = False,
         console_every: int = 50,
+        mlflow_every: int = 1,
     ):
         self._log_mlflow = log_mlflow
         self._log_console = log_console
         self._console_every = max(1, console_every)
+        self._mlflow_every = max(1, mlflow_every)
         self._best: dict[str, tuple[float, int]] = {}
         self._live = None
         if log_dvclive:
@@ -87,7 +92,11 @@ class IterationCallback:
             parsed.append((dataset_name, metric_name, float(value), bool(higher)))
             key = _metric_key(dataset_name, metric_name)
 
-            if self._log_mlflow and mlflow.active_run() is not None:
+            if (
+                self._log_mlflow
+                and iteration % self._mlflow_every == 0
+                and mlflow.active_run() is not None
+            ):
                 try:
                     mlflow.log_metric(key, value, step=iteration)
                 except Exception:
