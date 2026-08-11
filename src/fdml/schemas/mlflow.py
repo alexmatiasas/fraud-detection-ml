@@ -46,21 +46,6 @@ class DatasetCfg(BaseModel):
     )
 
 
-class CustomMetricCfg(BaseModel):
-    enabled: bool = Field(
-        default=False,
-        description="Enable mlflow.evaluate() with custom fraud metrics",
-    )
-    fn_cost: float = Field(
-        default=1.0,
-        description="Cost per false negative (multiplier of transaction amount)",
-    )
-    fp_cost: float = Field(
-        default=25.0,
-        description="Cost per false positive (manual review cost in $)",
-    )
-
-
 class MlflowFullConfig(BaseModel):
     tracking: TrackingCfg = Field(
         default_factory=TrackingCfg, description="Tracking server configuration"
@@ -74,8 +59,4 @@ class MlflowFullConfig(BaseModel):
     log_model: bool = Field(default=True, description="Log model artifact to MLflow")
     log_feature_importance: bool = Field(
         default=True, description="Log feature importance plot"
-    )
-    custom_metrics: CustomMetricCfg = Field(
-        default_factory=CustomMetricCfg,
-        description="Custom evaluation metrics for fraud",
     )

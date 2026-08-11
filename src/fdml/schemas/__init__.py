@@ -27,7 +27,6 @@ from fdml.schemas.features import (
 )
 from fdml.schemas.mlflow import (
     BackendType,
-    CustomMetricCfg,
     DatasetCfg,
     MlflowFullConfig,
     RegistryCfg,
@@ -54,7 +53,6 @@ __all__ = [
     "AggFunc",
     "BackendType",
     "CardAggregationCfg",
-    "CustomMetricCfg",
     "DataConfig",
     "DataPathsCfg",
     "DatasetCfg",
