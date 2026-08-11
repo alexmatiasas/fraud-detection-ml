@@ -68,6 +68,9 @@ class EvaluationReport(BaseModel):
     recall_at_k: dict[str, float] = {}
     cost_curve: list[CostPoint] = []
     threshold_curve: list[ThresholdPoint] = []
+    roc_curve: list[dict[str, float]] = []
+    pr_curve: list[dict[str, float]] = []
+    calibration_curve: list[dict[str, float]] = []
     segments: list[SegmentResult] = []
     top_features: list[dict[str, Any]] = []
     auc_adv: float | None = None
@@ -175,19 +178,26 @@ class LoggingReporter(Reporter):
 
 
 class MLflowReporter(Reporter):
+    """Log evaluation outputs to the active MLflow run.
+
+    Conventions (matching the project's experiment-comparison workflow):
+    - **Metrics** carry the ``val/`` prefix so the validation metrics group
+      together in the UI and runs can be sorted/compared (Fase A/B noise floor).
+    - **Params** hold model hyperparameters and data description; static run
+      context (model name, split strategy, sizes) goes to **tags**.
+    - Curves are logged as interactive tables under ``curves/`` and all plot
+      images are uploaded under ``plots/``.
+    """
+
     def __init__(
         self,
         mlflow_cfg: MlflowFullConfig,
         eval_cfg: EvaluateConfig,
-        X_train: pd.DataFrame,
-        y_train: pd.Series,
         model_name: str,
         split_strategy: str,
     ):
         self._mlflow_cfg = mlflow_cfg
         self._eval_cfg = eval_cfg
-        self._X_train = X_train
-        self._y_train = y_train
         self._model_name = model_name
         self._split_strategy = split_strategy
 
@@ -199,49 +209,64 @@ class MLflowReporter(Reporter):
         run = mlflow.active_run()
         run_id = run.info.run_id
 
-        mlflow.log_params(
+        mlflow.set_tags(
             {
                 "model_name": self._model_name,
                 "split_strategy": self._split_strategy,
-                "n_features": report.n_features,
-                "n_train": report.n_train,
-                "n_val": report.n_val,
-                "best_threshold": report.best_threshold,
+                "n_features": str(report.n_features),
+                "n_train": str(report.n_train),
+                "n_val": str(report.n_val),
             }
         )
 
         mlflow.log_metrics(
             {
-                "roc_auc": report.roc_auc,
-                "average_precision": report.average_precision,
-                "f1": report.f1,
-                "precision": report.precision,
-                "recall": report.recall,
+                "val/roc_auc": report.roc_auc,
+                "val/average_precision": report.average_precision,
+                "val/f1": report.f1,
+                "val/f1_best": report.best_f1,
+                "val/precision": report.precision,
+                "val/recall": report.recall,
+                "val/best_threshold": report.best_threshold,
+                "val/fraud_rate": report.fraud_rate,
             }
         )
 
         extra: dict[str, float] = {}
         if report.brier is not None:
-            extra["brier"] = report.brier
+            extra["val/brier"] = report.brier
         if report.f_beta is not None:
-            extra["f_beta"] = report.f_beta
+            extra["val/f_beta"] = report.f_beta
         if report.expected_cost is not None:
-            extra["expected_cost"] = report.expected_cost
-            extra["cost_best_threshold"] = report.cost_best_threshold or 0.0
+            extra["val/expected_cost"] = report.expected_cost
+            extra["val/cost_best_threshold"] = report.cost_best_threshold or 0.0
         for k, v in report.recall_at_k.items():
-            extra[f"recall_at_top_{float(k):.2f}"] = v
+            extra[f"val/recall_at_top_{float(k):.2f}"] = v
+        if report.ci_lower is not None:
+            extra["val/ap_ci_lower"] = report.ci_lower
+            extra["val/ap_ci_upper"] = report.ci_upper
+        if report.auc_adv is not None:
+            extra["val/adversarial_auc"] = report.auc_adv
         if extra:
             mlflow.log_metrics(extra)
 
         if report.threshold_curve:
             mlflow.log_table(
                 pd.DataFrame([t.model_dump() for t in report.threshold_curve]),
-                "segments/threshold_curve.json",
+                "curves/threshold_curve.json",
             )
         if report.cost_curve:
             mlflow.log_table(
                 pd.DataFrame([c.model_dump() for c in report.cost_curve]),
-                "segments/cost_curve.json",
+                "curves/cost_curve.json",
+            )
+        if report.roc_curve:
+            mlflow.log_table(pd.DataFrame(report.roc_curve), "curves/roc.json")
+        if report.pr_curve:
+            mlflow.log_table(pd.DataFrame(report.pr_curve), "curves/pr.json")
+        if report.calibration_curve:
+            mlflow.log_table(
+                pd.DataFrame(report.calibration_curve), "curves/calibration.json"
             )
         if report.segments:
             mlflow.log_table(
@@ -249,15 +274,11 @@ class MLflowReporter(Reporter):
                 "segments/segments.json",
             )
 
-        if report.ci_lower is not None:
-            mlflow.log_metrics(
-                {
-                    "ap_ci_lower": report.ci_lower,
-                    "ap_ci_upper": report.ci_upper,
-                }
-            )
-        if report.auc_adv is not None:
-            mlflow.log_metric("adversarial_auc", report.auc_adv)
+        if report.plot_paths:
+            for path_str in report.plot_paths:
+                p = Path(path_str)
+                if p.exists():
+                    mlflow.log_artifact(str(p), "plots")
 
         if report.model_card_path:
             p = Path(report.model_card_path)
@@ -269,18 +290,10 @@ class MLflowReporter(Reporter):
             if p.exists():
                 mlflow.log_artifact(str(p))
 
-        if report.top_features:
-            mlflow.log_dict(
-                {"features": report.top_features}, "features/importance.json"
+        if report.top_features and self._mlflow_cfg.log_feature_importance:
+            mlflow.log_table(
+                pd.DataFrame(report.top_features), "features/importance.json"
             )
-
-        if self._mlflow_cfg.datasets.enabled:
-            try:
-                dataset = mlflow.data.from_pandas(self._X_train)
-                mlflow.log_input(dataset, context=self._mlflow_cfg.datasets.context)
-                logger.info("  MLflow: dataset lineage logged")
-            except Exception as exc:
-                logger.warning("  MLflow: log_input failed: %s", exc)
 
         logger.info(
             "  MLflow: run %s — AP=%.4f, AUC=%.4f",
@@ -288,6 +301,34 @@ class MLflowReporter(Reporter):
             report.average_precision,
             report.roc_auc,
         )
+
+
+def log_dataset_lineage(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    contexts: tuple[str, str] = ("training", "validation"),
+) -> None:
+    """Log raw train/val frames (with target) as MLflow input datasets.
+
+    ``from_pandas`` computes a content digest (hash) over the frame, which is
+    what MLflow stores as the dataset's identity — the lineage that lets you
+    see exactly which data produced a run. Guarded by ``datasets.enabled``.
+    """
+    if mlflow.active_run() is None:
+        return
+    for X, y, context in [(X_train, y_train, contexts[0]), (X_val, y_val, contexts[1])]:
+        try:
+            df = X.copy()
+            df["isFraud"] = y.astype("int32")
+            dataset = mlflow.data.from_pandas(
+                df, targets="isFraud", name="transactions"
+            )
+            mlflow.log_input(dataset, context=context)
+            logger.info("  MLflow: dataset lineage logged (context=%s)", context)
+        except Exception as exc:
+            logger.warning("  MLflow: log_input failed (%s): %s", context, exc)
 
 
 class DVCLiveReporter(Reporter):
@@ -371,7 +412,7 @@ class DVCLiveReporter(Reporter):
 
                 for path_str in report.plot_paths:
                     p = Path(path_str)
-                    if p.exists() and p.suffix in (".png", ".jpg", ".jpeg"):
+                    if p.exists() and p.suffix in (".png", ".jpg", ".jpeg", ".webp"):
                         try:
                             img = _read_image(p)
                             if img is not None:
