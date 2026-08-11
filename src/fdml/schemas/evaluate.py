@@ -158,6 +158,13 @@ class PlotCfg(BaseModel):
         default_factory=lambda: ["roc_curve", "pr_curve", "calibration"],
         description="Plots to generate",
     )
+    output_format: Literal["png", "webp"] = Field(
+        default="webp",
+        description="Image format for saved plots (webp for web embedding)",
+    )
+    dpi: int = Field(
+        default=150, ge=72, le=600, description="DPI for saved plot images"
+    )
     error_features: list[str] | None = Field(
         default=None,
         description="Features for error analysis histograms (None = auto)",
