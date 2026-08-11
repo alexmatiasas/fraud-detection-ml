@@ -225,6 +225,31 @@ def featurize(
     return X_train_fe, X_val_fe, pipeline, X_train_fe.columns.tolist()
 
 
+def _sample_eval_set(
+    X_val: pd.DataFrame, y_val: pd.Series, max_rows: int
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Fixed, stratified subsample of the validation fold for early stopping.
+
+    Uses a constant random_state (not the training seed) so every seed of an
+    experiment early-stops on the same validation rows, keeping per-iteration
+    curves comparable across runs. Final metrics are still computed on the
+    full validation fold in PHASE 5.
+    """
+    if max_rows <= 0 or len(y_val) <= max_rows:
+        return X_val, y_val
+    from sklearn.model_selection import train_test_split
+
+    X_es, _rest_x, y_es, _rest_y = train_test_split(
+        X_val, y_val, train_size=max_rows, stratify=y_val, random_state=0
+    )
+    logger.info(
+        "  Early stopping eval set: %d rows (of %d val)",
+        len(y_es),
+        len(y_val),
+    )
+    return X_es, y_es
+
+
 def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
     """PHASES 1-3: load, split, feature engineering."""
 
@@ -232,8 +257,85 @@ def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
     X_train_fe, X_val_fe, pipeline, feature_names = featurize(
         X_train, X_val, y_train, load_features_config()
     )
+    X_val_es, y_val_es = _sample_eval_set(
+        X_val_fe, y_val, cfg.early_stopping.eval_max_rows
+    )
 
-    return X_train_fe, X_val_fe, y_train, y_val, pipeline, feature_names
+    return (
+        X_train_fe,
+        X_val_fe,
+        y_train,
+        y_val,
+        X_val_es,
+        y_val_es,
+        pipeline,
+        feature_names,
+    )
+
+
+def _fit_model(
+    model: Any,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    cfg: Any,
+    callbacks: list | None = None,
+) -> Any:
+    """Fit ``model`` with an evaluation set and native early stopping.
+
+    LightGBM 4.x removed the ``early_stopping_rounds`` estimator attribute, so
+    early stopping is applied through the native ``lgb.early_stopping`` /
+    ``xgb.callback.EarlyStopping`` callbacks instead of estimator parameters.
+    """
+    use_es = cfg.early_stopping.enabled
+    if use_es:
+        logger.info(
+            "  Early stopping: %d rounds on %s",
+            cfg.early_stopping.rounds,
+            cfg.early_stopping.eval_metric,
+        )
+
+    import lightgbm as lgb  # noqa: PLC0415
+    import xgboost as xgb  # noqa: PLC0415
+
+    eval_set = [(X_val, y_val)] if use_es else None
+    if eval_set is None:
+        model.fit(X_train, y_train)
+        return model
+
+    if isinstance(model, lgb.LGBMClassifier):
+        model.fit(
+            X_train,
+            y_train,
+            eval_set=eval_set,
+            eval_names=["validation"],
+            eval_metric=cfg.early_stopping.eval_metric,
+            callbacks=[
+                lgb.early_stopping(cfg.early_stopping.rounds, first_metric_only=True),
+                *(callbacks or []),
+            ],
+        )
+    elif isinstance(model, xgb.XGBClassifier):
+        model.fit(
+            X_train,
+            y_train,
+            eval_set=eval_set,
+            eval_metric=cfg.early_stopping.eval_metric,
+            verbose=False,
+            callbacks=[
+                xgb.callback.EarlyStopping(
+                    cfg.early_stopping.rounds,
+                    metric_name=cfg.early_stopping.eval_metric,
+                    maximize=True,
+                    save_best=True,
+                ),
+                *(callbacks or []),
+            ],
+        )
+    else:
+        model.fit(X_train, y_train)
+    return model
 
 
 def train(
@@ -248,9 +350,16 @@ def train(
     if cfg is None:
         cfg = load_train_config(cli_args=cli_args)
 
-    X_train_fe, X_val_fe, y_train, y_val, pipeline, feature_names = _prepare_data(
-        cfg, mlflow_cfg
-    )
+    (
+        X_train_fe,
+        X_val_fe,
+        y_train,
+        y_val,
+        X_val_es,
+        y_val_es,
+        pipeline,
+        feature_names,
+    ) = _prepare_data(cfg, mlflow_cfg)
 
     with step("PHASE 4: Model training"):
         builder = model_builder_registry.get(cfg.model.name)
@@ -277,42 +386,9 @@ def train(
         logger.info("  params: %s", builder.format_params(params))
 
         model = builder.build(params)
-        use_es = cfg.early_stopping.enabled and hasattr(model, "early_stopping_rounds")
-
-        if use_es:
-            logger.info(
-                "  Early stopping: %d rounds on %s",
-                cfg.early_stopping.rounds,
-                cfg.early_stopping.eval_metric,
-            )
-
-        import lightgbm as lgb  # noqa: PLC0415
-        import xgboost as xgb  # noqa: PLC0415
-
-        eval_set = [(X_val_fe, y_val)] if use_es else None
-
-        if eval_set is not None:
-            if isinstance(model, lgb.LGBMClassifier):
-                model.fit(
-                    X_train_fe,
-                    y_train,
-                    eval_set=eval_set,
-                    eval_names=["validation"],
-                    eval_metric=cfg.early_stopping.eval_metric,
-                    callbacks=callbacks or None,
-                )
-            elif isinstance(model, xgb.XGBClassifier):
-                model.fit(
-                    X_train_fe,
-                    y_train,
-                    eval_set=eval_set,
-                    verbose=False,
-                    callbacks=callbacks or None,
-                )
-            else:
-                model.fit(X_train_fe, y_train)
-        else:
-            model.fit(X_train_fe, y_train)
+        model = _fit_model(
+            model, X_train_fe, y_train, X_val_es, y_val_es, cfg, callbacks
+        )
 
         logger.info("  ✓ Training complete")
 
@@ -387,6 +463,7 @@ def _build_callbacks(cfg: Any) -> list | None:
             log_mlflow=True,
             log_dvclive=cfg.training_callbacks.dvclive,
             log_console=True,
+            mlflow_every=cfg.training_callbacks.mlflow_every,
         )
     ]
 
