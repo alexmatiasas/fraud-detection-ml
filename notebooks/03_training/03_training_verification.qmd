@@ -241,6 +241,7 @@ from fdml.models.evaluate.reporter import (
     JSONFileReporter,
     LoggingReporter,
     MLflowReporter,
+    log_dataset_lineage,
 )
 from fdml.models.train.model_builder import model_builder_registry
 from fdml.models.train.runner import (
@@ -312,13 +313,14 @@ def fit_model(
 def run_and_register(seed: int, run_name: str):
     """PHASE 5-6 replication: fit inside an active run, evaluate with real
     reporters, register. Fitting inside the run mirrors runner.main() and lets
-    the per-iteration callback log `validation_auc` to MLflow."""
+    the per-iteration callback log `val/auc` to MLflow."""
     params = {**sample_params, "random_state": seed}
-    callbacks = _build_callbacks(cfg)  # per-iteration validation_auc → MLflow
+    callbacks = _build_callbacks(cfg)  # per-iteration val/auc → MLflow
 
     with mlflow.start_run(run_name=run_name) as run:
         run_id = run.info.run_id
         _log_git_tags()
+        log_dataset_lineage(X_train, y_train, X_val, y_val)
         model, fit_s = fit_model("lightgbm", params, seed=seed, callbacks=callbacks)
         full_pipeline = Pipeline([("features", pipeline), ("model", model)])
         y_proba = model.predict_proba(X_val_fe)[:, 1]
@@ -328,18 +330,18 @@ def run_and_register(seed: int, run_name: str):
         mlflow.log_params(
             {
                 "seed": seed,
-                "training_elapsed_s": round(fit_s, 1),
                 "train_dt_min": train_tr[0],
                 "train_dt_max": train_tr[1],
                 "val_dt_min": val_tr[0],
                 "val_dt_max": val_tr[1],
             }
         )
+        mlflow.log_metric("training_elapsed_s", round(fit_s, 1))
         best_iter = getattr(model, "best_iteration_", None)
         if best_iter is None:
             best_iter = getattr(model, "best_iteration", None)
         if best_iter is not None:
-            mlflow.log_param("best_iteration", int(best_iter))
+            mlflow.log_metric("val/best_iteration", int(best_iter))
 
         reporters = [
             ConsoleReporter(),
@@ -348,8 +350,6 @@ def run_and_register(seed: int, run_name: str):
             MLflowReporter(
                 mlflow_cfg=mlflow_cfg,
                 eval_cfg=eval_cfg,
-                X_train=X_train_fe,
-                y_train=y_train,
                 model_name="lightgbm",
                 split_strategy="temporal",
             ),
@@ -428,18 +428,21 @@ print(
 ```{python}
 required_params = {
     "seed", "n_estimators", "learning_rate", "num_leaves", "scale_pos_weight",
-    "random_state", "training_elapsed_s", "train_dt_min", "train_dt_max",
-    "val_dt_min", "val_dt_max", "best_iteration",
-    "model_name", "split_strategy", "n_features", "n_train", "n_val",
-    "best_threshold",
+    "random_state", "train_dt_min", "train_dt_max",
+    "val_dt_min", "val_dt_max",
 }
 required_metrics = {
-    "roc_auc", "average_precision", "f1", "precision", "recall",
-    "brier", "f_beta", "expected_cost", "cost_best_threshold",
-    "recall_at_top_0.01", "recall_at_top_0.05",
-    "ap_ci_lower", "ap_ci_upper", "validation_auc",
+    "val/roc_auc", "val/average_precision", "val/f1", "val/f1_best",
+    "val/precision", "val/recall", "val/best_threshold", "val/fraud_rate",
+    "val/brier", "val/f_beta", "val/expected_cost", "val/cost_best_threshold",
+    "val/recall_at_top_0.01", "val/recall_at_top_0.05",
+    "val/ap_ci_lower", "val/ap_ci_upper", "val/auc", "val/best_iteration",
+    "training_elapsed_s",
 }
-required_tags = {"git_branch", "git_commit"}
+required_tags = {
+    "git_branch", "git_commit", "model_name", "split_strategy",
+    "n_features", "n_train", "n_val",
+}
 
 missing_params = required_params - set(run.data.params)
 missing_metrics = required_metrics - set(run.data.metrics)
@@ -471,7 +474,9 @@ required_artifacts = {
     "configs/train.yaml", "configs/features.yaml", "configs/evaluate.yaml",
     "configs/mlflow.yaml", "env/pyproject.toml", "env/uv.lock",
     "features/importance.json", "model_card.md", "report.json",
-    "segments/threshold_curve.json", "segments/cost_curve.json",
+    "plots/roc_curve.webp", "plots/pr_curve.webp", "plots/calibration_curve.webp",
+    "curves/threshold_curve.json", "curves/cost_curve.json",
+    "curves/roc.json", "curves/pr.json", "curves/calibration.json",
     "segments/segments.json",
 }
 missing_artifacts = required_artifacts - set(artifacts)
@@ -539,8 +544,8 @@ report_s43, run_id_s43, *_ = run_and_register(43, "lgbm_temporal_seed43")
 
 champ = client.get_model_version_by_alias("fraud-detection-lgbm", "champion")
 chal = client.get_model_version_by_alias("fraud-detection-lgbm", "challenger")
-champ_auc = mlflow.get_run(champ.run_id).data.metrics["roc_auc"]
-chal_auc = mlflow.get_run(chal.run_id).data.metrics["roc_auc"]
+champ_auc = mlflow.get_run(champ.run_id).data.metrics["val/roc_auc"]
+chal_auc = mlflow.get_run(chal.run_id).data.metrics["val/roc_auc"]
 
 print(f"champion   -> v{champ.version} (run {champ.run_id[:8]})  AUC={champ_auc:.4f}")
 print(f"challenger -> v{chal.version} (run {chal.run_id[:8]})  AUC={chal_auc:.4f}")
@@ -677,9 +682,10 @@ Everything below was verified on a real 80k temporal sample:
 - **Split**: `train_dt_max < val_dt_min` (no temporal leakage); the logged
   `train_dt_*` / `val_dt_*` params match the actual split.
 - **Tracking**: the run carries the model hyperparameters, seed, split
-  boundaries, `best_iteration`, training time, all evaluation metrics
-  (including the per-iteration `validation_auc` curve), configs/env artifacts,
-  feature importance, model card, report and the logged model with signature.
+  boundaries, `val/best_iteration`, training time, all evaluation metrics
+  (under the `val/` prefix, including the per-iteration `val/auc` curve),
+  configs/env artifacts, feature importance, model card, report, the raw
+  train/val datasets (lineage) and the logged model with signature.
 - **Reproducibility**: same seed → identical predictions (max `|Δp|` at machine
   precision); seed 43 → different model. The `random_state` wiring is real.
 - **Registry**: the seed-42 model is `champion` by ROC AUC; the worse seed-43
@@ -696,3 +702,4 @@ data will decide).
 assert no_overlap
 assert report_e2e.roc_auc > 0.5 and report_e2e.average_precision > 0.03
 print("All checks passed ✔")
+```
