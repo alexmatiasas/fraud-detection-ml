@@ -23,8 +23,8 @@ class TestIterationCallback:
             callback(env)
 
         assert mock_log.call_count == 2
-        mock_log.assert_any_call("validation_auc", 0.85, step=5)
-        mock_log.assert_any_call("validation_log_loss", 0.35, step=5)
+        mock_log.assert_any_call("val/auc", 0.85, step=5)
+        mock_log.assert_any_call("val/log_loss", 0.35, step=5)
 
     def test_xgboost_format(self):
         callback = IterationCallback(log_mlflow=True, log_dvclive=False)
@@ -42,8 +42,8 @@ class TestIterationCallback:
             callback(env)
 
         assert mock_log.call_count == 2
-        mock_log.assert_any_call("validation_auc", 0.82, step=10)
-        mock_log.assert_any_call("validation_log_loss", 0.40, step=10)
+        mock_log.assert_any_call("val/auc", 0.82, step=10)
+        mock_log.assert_any_call("val/log_loss", 0.40, step=10)
 
     def test_no_active_run_skips_mlflow(self):
         callback = IterationCallback(log_mlflow=True, log_dvclive=False)

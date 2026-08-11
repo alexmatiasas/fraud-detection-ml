@@ -25,6 +25,17 @@ def _higher_is_better(metric_name: str, default: bool = True) -> bool:
     return default
 
 
+def _metric_key(dataset_name: str, metric_name: str) -> str:
+    """MLflow metric name for a (dataset, metric) pair.
+
+    Validation metrics get the conventional ``val/`` prefix so they group
+    together in the MLflow UI; other datasets keep ``dataset_metric``.
+    """
+    if dataset_name.lower() in {"validation", "valid", "val"}:
+        return f"val/{metric_name}"
+    return f"{dataset_name}_{metric_name}"
+
+
 class IterationCallback:
     """Logs per-iteration validation metrics to MLflow, DVCLive and/or console.
 
@@ -74,7 +85,7 @@ class IterationCallback:
                 continue
 
             parsed.append((dataset_name, metric_name, float(value), bool(higher)))
-            key = f"{dataset_name}_{metric_name}"
+            key = _metric_key(dataset_name, metric_name)
 
             if self._log_mlflow and mlflow.active_run() is not None:
                 try:
@@ -104,7 +115,7 @@ class IterationCallback:
     ) -> None:
         parts: list[str] = []
         for dataset_name, metric_name, value, higher in parsed:
-            key = f"{dataset_name}_{metric_name}"
+            key = _metric_key(dataset_name, metric_name)
             best_value, best_iter = self._best.get(key, (None, None))
             is_best = best_value is None or (
                 value > best_value if higher else value < best_value
