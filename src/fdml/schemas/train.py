@@ -138,6 +138,16 @@ class EarlyStoppingCfg(BaseModel):
     eval_metric: EvalMetric = Field(
         default="auc", description="Early stopping evaluation metric"
     )
+    eval_max_rows: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Max rows of the validation fold used for early stopping and the "
+            "per-iteration metric curve (0 = full fold). A fixed stratified "
+            "subsample makes each iteration much cheaper; final metrics are "
+            "still computed on the full validation fold"
+        ),
+    )
 
 
 class ShapCfg(BaseModel):
@@ -173,6 +183,16 @@ class TrainingCallbacksCfg(BaseModel):
     log_per_iteration: bool = Field(
         default=True,
         description="Log per-iteration validation metrics to MLflow + DVCLive",
+    )
+    mlflow_every: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Send one MLflow metric per this many iterations. Each remote "
+            "log_metric call to DagsHub costs ~1.5s, so 10 keeps the curve "
+            "while cutting experiment wall time ~10x. Console logging is "
+            "unaffected"
+        ),
     )
     dvclive: bool = Field(
         default=False,

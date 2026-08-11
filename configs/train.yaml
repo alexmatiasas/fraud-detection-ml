@@ -62,10 +62,18 @@ early_stopping:
   enabled: true
   rounds: 100
   eval_metric: auc
+  # Subconjunto fijo y estratificado del fold de validación usado SOLO para
+  # early stopping y la curva val/auc por iteración (métricas finales se
+  # calculan sobre el val completo). Eval de AUC en 118k filas cuesta ~4s/iter;
+  # con 20k filas baja a <1s. 0 = fold completo.
+  eval_max_rows: 20000
 
 # ── Training callbacks (per-iteration logging) ──────────────────────────────
 training_callbacks:
   log_per_iteration: true
+  # Cada log_metric remoto a DagsHub cuesta ~1.5s; cada 10 iteraciones la curva
+  # val/auc sigue siendo legible y los experimentos corren ~10x más rápido.
+  mlflow_every: 10
   dvclive: false
 
 # ── MLflow ────────────────────────────────────────────────────────────────────

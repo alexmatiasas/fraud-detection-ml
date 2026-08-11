@@ -104,6 +104,13 @@
           ],
           "title": "Eval Metric",
           "type": "string"
+        },
+        "eval_max_rows": {
+          "default": 0,
+          "description": "Max rows of the validation fold used for early stopping and the per-iteration metric curve (0 = full fold). A fixed stratified subsample makes each iteration much cheaper; final metrics are still computed on the full validation fold",
+          "minimum": 0,
+          "title": "Eval Max Rows",
+          "type": "integer"
         }
       },
       "title": "EarlyStoppingCfg",
@@ -391,6 +398,13 @@
           "description": "Log per-iteration validation metrics to MLflow + DVCLive",
           "title": "Log Per Iteration",
           "type": "boolean"
+        },
+        "mlflow_every": {
+          "default": 1,
+          "description": "Send one MLflow metric per this many iterations. Each remote log_metric call to DagsHub costs ~1.5s, so 10 keeps the curve while cutting experiment wall time ~10x. Console logging is unaffected",
+          "minimum": 1,
+          "title": "Mlflow Every",
+          "type": "integer"
         },
         "dvclive": {
           "default": false,
