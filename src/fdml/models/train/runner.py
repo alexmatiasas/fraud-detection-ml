@@ -36,6 +36,7 @@ from fdml.models.evaluate.reporter import (
     JSONFileReporter,
     LoggingReporter,
     MLflowReporter,
+    log_dataset_lineage,
 )
 from fdml.models.evaluate.runner import evaluate
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
@@ -105,7 +106,9 @@ def transform_steps(pipeline: Pipeline, X: pd.DataFrame) -> pd.DataFrame:
     return Xt
 
 
-def load_split(cfg: Any) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+def load_split(
+    cfg: Any, mlflow_cfg: Any = None
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """PHASES 1-2: load the merged data and produce the train/val split."""
 
     data_cfg = load_data_config()
@@ -153,6 +156,9 @@ def load_split(cfg: Any) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Seri
                 val_tr[1],
             )
 
+        if mlflow_cfg is not None and mlflow_cfg.datasets.enabled:
+            log_dataset_lineage(X_train, y_train, X_val, y_val)
+
     return X_train, X_val, y_train, y_val
 
 
@@ -194,10 +200,10 @@ def featurize(
     return X_train_fe, X_val_fe, pipeline, X_train_fe.columns.tolist()
 
 
-def _prepare_data(cfg: Any) -> tuple:
+def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
     """PHASES 1-3: load, split, feature engineering."""
 
-    X_train, X_val, y_train, y_val = load_split(cfg)
+    X_train, X_val, y_train, y_val = load_split(cfg, mlflow_cfg)
     X_train_fe, X_val_fe, pipeline, feature_names = featurize(
         X_train, X_val, y_train, load_features_config()
     )
@@ -210,13 +216,16 @@ def train(
     cli_args: list[str] | None = None,
     callbacks: list | None = None,
     hpo_strategy: Any = None,
+    mlflow_cfg: Any = None,
 ) -> TrainResult:
     ensure_logging()
 
     if cfg is None:
         cfg = load_train_config(cli_args=cli_args)
 
-    X_train_fe, X_val_fe, y_train, y_val, pipeline, feature_names = _prepare_data(cfg)
+    X_train_fe, X_val_fe, y_train, y_val, pipeline, feature_names = _prepare_data(
+        cfg, mlflow_cfg
+    )
 
     with step("PHASE 4: Model training"):
         builder = model_builder_registry.get(cfg.model.name)
@@ -316,7 +325,7 @@ def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
         try:
             champion_mv = client.get_model_version_by_alias(model_name, "champion")
             champion_run = client.get_run(champion_mv.run_id)
-            champion_auc = champion_run.data.metrics.get("roc_auc", 0.0)
+            champion_auc = champion_run.data.metrics.get("val/roc_auc", 0.0)
 
             if auc > champion_auc:
                 client.set_registered_model_alias(model_name, "champion", version)
@@ -438,14 +447,18 @@ def main() -> None:
 
         callbacks = _build_callbacks(cfg)
         train_start = time.perf_counter()
-        result = train(cfg, callbacks=callbacks, hpo_strategy=hpo_strategy)
+        result = train(
+            cfg,
+            callbacks=callbacks,
+            hpo_strategy=hpo_strategy,
+            mlflow_cfg=mlflow_cfg,
+        )
         train_elapsed_s = time.perf_counter() - train_start
 
         with step("PHASE 5: Evaluation + MLflow tracking"):
             mlflow.log_params(result.params)
-            mlflow.log_params(
-                {"seed": cfg.seed, "training_elapsed_s": round(train_elapsed_s, 1)}
-            )
+            mlflow.log_params({"seed": cfg.seed})
+            mlflow.log_metric("training_elapsed_s", round(train_elapsed_s, 1))
 
             if (
                 cfg.split.strategy == "temporal"
@@ -464,7 +477,7 @@ def main() -> None:
             if best_iter is None:
                 best_iter = getattr(result.model, "best_iteration", None)
             if best_iter is not None:
-                mlflow.log_param("best_iteration", int(best_iter))
+                mlflow.log_metric("val/best_iteration", int(best_iter))
             model = result.model
             y_proba = model.predict_proba(result.X_val)[:, 1]
             y_pred = model.predict(result.X_val)
@@ -483,8 +496,6 @@ def main() -> None:
                 MLflowReporter(
                     mlflow_cfg=mlflow_cfg,
                     eval_cfg=eval_cfg,
-                    X_train=result.X_train,
-                    y_train=result.y_train,
                     model_name=cfg.model.name,
                     split_strategy=cfg.split.strategy,
                 ),
