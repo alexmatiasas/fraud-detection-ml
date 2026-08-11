@@ -1,7 +1,33 @@
 import pytest
 from omegaconf import OmegaConf
 
-from fdml.models.config import load_train_config
+from fdml.models.config import (
+    load_mlflow_config,
+    load_train_config,
+    resolve_mlflow_tracking,
+)
+
+
+class TestResolveMlflowTracking:
+    def test_dagshub_uri_does_not_embed_token(self, tmp_path, monkeypatch):
+        (tmp_path / ".env").write_text(
+            "DAGSHUB_TOKEN=sekret123\nDAGSHUB_USERNAME=alice\nDAGSHUB_REPO=repo\n"
+        )
+        for var in ("DAGSHUB_TOKEN", "DAGSHUB_USERNAME", "DAGSHUB_REPO"):
+            monkeypatch.delenv(var, raising=False)
+        cfg = load_mlflow_config()
+        monkeypatch.chdir(tmp_path)
+        cfg = resolve_mlflow_tracking(cfg)
+        assert "sekret123" not in cfg.tracking.tracking_uri
+        assert cfg.tracking.tracking_uri == "https://dagshub.com/alice/repo.mlflow"
+        assert cfg.tracking.backend == "dagshub"
+
+    def test_no_dotenv_leaves_uri_untouched(self, tmp_path, monkeypatch):
+        cfg = load_mlflow_config()
+        original = cfg.tracking.tracking_uri
+        monkeypatch.chdir(tmp_path)
+        resolve_mlflow_tracking(cfg)
+        assert cfg.tracking.tracking_uri == original
 
 
 class TestLoadTrainConfig:
