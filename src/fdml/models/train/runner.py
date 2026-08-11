@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import subprocess
+import sys
 import time
 import warnings
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 
 import joblib
 import mlflow
+import numpy as np
 import pandas as pd
 from mlflow.models import infer_signature
 from pydantic import BaseModel, ConfigDict
@@ -156,10 +158,33 @@ def load_split(
                 val_tr[1],
             )
 
+        cap = cfg.data.max_train_rows
+        if cap and len(X_train) > cap:
+            X_train, y_train = _cap_train_fold(cfg, X_train, y_train, cap=cap)
+
         if mlflow_cfg is not None and mlflow_cfg.datasets.enabled:
             log_dataset_lineage(X_train, y_train, X_val, y_val)
 
     return X_train, X_val, y_train, y_val
+
+
+def _cap_train_fold(
+    cfg: Any,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    cap: int,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Keep the earliest ``cap`` rows of the training fold (by time when possible)."""
+    if cfg.split.strategy == "temporal" and cfg.split.time_col in X_train.columns:
+        X_train = X_train.sort_values(cfg.split.time_col).head(cap)
+    else:
+        X_train = X_train.head(cap)
+    y_train = y_train.loc[X_train.index]
+    logger.info(
+        "  data.max_train_rows: train capped to %s rows (earliest by time)",
+        f"{len(X_train):,}",
+    )
+    return X_train, y_train
 
 
 def featurize(
@@ -399,8 +424,9 @@ def _log_git_tags() -> None:
 
 
 def main() -> None:
-    cfg = load_train_config()
-    run_name = f"{cfg.model.name}_s{cfg.seed}"
+    cfg = load_train_config(cli_args=sys.argv[1:])
+    tag = cfg.mlflow.experiment_tag
+    run_name = f"{cfg.model.name}_s{cfg.seed}" + (f"_{tag}" if tag else "")
     log_path = setup_logging(log_path=f"train_{run_name}.log")
 
     if cfg.ablation.enabled:
@@ -432,6 +458,10 @@ def main() -> None:
         run_id = run.info.run_id
 
         _log_git_tags()
+
+        if cfg.mlflow.experiment_tag:
+            mlflow.set_tag("experiment", cfg.mlflow.experiment_tag)
+            mlflow.log_param("experiment", cfg.mlflow.experiment_tag)
 
         hpo_strategy = None
         if cfg.optuna.enabled:
@@ -524,6 +554,16 @@ def main() -> None:
             joblib.dump(full_pipeline, pipeline_path)
             size_mb = pipeline_path.stat().st_size / (1024 * 1024)
             logger.info("  Pipeline saved: %s (%.1f MB)", pipeline_path, size_mb)
+
+            proba_path = artifact_dir / "val_proba.npy"
+            yval_path = artifact_dir / "y_val.npy"
+            np.save(proba_path, y_proba)
+            np.save(yval_path, result.y_val.values.astype("int32"))
+            mlflow.log_artifact(str(proba_path))
+            mlflow.log_artifact(str(yval_path))
+            logger.info(
+                "  Saved val predictions for cross-run comparison (seed bagging)"
+            )
 
             _log_configs_and_env()
 
