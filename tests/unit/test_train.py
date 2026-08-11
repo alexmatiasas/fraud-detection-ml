@@ -9,7 +9,47 @@ from fdml.models.config import load_train_config
 from fdml.models.evaluate.metrics import compute_metrics
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
 from fdml.models.train.model_builder import model_builder_registry
-from fdml.models.train.runner import _get_splitter
+from fdml.models.train.runner import _cap_train_fold, _get_splitter
+
+
+class TestCapTrainFold:
+    @pytest.fixture()
+    def temporal_cfg(self):
+        return load_train_config()
+
+    @pytest.fixture()
+    def random_cfg(self):
+        return load_train_config(cli_args=["split.strategy=random"])
+
+    @staticmethod
+    def _data() -> tuple[pd.DataFrame, pd.Series]:
+        X = pd.DataFrame(
+            {
+                "TransactionDT": [100, 50, 300, 200, 150],
+                "x": [1, 2, 3, 4, 5],
+            }
+        )
+        y = pd.Series([0, 1, 0, 1, 0])
+        return X, y
+
+    def test_temporal_keeps_earliest_rows_by_time(self, temporal_cfg):
+        X, y = self._data()
+        Xc, yc = _cap_train_fold(temporal_cfg, X, y, cap=2)
+        assert Xc["TransactionDT"].tolist() == [50, 100]
+        assert yc.tolist() == [1, 0]
+
+    def test_random_keeps_head_rows(self, random_cfg):
+        X, y = self._data()
+        Xc, yc = _cap_train_fold(random_cfg, X, y, cap=3)
+        assert Xc["TransactionDT"].tolist() == [100, 50, 300]
+        assert yc.tolist() == [0, 1, 0]
+
+    def test_cap_greater_than_size_keeps_all(self, temporal_cfg):
+        X, y = self._data()
+        Xc, yc = _cap_train_fold(temporal_cfg, X, y, cap=99)
+        assert len(Xc) == 5
+        assert sorted(Xc["TransactionDT"]) == sorted(X["TransactionDT"])
+        assert len(yc) == 5
 
 
 class TestGetSplitter:

@@ -32,6 +32,14 @@ class TestLoadTrainConfig:
         cfg = load_train_config(cli_args=["optuna.enabled=true"])
         assert cfg.optuna.enabled is True
 
+    def test_cli_overrides_max_train_rows(self):
+        cfg = load_train_config(cli_args=["data.max_train_rows=200000"])
+        assert cfg.data.max_train_rows == 200000
+
+    def test_cli_overrides_experiment_tag(self):
+        cfg = load_train_config(cli_args=["mlflow.experiment_tag=A_baseline"])
+        assert cfg.mlflow.experiment_tag == "A_baseline"
+
     def test_cli_handles_dash_args(self):
         """OmegaConf should ignore --file-style flags."""
         cfg = load_train_config(cli_args=["--help", "split.test_size=0.25"])
