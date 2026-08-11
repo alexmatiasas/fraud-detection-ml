@@ -24,6 +24,14 @@ class DataPathsCfg(BaseModel):
     test_identity: str = Field(
         default="data/raw/test_identity.parquet", description="Test identity file"
     )
+    max_train_rows: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Cap the training fold to the earliest N rows by time "
+            "(validation stays untouched). 0 = use all rows"
+        ),
+    )
 
 
 SplitStrategy = Literal["temporal", "random"]
@@ -152,6 +160,13 @@ class MlflowCfg(BaseModel):
     )
     run_name: str = Field(default="lgbm_baseline", description="MLflow run name")
     log_model: bool = Field(default=True, description="Log model artifact to MLflow")
+    experiment_tag: str = Field(
+        default="",
+        description=(
+            "Experiment group label (e.g. 'A_baseline', 'B_reg'). Empty = no tag. "
+            "Used to filter/compare runs across seeds and variants"
+        ),
+    )
 
 
 class TrainingCallbacksCfg(BaseModel):
