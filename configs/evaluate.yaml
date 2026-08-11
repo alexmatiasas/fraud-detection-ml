@@ -61,6 +61,9 @@ plots:
 dvclive:
   enabled: true
   dir: dvclive
+  # Modo report de dvclive: null | html | notebook | md. 'notebook' solo dentro
+  # de un notebook (warn en CLI); null/html para runs de `make train`.
+  report: null
 
 # ── Report (JSON, sin dependencia de MLflow) ─────────────────────────────────
 report:

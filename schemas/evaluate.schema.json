@@ -65,6 +65,24 @@
           "description": "DVCLive output directory",
           "title": "Dir",
           "type": "string"
+        },
+        "report": {
+          "anyOf": [
+            {
+              "enum": [
+                "md",
+                "notebook",
+                "html"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "DVCLive report mode. 'notebook' only works inside a notebook and warns otherwise; keep None (or 'html') for CLI runs",
+          "title": "Report"
         }
       },
       "title": "DVCLiveCfg",

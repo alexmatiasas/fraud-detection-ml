@@ -176,6 +176,13 @@ class DVCLiveCfg(BaseModel):
         default=True, description="Enable DVCLive logging for DVC metrics/plots"
     )
     dir: str = Field(default="dvclive", description="DVCLive output directory")
+    report: Literal["md", "notebook", "html"] | None = Field(
+        default=None,
+        description=(
+            "DVCLive report mode. 'notebook' only works inside a notebook and "
+            "warns otherwise; keep None (or 'html') for CLI runs"
+        ),
+    )
 
 
 class ReportCfg(BaseModel):
