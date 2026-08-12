@@ -45,6 +45,7 @@ def _get_runs(client: MlflowClient, experiment: str, tag: str) -> list:
 
 def _run_row(run) -> dict:
     m, p, t = run.data.metrics, run.data.params, run.data.tags
+    best_iter = m.get("val/best_iteration")
     return {
         "run_name": p.get("run_name", run.info.run_name),
         "seed": p.get("seed", ""),
@@ -53,7 +54,9 @@ def _run_row(run) -> dict:
         "val/roc_auc": round(m.get("val/roc_auc", float("nan")), 5),
         "val/average_precision": round(m.get("val/average_precision", float("nan")), 5),
         "val/f1_best": round(m.get("val/f1_best", float("nan")), 5),
-        "val/best_iteration": int(m.get("val/best_iteration", 0)),
+        "val/best_iteration": (
+            float(best_iter) if best_iter is not None else float("nan")
+        ),
         "training_elapsed_s": round(m.get("training_elapsed_s", float("nan")), 1),
     }
 
@@ -66,9 +69,10 @@ def _print_table(rows: list[dict]) -> None:
 
 
 def _summary(rows: list[dict]) -> None:
-    print("\nSummary (mean +/- std, N=%d):" % len(rows))
+    complete = [r for r in rows if np.isfinite(r["val/roc_auc"])]
+    print("\nSummary (mean +/- std, N=%d, complete runs):" % len(complete))
     for metric in METRICS:
-        vals = [r[metric] for r in rows if np.isfinite(r[metric])]
+        vals = [r[metric] for r in complete if np.isfinite(r[metric])]
         if vals:
             print(f"  {metric:<24} {np.mean(vals):.5f} +/- {np.std(vals):.5f}")
 
@@ -80,9 +84,9 @@ def _seed_bag(client: MlflowClient, runs, output: Path | None) -> None:
     used = 0
     for run in runs:
         seed = run.data.params.get("seed", "")
-        seeds.add(seed)
         if not seed:
             continue
+        seeds.add(seed)
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 proba_path = client.download_artifacts(
