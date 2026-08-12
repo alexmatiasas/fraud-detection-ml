@@ -13,6 +13,7 @@ _FMT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 _stdout_handler_attached = False
 _file_handlers_attached: set[Path] = set()
 _primary_log_path: Path = LOGS_DIR / "fdml.log"
+_phase_timings: dict[str, float] = {}
 
 
 def setup_logging(
@@ -87,5 +88,11 @@ def step(name: str, *, level: int = logging.INFO) -> Iterator[None]:
         yield
     finally:
         elapsed = time.perf_counter() - start
+        _phase_timings[name] = elapsed
         logger.log(level, "  %s — done in %.1fs", name, elapsed)
         logger.log(level, "")
+
+
+def get_phase_timings() -> dict[str, float]:
+    """Elapsed seconds of every ``step()`` block that has completed."""
+    return dict(_phase_timings)
