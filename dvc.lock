@@ -46,12 +46,12 @@ stages:
       size: 500
     - path: configs/features.yaml
       hash: md5
-      md5: 91c68c869d92d57c5f82c03659ff0029
-      size: 4677
+      md5: d7b0b259521a3b2913378bd8e91bdd94
+      size: 7099
     - path: configs/train.yaml
       hash: md5
-      md5: b96e18da3b47d33f7be10b7234e309a3
-      size: 3081
+      md5: 0b084876e631c9202b25b15105d145f6
+      size: 5078
     - path: data/processed
       hash: md5
       md5: 43b41ede9e8aeb0d224f61ff795f4abc.dir
@@ -59,18 +59,18 @@ stages:
       nfiles: 6
     - path: src/fdml/features/
       hash: md5
-      md5: 729ee4477b5b64e8cc727436f3e35c4e.dir
-      size: 60959
-      nfiles: 22
+      md5: fd047ce48c1fa66a16f8ea34ca012388.dir
+      size: 99407
+      nfiles: 34
     - path: src/fdml/models/
       hash: md5
-      md5: 5027462afef095ffb7dea99caeceabed.dir
-      size: 214298
-      nfiles: 40
+      md5: db42a10181475f8ef7f58786fc50fb37.dir
+      size: 320882
+      nfiles: 42
     - path: src/fdml/schemas/
       hash: md5
-      md5: 6fbbc78083b63dc85c9e4d476e8b2a15.dir
-      size: 64443
+      md5: 5f71066b57bbe59204b8e99c01bf1e17.dir
+      size: 78379
       nfiles: 14
     params:
       configs/train.yaml:
@@ -78,6 +78,8 @@ stages:
           enabled: true
           rounds: 100
           eval_metric: auc
+          eval_max_rows: 20000
+          train_eval_max_rows: 50000
         model:
           name: lightgbm
           artifact_dir: models/
@@ -98,17 +100,26 @@ stages:
           strategy: temporal
           time_col: TransactionDT
           test_size: 0.2
+          embargo_seconds: 172800
     outs:
     - path: dvclive/metrics.json
       hash: md5
-      md5: 731a026501fd7cdd1b74f0e620a83cb3
-      size: 261
-    - path: dvclive/plots
+      md5: 201788bc507ed2364d1b850de3d803cf
+      size: 513
+    - path: dvclive/plots/metrics
       hash: md5
-      md5: c977a117a42912a16468ffc706f01c9b.dir
-      size: 18827855
-      nfiles: 12
+      md5: 68ca77d5ec903e07c6e43e1b5d940d9f.dir
+      size: 497
+      nfiles: 13
+    - path: dvclive/plots/sklearn/precision_recall.json
+      hash: md5
+      md5: b7a357820ecb6d24b23b0c5d6d6fc0d9
+      size: 17944054
+    - path: dvclive/plots/sklearn/roc.json
+      hash: md5
+      md5: 4e324cb7c767ebe70676f65f8af1ffbd
+      size: 789459
     - path: models/pipeline.joblib
       hash: md5
-      md5: 7e413a7fdcfefd4a2429f3ce833d306e
-      size: 9482294
+      md5: 0e9e6dff5870cab229b0e8d2c10227f3
+      size: 6234582
