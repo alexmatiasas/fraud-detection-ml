@@ -579,14 +579,14 @@ def main() -> None:
     log_path = setup_logging(log_path=f"train_{run_name}.log")
 
     if cfg.ablation.enabled:
-        from fdml.models.train.ablation import run_ablation
+        from fdml.models.train.ablation import run_ablation, summarize
 
         results = run_ablation(cfg, max_train_rows=cfg.ablation.max_train_rows)
         report_path = Path(cfg.ablation.report_path)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        results.to_csv(report_path, index=False)
+        summarize(results).to_csv(report_path, index=False)
         logger.info("Ablation report saved to %s", report_path)
-        logger.info("\n%s", results.to_string(index=False))
+        logger.info("\n%s", summarize(results).to_string(index=False))
         return
 
     eval_cfg = load_evaluation_config()
