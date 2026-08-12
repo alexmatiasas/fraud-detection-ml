@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import tempfile
 from collections import Counter, defaultdict
@@ -49,6 +50,10 @@ from fdml.models.config import load_mlflow_config, resolve_mlflow_tracking
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+
+# Download artifacts silently (no tqdm "Downloading artifacts" bars).
+os.environ.setdefault("MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR", "false")
+
 console = Console(width=160)
 
 METRICS = ["val/roc_auc", "val/average_precision", "val/f1_best", "val/best_iteration"]
