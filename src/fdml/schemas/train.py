@@ -210,6 +210,13 @@ class AblationCfg(BaseModel):
         ge=0,
         description="Cap train rows per variant to keep the study fast (0 = all)",
     )
+    seeds: list[int] = Field(
+        default_factory=lambda: [40, 41, 42],
+        description=(
+            "Seeds to run per variant (one MLflow run each). Empty falls back "
+            "to the global TrainConfig.seed"
+        ),
+    )
     report_path: str = Field(
         default="models/feature_ablation.csv",
         description="Where to save the per-variant results table",
