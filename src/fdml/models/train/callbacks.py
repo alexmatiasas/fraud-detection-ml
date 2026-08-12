@@ -44,15 +44,8 @@ def _normalize_dataset_name(data_name: str) -> str:
     return data_name
 
 
-class IterationCallback(TrainingCallback):
-    """Logs per-iteration validation metrics to MLflow, DVCLive and/or console.
-
-    Supports both framework callback protocols:
-      * LightGBM calls plain callables — ``__call__(env)`` reads
-        ``env.evaluation_result_list`` (dataset, metric, value, higher_better).
-      * XGBoost >= 3.x requires ``TrainingCallback`` subclasses passed via the
-        estimator constructor — ``after_iteration(model, epoch, evals_log)``
-        reads the ``evals_log`` dict.
+class _MetricLogger:
+    """Shared per-iteration logging for LightGBM and XGBoost callbacks.
 
     Args:
         log_mlflow: Log metrics to the active MLflow run.
@@ -73,7 +66,6 @@ class IterationCallback(TrainingCallback):
         console_every: int = 50,
         mlflow_every: int = 1,
     ):
-        super().__init__()
         self._log_mlflow = log_mlflow
         self._log_console = log_console
         self._console_every = max(1, console_every)
@@ -84,43 +76,6 @@ class IterationCallback(TrainingCallback):
             from dvclive import Live
 
             self._live = Live(dvcyaml=False, report="notebook")
-
-    def __call__(self, env: Any) -> None:
-        if not hasattr(env, "evaluation_result_list") or not env.evaluation_result_list:
-            return
-
-        iteration = env.iteration
-        parsed: list[tuple[str, str, float, bool]] = []
-
-        for item in env.evaluation_result_list:
-            if len(item) == 4:
-                dataset_name, metric_name, value, higher = item
-            elif len(item) == 3:
-                dataset_name, metric_name, value = item
-                higher = _higher_is_better(metric_name)
-            else:
-                continue
-
-            parsed.append((dataset_name, metric_name, float(value), bool(higher)))
-            self._log_metric(dataset_name, metric_name, float(value), iteration)
-
-        if self._log_console:
-            self._log_console_line(iteration, parsed)
-
-    def after_iteration(self, model: Any, epoch: int, evals_log: dict) -> bool:
-        parsed: list[tuple[str, str, float, bool]] = []
-        for data_name, metrics in evals_log.items():
-            dataset_name = _normalize_dataset_name(data_name)
-            for metric_name, values in metrics.items():
-                if not values:
-                    continue
-                value = float(values[epoch])
-                parsed.append((dataset_name, metric_name, value, True))
-                self._log_metric(dataset_name, metric_name, value, epoch + 1)
-
-        if self._log_console:
-            self._log_console_line(epoch + 1, parsed)
-        return False
 
     def _log_metric(
         self, dataset_name: str, metric_name: str, value: float, step: int
@@ -172,3 +127,85 @@ class IterationCallback(TrainingCallback):
 
         if parts:
             logger.info("  iter %5d | %s", iteration, " | ".join(parts))
+
+
+class IterationCallback(_MetricLogger):
+    """Per-iteration metric logging for LightGBM (plain callable protocol).
+
+    ``__call__(env)`` reads ``env.evaluation_result_list`` where each item is
+    ``(dataset, metric, value)`` or ``(dataset, metric, value, higher_better)``.
+    """
+
+    def __call__(self, env: Any) -> None:
+        if not hasattr(env, "evaluation_result_list") or not env.evaluation_result_list:
+            return
+
+        iteration = env.iteration
+        parsed: list[tuple[str, str, float, bool]] = []
+
+        for item in env.evaluation_result_list:
+            if len(item) == 4:
+                dataset_name, metric_name, value, higher = item
+            elif len(item) == 3:
+                dataset_name, metric_name, value = item
+                higher = _higher_is_better(metric_name)
+            else:
+                continue
+
+            parsed.append((dataset_name, metric_name, float(value), bool(higher)))
+            self._log_metric(dataset_name, metric_name, float(value), iteration)
+
+        if self._log_console:
+            self._log_console_line(iteration, parsed)
+
+    def as_xgboost(self) -> XGBoostIterationCallback:
+        """Return an equivalent callback for the XGBoost >= 3.x protocol."""
+        return XGBoostIterationCallback(
+            log_mlflow=self._log_mlflow,
+            log_dvclive=self._live is not None,
+            log_console=self._log_console,
+            console_every=self._console_every,
+            mlflow_every=self._mlflow_every,
+        )
+
+
+class XGBoostIterationCallback(_MetricLogger, TrainingCallback):
+    """Per-iteration metric logging for XGBoost >= 3.x.
+
+    ``after_iteration(model, epoch, evals_log)`` reads the ``evals_log`` dict
+    (``data_name -> metric -> [value per epoch]``). Epochs are 0-indexed in
+    XGBoost; MLflow steps are 1-indexed for consistency with LightGBM.
+    """
+
+    def __init__(
+        self,
+        log_mlflow: bool = True,
+        log_dvclive: bool = False,
+        log_console: bool = False,
+        console_every: int = 50,
+        mlflow_every: int = 1,
+    ):
+        _MetricLogger.__init__(
+            self,
+            log_mlflow=log_mlflow,
+            log_dvclive=log_dvclive,
+            log_console=log_console,
+            console_every=console_every,
+            mlflow_every=mlflow_every,
+        )
+        TrainingCallback.__init__(self)
+
+    def after_iteration(self, model: Any, epoch: int, evals_log: dict) -> bool:
+        parsed: list[tuple[str, str, float, bool]] = []
+        for data_name, metrics in evals_log.items():
+            dataset_name = _normalize_dataset_name(data_name)
+            for metric_name, values in metrics.items():
+                if not values:
+                    continue
+                value = float(values[epoch])
+                parsed.append((dataset_name, metric_name, value, True))
+                self._log_metric(dataset_name, metric_name, value, epoch + 1)
+
+        if self._log_console:
+            self._log_console_line(epoch + 1, parsed)
+        return False

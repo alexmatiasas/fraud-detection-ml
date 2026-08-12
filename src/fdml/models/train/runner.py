@@ -325,13 +325,16 @@ def _fit_model(
         )
     elif isinstance(model, xgb.XGBClassifier):
         # XGBoost >= 3.x sklearn API: early stopping, eval_metric and callbacks
-        # are estimator constructor params, not fit() kwargs.
+        # are estimator constructor params, not fit() kwargs. Callbacks must be
+        # TrainingCallback instances, so convert the LightGBM-style ones.
         xgb_kwargs: dict[str, Any] = {
             "eval_metric": cfg.early_stopping.eval_metric,
             "early_stopping_rounds": cfg.early_stopping.rounds,
         }
         if callbacks:
-            xgb_kwargs["callbacks"] = callbacks
+            xgb_kwargs["callbacks"] = [
+                cb.as_xgboost() for cb in callbacks if hasattr(cb, "as_xgboost")
+            ]
         model.set_params(**xgb_kwargs)
         model.fit(X_train, y_train, eval_set=eval_set, verbose=False)
     else:
