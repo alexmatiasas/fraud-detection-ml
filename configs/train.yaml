@@ -68,6 +68,11 @@ early_stopping:
   # con 20k filas baja a <1s. 0 = fold completo.
   eval_max_rows: 20000
 
+  # Muestra fija y aleatoria de filas de TRAIN usada SOLO para la curva
+  # train/auc por iteración (ver overfitting vs validation). El modelo sigue
+  # entrenando sobre el train completo. 0 = desactivado.
+  train_eval_max_rows: 50000
+
 # ── Training callbacks (per-iteration logging) ──────────────────────────────
 training_callbacks:
   log_per_iteration: true

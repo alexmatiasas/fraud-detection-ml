@@ -148,6 +148,16 @@ class EarlyStoppingCfg(BaseModel):
             "still computed on the full validation fold"
         ),
     )
+    train_eval_max_rows: int = Field(
+        default=50000,
+        ge=0,
+        description=(
+            "Max rows of the training set used for the per-iteration TRAIN "
+            "curve (train/auc), so overfitting vs validation is visible (0 = "
+            "off). A fixed random sample keeps each iteration cheap; the model "
+            "still trains on the full training set"
+        ),
+    )
 
 
 class ShapCfg(BaseModel):

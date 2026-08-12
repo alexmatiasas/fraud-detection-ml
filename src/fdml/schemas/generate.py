@@ -25,7 +25,7 @@ def generate_all(output_dir: str = "schemas") -> None:
     for filename, model_cls in entries:
         schema = model_cls.model_json_schema()
         path = schemas_dir / filename
-        path.write_text(json.dumps(schema, indent=2))
+        path.write_text(json.dumps(schema, indent=2) + "\n")
         print(f"  ✓ {path}")
 
 

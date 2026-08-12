@@ -15,6 +15,14 @@
           "title": "Max Train Rows",
           "type": "integer"
         },
+        "seeds": {
+          "description": "Seeds to run per variant (one MLflow run each). Empty falls back to the global TrainConfig.seed",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Seeds",
+          "type": "array"
+        },
         "report_path": {
           "default": "models/feature_ablation.csv",
           "description": "Where to save the per-variant results table",
@@ -110,6 +118,13 @@
           "description": "Max rows of the validation fold used for early stopping and the per-iteration metric curve (0 = full fold). A fixed stratified subsample makes each iteration much cheaper; final metrics are still computed on the full validation fold",
           "minimum": 0,
           "title": "Eval Max Rows",
+          "type": "integer"
+        },
+        "train_eval_max_rows": {
+          "default": 50000,
+          "description": "Max rows of the training set used for the per-iteration TRAIN curve (train/auc), so overfitting vs validation is visible (0 = off). A fixed random sample keeps each iteration cheap; the model still trains on the full training set",
+          "minimum": 0,
+          "title": "Train Eval Max Rows",
           "type": "integer"
         }
       },

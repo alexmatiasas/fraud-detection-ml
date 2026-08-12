@@ -197,6 +197,67 @@ class TestFitModel:
             hist = client.get_metric_history(mlflow.active_run().info.run_id, "val/auc")
         assert len(hist) > 0
 
+    def test_lgbm_logs_train_curve_when_enabled(self, tmp_path):
+        cfg = load_train_config(
+            cli_args=["model.n_estimators=50", "early_stopping.rounds=10"]
+        )
+        X, y, Xv, yv = self._synth()
+        model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
+
+        uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+        mlflow.set_tracking_uri(uri)
+        mlflow.set_experiment("test-fit-train")
+        client = MlflowClient(tracking_uri=uri)
+        with mlflow.start_run():
+            _fit_model(
+                model,
+                X,
+                y,
+                Xv,
+                yv,
+                cfg,
+                callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
+            )
+            train_hist = client.get_metric_history(
+                mlflow.active_run().info.run_id, "train/auc"
+            )
+            val_hist = client.get_metric_history(
+                mlflow.active_run().info.run_id, "val/auc"
+            )
+        assert len(train_hist) > 0
+        assert len(train_hist) == len(val_hist)
+        assert train_hist[-1].step == val_hist[-1].step
+
+    def test_lgbm_skips_train_curve_when_disabled(self, tmp_path):
+        cfg = load_train_config(
+            cli_args=[
+                "model.n_estimators=50",
+                "early_stopping.rounds=10",
+                "early_stopping.train_eval_max_rows=0",
+            ]
+        )
+        X, y, Xv, yv = self._synth()
+        model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
+
+        uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+        mlflow.set_tracking_uri(uri)
+        mlflow.set_experiment("test-fit-notrain")
+        client = MlflowClient(tracking_uri=uri)
+        with mlflow.start_run():
+            _fit_model(
+                model,
+                X,
+                y,
+                Xv,
+                yv,
+                cfg,
+                callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
+            )
+            train_hist = client.get_metric_history(
+                mlflow.active_run().info.run_id, "train/auc"
+            )
+        assert len(train_hist) == 0
+
     def test_disabled_early_stopping_fits_plain(self):
         cfg = load_train_config(cli_args=["early_stopping.enabled=false"])
         X, y, Xv, yv = self._synth()
