@@ -90,8 +90,10 @@ mlflow:
 # Leave-one-group-out: fixed model params (no Optuna), same temporal split for
 # every variant. Compares AUC/AP of the full feature set against each variant
 # with one engineered/selection group toggled OFF. Set enabled: true and run
-# `make train`. max_train_rows caps the training set (temporal order kept).
+# `make train`. Each variant × seed becomes one MLflow run (tag D_ablation).
+# max_train_rows caps the training set (temporal order kept).
 ablation:
   enabled: false
   max_train_rows: 0
+  seeds: [40, 41, 42]
   report_path: models/feature_ablation.csv
