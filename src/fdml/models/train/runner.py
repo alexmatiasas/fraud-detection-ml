@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ import numpy as np
 import pandas as pd
 from mlflow.models import infer_signature
 from pydantic import BaseModel, ConfigDict
+from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
 
 from fdml.features.factory import (
@@ -43,7 +45,12 @@ from fdml.models.evaluate.reporter import (
 from fdml.models.evaluate.runner import evaluate
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
 from fdml.models.train.model_builder import model_builder_registry
-from fdml.utils.logging import ensure_logging, setup_logging, step
+from fdml.utils.logging import (
+    ensure_logging,
+    get_phase_timings,
+    setup_logging,
+    step,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +475,7 @@ def _build_callbacks(cfg: Any) -> list | None:
     ]
 
 
-def _log_configs_and_env() -> None:
+def _log_configs_and_env(cfg: Any) -> None:
     for config_path in [
         "configs/train.yaml",
         "configs/features.yaml",
@@ -477,6 +484,23 @@ def _log_configs_and_env() -> None:
     ]:
         if Path(config_path).exists():
             mlflow.log_artifact(config_path, "configs")
+
+    # Resolved config (after CLI overrides) — makes the run reproducible from
+    # MLflow alone, since the raw yaml files don't reflect `key=value` overrides.
+    import json
+    import tempfile
+
+    try:
+        resolved = json.dumps(cfg.model_dump(mode="json"), indent=2, default=str)
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".json", encoding="utf-8", delete=False
+        ) as f:
+            f.write(resolved)
+            tmp_path = f.name
+        mlflow.log_artifact(tmp_path, "configs")
+        Path(tmp_path).unlink(missing_ok=True)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("  Config snapshot failed: %s", exc)
     for dep_path in ["pyproject.toml", "uv.lock"]:
         if Path(dep_path).exists():
             mlflow.log_artifact(dep_path, "env")
@@ -498,6 +522,57 @@ def _log_git_tags() -> None:
             mlflow.set_tag(tag_name, result.stdout.strip())
         except Exception:
             pass
+    try:
+        dirty = (
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5,
+            ).stdout
+            != ""
+        )
+        mlflow.set_tag("git_dirty", "yes" if dirty else "no")
+    except Exception:
+        pass
+
+
+def features_fingerprint(features_cfg: Any) -> str:
+    """Canonical sha1 of the resolved feature configuration.
+
+    Distinguishes runs that used different feature sets even though the
+    ``features.yaml`` file on disk changed between runs. Two runs share a
+    ``features_hash`` iff their feature pipeline is identical.
+    """
+    import json
+
+    payload = json.dumps(
+        features_cfg.model_dump(mode="json"), sort_keys=True, default=str
+    )
+    return hashlib.sha1(payload.encode()).hexdigest()
+
+
+def _register_abort_handler() -> None:
+    """Tag the active MLflow run ``status=aborted`` on Ctrl-C / SIGTERM.
+
+    The tag lets ``compare_runs.py`` exclude interrupted runs instead of
+    showing them as metric-less noise. Runs that are killed hard (SIGKILL)
+    cannot be tagged — they are simply dropped by the completeness filter.
+    """
+    import signal
+
+    def _mark_aborted(signum, frame):  # noqa: ARG001
+        try:
+            if mlflow.active_run() is not None:
+                mlflow.set_tag("status", "aborted")
+                logger.warning("  Interrupted — run tagged status=aborted")
+        except Exception:
+            pass
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, _mark_aborted)
+    signal.signal(signal.SIGTERM, _mark_aborted)
 
 
 def main() -> None:
@@ -534,11 +609,18 @@ def main() -> None:
     with mlflow.start_run(run_name=run_name) as run:
         run_id = run.info.run_id
 
+        _register_abort_handler()
         _log_git_tags()
 
         if cfg.mlflow.experiment_tag:
             mlflow.set_tag("experiment", cfg.mlflow.experiment_tag)
             mlflow.log_param("experiment", cfg.mlflow.experiment_tag)
+
+        from fdml.features.factory import load_features_config
+
+        features_hash = features_fingerprint(load_features_config())
+        mlflow.set_tag("features_hash", features_hash)
+        mlflow.log_param("features_hash", features_hash)
 
         hpo_strategy = None
         if cfg.optuna.enabled:
@@ -567,6 +649,15 @@ def main() -> None:
             mlflow.log_params({"seed": cfg.seed})
             mlflow.log_metric("training_elapsed_s", round(train_elapsed_s, 1))
 
+            for phase_name, elapsed in get_phase_timings().items():
+                match = re.search(r"PHASE (\d+)", phase_name)
+                key = (
+                    f"phase_{match.group(1)}_seconds"
+                    if match
+                    else f"phase_{phase_name}_seconds"
+                )
+                mlflow.log_metric(key, round(elapsed, 1))
+
             if (
                 cfg.split.strategy == "temporal"
                 and cfg.split.time_col in result.X_train.columns
@@ -588,6 +679,12 @@ def main() -> None:
             model = result.model
             y_proba = model.predict_proba(result.X_val)[:, 1]
             y_pred = model.predict(result.X_val)
+
+            train_proba = model.predict_proba(result.X_train)[:, 1]
+            mlflow.log_metric(
+                "train/roc_auc",
+                round(float(roc_auc_score(result.y_train, train_proba)), 5),
+            )
 
             reporters = [
                 ConsoleReporter(),
@@ -642,7 +739,7 @@ def main() -> None:
                 "  Saved val predictions for cross-run comparison (seed bagging)"
             )
 
-            _log_configs_and_env()
+            _log_configs_and_env(cfg)
 
             mlflow.log_artifact(str(log_path))
 
