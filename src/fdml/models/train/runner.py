@@ -311,12 +311,37 @@ def _fit_model(
         model.fit(X_train, y_train)
         return model
 
+    # Optional per-iteration TRAIN curve: a fixed random sample of the training
+    # rows is added as a second eval dataset so overfitting/underfitting is
+    # visible (train/auc vs val/auc at each iteration). 0 = off.
+    train_eval: tuple[pd.DataFrame, pd.Series] | None = None
+    train_rows = cfg.early_stopping.train_eval_max_rows
+    if train_rows:
+        n_train = len(X_train)
+        if n_train > train_rows:
+            idx = np.sort(
+                np.random.default_rng(cfg.seed).choice(
+                    n_train, train_rows, replace=False
+                )
+            )
+        else:
+            idx = np.arange(n_train)
+        train_eval = (X_train.iloc[idx], y_train.iloc[idx])
+        logger.info(
+            "  Train eval: %s rows sampled for the per-iteration train curve",
+            f"{len(idx):,}",
+        )
+
     if isinstance(model, lgb.LGBMClassifier):
+        eval_names = ["validation"]
+        if train_eval:
+            eval_set = eval_set + [train_eval]
+            eval_names.append("train")
         model.fit(
             X_train,
             y_train,
             eval_set=eval_set,
-            eval_names=["validation"],
+            eval_names=eval_names,
             eval_metric=cfg.early_stopping.eval_metric,
             callbacks=[
                 lgb.early_stopping(cfg.early_stopping.rounds, first_metric_only=True),
@@ -327,13 +352,20 @@ def _fit_model(
         # XGBoost >= 3.x sklearn API: early stopping, eval_metric and callbacks
         # are estimator constructor params, not fit() kwargs. Callbacks must be
         # TrainingCallback instances, so convert the LightGBM-style ones.
+        # XGBoost early-stops on the LAST eval dataset, so validation goes last;
+        # the callback name_map keeps train/validation distinguishable.
+        if train_eval:
+            eval_set = [train_eval, (X_val, y_val)]
+            name_map = {"validation_0": "train", "validation_1": "validation"}
+        else:
+            name_map = {"validation_0": "validation"}
         xgb_kwargs: dict[str, Any] = {
             "eval_metric": cfg.early_stopping.eval_metric,
             "early_stopping_rounds": cfg.early_stopping.rounds,
         }
         if callbacks:
             xgb_kwargs["callbacks"] = [
-                cb.as_xgboost() for cb in callbacks if hasattr(cb, "as_xgboost")
+                cb.as_xgboost(name_map) for cb in callbacks if hasattr(cb, "as_xgboost")
             ]
         model.set_params(**xgb_kwargs)
         model.fit(X_train, y_train, eval_set=eval_set, verbose=False)

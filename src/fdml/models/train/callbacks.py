@@ -29,11 +29,14 @@ def _higher_is_better(metric_name: str, default: bool = True) -> bool:
 def _metric_key(dataset_name: str, metric_name: str) -> str:
     """MLflow metric name for a (dataset, metric) pair.
 
-    Validation metrics get the conventional ``val/`` prefix so they group
-    together in the MLflow UI; other datasets keep ``dataset_metric``.
+    Validation and training metrics get the conventional ``val/`` / ``train/``
+    prefixes so they group together in the MLflow UI; other datasets keep
+    ``dataset_metric``.
     """
     if dataset_name.lower() in {"validation", "valid", "val"}:
         return f"val/{metric_name}"
+    if dataset_name.lower() in {"train", "training"}:
+        return f"train/{metric_name}"
     return f"{dataset_name}_{metric_name}"
 
 
@@ -109,6 +112,7 @@ class _MetricLogger:
     def _log_console_line(
         self, iteration: int, parsed: list[tuple[str, str, float, bool]]
     ) -> None:
+        multiple = len(parsed) > 1
         parts: list[str] = []
         for dataset_name, metric_name, value, higher in parsed:
             key = _metric_key(dataset_name, metric_name)
@@ -121,8 +125,9 @@ class _MetricLogger:
                 best_value, best_iter = value, iteration
 
             if iteration % self._console_every == 0 or is_best:
+                label = f"{dataset_name}:{metric_name}" if multiple else metric_name
                 parts.append(
-                    f"{metric_name}={value:.4f} (best {best_value:.4f} @ {best_iter})"
+                    f"{label}={value:.4f} (best {best_value:.4f} @ {best_iter})"
                 )
 
         if parts:
@@ -158,14 +163,23 @@ class IterationCallback(_MetricLogger):
         if self._log_console:
             self._log_console_line(iteration, parsed)
 
-    def as_xgboost(self) -> XGBoostIterationCallback:
-        """Return an equivalent callback for the XGBoost >= 3.x protocol."""
+    def as_xgboost(
+        self, name_map: dict[str, str] | None = None
+    ) -> XGBoostIterationCallback:
+        """Return an equivalent callback for the XGBoost >= 3.x protocol.
+
+        ``name_map`` maps XGBoost's auto-generated eval names (``validation_0``,
+        ``validation_1``, ...) to their logical dataset names (``validation``,
+        ``train``). Required when more than one eval set is passed, otherwise
+        every dataset would normalize to ``validation``.
+        """
         return XGBoostIterationCallback(
             log_mlflow=self._log_mlflow,
             log_dvclive=self._live is not None,
             log_console=self._log_console,
             console_every=self._console_every,
             mlflow_every=self._mlflow_every,
+            name_map=name_map,
         )
 
 
@@ -184,6 +198,7 @@ class XGBoostIterationCallback(_MetricLogger, TrainingCallback):
         log_console: bool = False,
         console_every: int = 50,
         mlflow_every: int = 1,
+        name_map: dict[str, str] | None = None,
     ):
         _MetricLogger.__init__(
             self,
@@ -194,11 +209,16 @@ class XGBoostIterationCallback(_MetricLogger, TrainingCallback):
             mlflow_every=mlflow_every,
         )
         TrainingCallback.__init__(self)
+        self._name_map = name_map
 
     def after_iteration(self, model: Any, epoch: int, evals_log: dict) -> bool:
         parsed: list[tuple[str, str, float, bool]] = []
         for data_name, metrics in evals_log.items():
-            dataset_name = _normalize_dataset_name(data_name)
+            dataset_name = (
+                self._name_map.get(data_name)
+                if self._name_map
+                else _normalize_dataset_name(data_name)
+            )
             for metric_name, values in metrics.items():
                 if not values:
                     continue
