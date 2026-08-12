@@ -36,6 +36,21 @@ stages:
           - early_stopping
     outs:
       - models/pipeline.joblib
+    metrics:
       - dvclive/metrics.json:
           cache: false
-      - dvclive/plots
+    plots:
+      - dvclive/plots/metrics:
+          cache: false
+      - dvclive/plots/sklearn/roc/train.json:
+          template: simple
+          x: fpr
+          y: tpr
+      - dvclive/plots/sklearn/prc/train.json:
+          template: simple
+          x: recall
+          y: precision
+      - dvclive/plots/sklearn/calibration_curve/train.json:
+          template: simple
+          x: prob_pred
+          y: prob_true
