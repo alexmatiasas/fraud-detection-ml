@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 import mlflow
+from xgboost.callback import TrainingCallback
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,22 @@ def _metric_key(dataset_name: str, metric_name: str) -> str:
     return f"{dataset_name}_{metric_name}"
 
 
-class IterationCallback:
+def _normalize_dataset_name(data_name: str) -> str:
+    """Map xgboost's auto-generated ``validation_0`` to ``validation``."""
+    if len(data_name) >= 2 and data_name[-2] == "_" and data_name[-1].isdigit():
+        return data_name[:-2]
+    return data_name
+
+
+class IterationCallback(TrainingCallback):
     """Logs per-iteration validation metrics to MLflow, DVCLive and/or console.
 
-    Compatible with both LightGBM and XGBoost callback APIs.
-    LightGBM env.evaluation_result_list: (dataset, metric, value, higher_better)
-    XGBoost  env.evaluation_result_list: (dataset, metric, value)
+    Supports both framework callback protocols:
+      * LightGBM calls plain callables — ``__call__(env)`` reads
+        ``env.evaluation_result_list`` (dataset, metric, value, higher_better).
+      * XGBoost >= 3.x requires ``TrainingCallback`` subclasses passed via the
+        estimator constructor — ``after_iteration(model, epoch, evals_log)``
+        reads the ``evals_log`` dict.
 
     Args:
         log_mlflow: Log metrics to the active MLflow run.
@@ -62,6 +73,7 @@ class IterationCallback:
         console_every: int = 50,
         mlflow_every: int = 1,
     ):
+        super().__init__()
         self._log_mlflow = log_mlflow
         self._log_console = log_console
         self._console_every = max(1, console_every)
@@ -90,27 +102,47 @@ class IterationCallback:
                 continue
 
             parsed.append((dataset_name, metric_name, float(value), bool(higher)))
-            key = _metric_key(dataset_name, metric_name)
-
-            if (
-                self._log_mlflow
-                and iteration % self._mlflow_every == 0
-                and mlflow.active_run() is not None
-            ):
-                try:
-                    mlflow.log_metric(key, value, step=iteration)
-                except Exception:
-                    pass
-
-            if self._live is not None:
-                try:
-                    self._live.log_metric(key, value)
-                    self._live.next_step()
-                except Exception:
-                    pass
+            self._log_metric(dataset_name, metric_name, float(value), iteration)
 
         if self._log_console:
             self._log_console_line(iteration, parsed)
+
+    def after_iteration(self, model: Any, epoch: int, evals_log: dict) -> bool:
+        parsed: list[tuple[str, str, float, bool]] = []
+        for data_name, metrics in evals_log.items():
+            dataset_name = _normalize_dataset_name(data_name)
+            for metric_name, values in metrics.items():
+                if not values:
+                    continue
+                value = float(values[epoch])
+                parsed.append((dataset_name, metric_name, value, True))
+                self._log_metric(dataset_name, metric_name, value, epoch + 1)
+
+        if self._log_console:
+            self._log_console_line(epoch + 1, parsed)
+        return False
+
+    def _log_metric(
+        self, dataset_name: str, metric_name: str, value: float, step: int
+    ) -> None:
+        key = _metric_key(dataset_name, metric_name)
+
+        if (
+            self._log_mlflow
+            and step % self._mlflow_every == 0
+            and mlflow.active_run() is not None
+        ):
+            try:
+                mlflow.log_metric(key, value, step=step)
+            except Exception:
+                pass
+
+        if self._live is not None:
+            try:
+                self._live.log_metric(key, value)
+                self._live.next_step()
+            except Exception:
+                pass
 
     def close(self) -> None:
         if self._live is not None:

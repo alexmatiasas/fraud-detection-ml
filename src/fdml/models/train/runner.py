@@ -324,22 +324,16 @@ def _fit_model(
             ],
         )
     elif isinstance(model, xgb.XGBClassifier):
-        model.fit(
-            X_train,
-            y_train,
-            eval_set=eval_set,
-            eval_metric=cfg.early_stopping.eval_metric,
-            verbose=False,
-            callbacks=[
-                xgb.callback.EarlyStopping(
-                    cfg.early_stopping.rounds,
-                    metric_name=cfg.early_stopping.eval_metric,
-                    maximize=True,
-                    save_best=True,
-                ),
-                *(callbacks or []),
-            ],
-        )
+        # XGBoost >= 3.x sklearn API: early stopping, eval_metric and callbacks
+        # are estimator constructor params, not fit() kwargs.
+        xgb_kwargs: dict[str, Any] = {
+            "eval_metric": cfg.early_stopping.eval_metric,
+            "early_stopping_rounds": cfg.early_stopping.rounds,
+        }
+        if callbacks:
+            xgb_kwargs["callbacks"] = callbacks
+        model.set_params(**xgb_kwargs)
+        model.fit(X_train, y_train, eval_set=eval_set, verbose=False)
     else:
         model.fit(X_train, y_train)
     return model
@@ -615,8 +609,6 @@ def main() -> None:
         if cfg.mlflow.experiment_tag:
             mlflow.set_tag("experiment", cfg.mlflow.experiment_tag)
             mlflow.log_param("experiment", cfg.mlflow.experiment_tag)
-
-        from fdml.features.factory import load_features_config
 
         features_hash = features_fingerprint(load_features_config())
         mlflow.set_tag("features_hash", features_hash)
