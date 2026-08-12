@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -30,6 +31,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from mlflow import MlflowClient  # noqa: E402
+from rich.console import Console  # noqa: E402
+from rich.table import Table  # noqa: E402
 from scipy import stats  # noqa: E402
 from sklearn.metrics import average_precision_score, roc_auc_score  # noqa: E402
 
@@ -44,6 +47,11 @@ from fdml.models.config import load_mlflow_config, resolve_mlflow_tracking
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+
+# Download artifacts silently (no tqdm "Downloading artifacts" bars).
+os.environ.setdefault("MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR", "false")
+
+console = Console(width=160)
 
 
 def _complete_rows(runs, dedupe: bool) -> list[dict]:
@@ -138,13 +146,13 @@ def _mean_curve(
     grid_values = np.full((len(curves), len(grid)), np.nan)
     for i, (_seed, (iters, vals)) in enumerate(curves.items()):
         grid_values[i, np.searchsorted(grid, iters)] = vals
-    mean = np.nanmean(grid_values, axis=0)
-    std = np.where(
-        np.sum(~np.isnan(grid_values), axis=0) >= 2,
-        np.nanstd(grid_values, axis=0, ddof=1),
-        np.nan,
-    )
     n = np.sum(~np.isnan(grid_values), axis=0)
+    mean = np.full(len(grid), np.nan)
+    has_data = n > 0
+    mean[has_data] = np.nanmean(grid_values[:, has_data], axis=0)
+    std = np.full(len(grid), np.nan)
+    has_std = has_data & (n >= 2)
+    std[has_std] = np.nanstd(grid_values[:, has_std], axis=0, ddof=1)
     return mean, std, max(n, default=0)
 
 
@@ -204,6 +212,12 @@ def _plot_learning_curves(
     )
     ax.axvline(ctrl_iter, color="C0", ls="--", lw=1, alpha=0.5)
     ax.axvline(cand_iter, color="C1", ls="--", lw=1, alpha=0.5)
+    c_peak = int(np.nanargmax(c_mean))
+    k_peak = int(np.nanargmax(k_mean))
+    ax.plot(grid[c_peak], c_mean[c_peak], "o", color="C0", ms=5)
+    ax.plot(grid[k_peak], k_mean[k_peak], "o", color="C1", ms=5)
+    ax.plot([], [], ls="--", color="0.5", lw=1, label="mean best_iteration")
+    ax.plot([], [], "o", color="0.5", ms=5, label="peak of mean curve")
 
     ax.set_xlabel("iteration (ES eval set, 20k rows, mlflow_every=10)")
     ax.set_ylabel("val AUC")
@@ -271,48 +285,93 @@ def main() -> None:
     pairs = _pair_by_seed(control_rows, cand_rows)
     deltas = [(c, k, k["val/roc_auc"] - c["val/roc_auc"]) for c, k in pairs]
 
+    deltas_auc = np.array([d for _, _, d in deltas])
+    n = len(deltas_auc)
+    mean_d = deltas_auc.mean()
+
+    if n >= 2:
+        std_d = deltas_auc.std(ddof=1)
+        t_stat, p_two = stats.ttest_rel(
+            np.array([k["val/roc_auc"] for _, k, _ in deltas]),
+            np.array([c["val/roc_auc"] for c, _, _ in deltas]),
+        )
+        p_one = p_two / 2 if t_stat > 0 else 1 - p_two / 2
+        pos = int(np.sum(deltas_auc > 0))
+        sign_p = stats.binomtest(pos, n, alternative="greater").pvalue
+        sigma_ctrl = np.std([c["val/roc_auc"] for c, _, _ in deltas], ddof=1)
+
+    ctrl_bag = _bagged(client, control_rows)
+    cand_bag = _bagged(client, cand_rows)
+
     print(f"\nControl   : {ctrl_label}  (N={len(control_rows)})")
     print(f"Candidate : {cand_label}  (N={len(cand_rows)})")
     print(f"Paired seeds: {', '.join(c['seed'] for c, _, _ in deltas)}\n")
 
-    print("  seed   control_auc   cand_auc      delta")
+    table = Table(
+        header_style="bold", show_lines=False, pad_edge=False, title="paired by seed"
+    )
+    table.add_column("seed", justify="right")
+    table.add_column("control_auc", justify="right")
+    table.add_column("cand_auc", justify="right")
+    table.add_column("delta", justify="right")
     for c, k, d in deltas:
-        print(
-            f"  {c['seed']:>4}   {c['val/roc_auc']:.5f}   {k['val/roc_auc']:.5f}   {d:+.5f}"
+        table.add_row(
+            str(c["seed"]),
+            f"{c['val/roc_auc']:.5f}",
+            f"{k['val/roc_auc']:.5f}",
+            f"{d:+.5f}",
         )
+    console.print(table)
 
-    deltas_auc = np.array([d for _, _, d in deltas])
-    n = len(deltas_auc)
-    mean_d = deltas_auc.mean()
-    std_d = deltas_auc.std(ddof=1)
-    t_stat, p_two = stats.ttest_rel(
-        np.array([k["val/roc_auc"] for _, k, _ in deltas]),
-        np.array([c["val/roc_auc"] for c, _, _ in deltas]),
+    stats_table = Table(
+        header_style="bold",
+        show_lines=False,
+        pad_edge=False,
+        title=(
+            "paired hypothesis test (H0: mean Δ ≤ 0)"
+            if n >= 2
+            else "paired by seed (stats need ≥2 seeds)"
+        ),
     )
-    p_one = p_two / 2 if t_stat > 0 else 1 - p_two / 2
-    pos = int(np.sum(deltas_auc > 0))
-    sign_p = stats.binomtest(pos, n, alternative="greater").pvalue
+    stats_table.add_column("metric", no_wrap=True)
+    stats_table.add_column("value", justify="right")
+    if n >= 2:
+        for key, value in (
+            ("mean Δ", f"{mean_d:+.5f}"),
+            ("std Δ", f"{std_d:.5f}"),
+            ("SE", f"{std_d / np.sqrt(n):.5f}"),
+            (f"paired t({n - 1})", f"{t_stat:.2f}"),
+            ("p (1-sided)", f"{p_one:.4f}"),
+            ("p (2-sided)", f"{p_two:.4f}"),
+            ("sign test", f"{pos}/{n} seeds improved (p={sign_p:.4f})"),
+            ("noise floor σ (control)", f"{sigma_ctrl:.5f}"),
+            ("mean Δ in σ units", f"{mean_d / sigma_ctrl:+.2f}σ"),
+        ):
+            stats_table.add_row(key, value)
+    else:
+        stats_table.add_row("mean Δ", f"{mean_d:+.5f}")
+        stats_table.add_row("note", "add seeds so the paired t-test / σ are computable")
+    console.print(stats_table)
 
-    print("\nPaired deltas (candidate − control, by seed):")
-    print(f"  mean Δ = {mean_d:+.5f}  std = {std_d:.5f}  SE = {std_d / np.sqrt(n):.5f}")
-    print(
-        f"  paired t({n - 1}) = {t_stat:.2f}   p(1-sided) = {p_one:.4f}  p(2-sided) = {p_two:.4f}"
-    )
-    print(f"  sign test: {pos}/{n} seeds improved → p(1-sided) = {sign_p:.4f}")
-    print(
-        f"  noise floor σ (control across seeds) = {np.std([c['val/roc_auc'] for c, _, _ in deltas], ddof=1):.5f}"
-    )
-    print(
-        f"  mean Δ in σ units = {mean_d / np.std([c['val/roc_auc'] for c, _, _ in deltas], ddof=1):+.2f}σ"
-    )
-
-    ctrl_bag = _bagged(client, control_rows)
-    cand_bag = _bagged(client, cand_rows)
     if ctrl_bag and cand_bag:
-        print("\nSeed-bagged (mean of val_proba, N>=2):")
-        print(f"  {ctrl_label:34s} AUC={ctrl_bag[0]:.5f}  AP={ctrl_bag[1]:.5f}")
-        print(f"  {cand_label:34s} AUC={cand_bag[0]:.5f}  AP={cand_bag[1]:.5f}")
-        print(f"  Δ AUC = {cand_bag[0] - ctrl_bag[0]:+.5f}")
+        bag_table = Table(
+            header_style="bold",
+            show_lines=False,
+            pad_edge=False,
+            title="seed-bagged (mean of val_proba, N≥2)",
+        )
+        bag_table.add_column("group", no_wrap=True)
+        bag_table.add_column("auc", justify="right")
+        bag_table.add_column("ap", justify="right")
+        bag_table.add_column("Δ auc", justify="right")
+        bag_table.add_row(ctrl_label, f"{ctrl_bag[0]:.5f}", f"{ctrl_bag[1]:.5f}", "—")
+        bag_table.add_row(
+            cand_label,
+            f"{cand_bag[0]:.5f}",
+            f"{cand_bag[1]:.5f}",
+            f"{cand_bag[0] - ctrl_bag[0]:+.5f}",
+        )
+        console.print(bag_table)
 
     _plot_learning_curves(
         client, control_rows, cand_rows, ctrl_label, cand_label, Path(args.plot)
