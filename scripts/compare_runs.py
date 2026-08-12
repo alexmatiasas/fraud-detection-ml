@@ -62,6 +62,7 @@ METRICS = ["val/roc_auc", "val/average_precision", "val/f1_best", "val/best_iter
 _NON_CONFIG_PARAMS = {
     "seed",
     "experiment",
+    "variant",
     "random_state",
     "train_dt_min",
     "train_dt_max",
@@ -146,11 +147,16 @@ def _variant_label(run, varying_keys: list[str], baseline: dict[str, str]) -> st
 def _run_row(run, varying_keys: list[str], baseline: dict[str, str]) -> dict:
     m, p, t = run.data.metrics, run.data.params, run.data.tags
     best_iter = m.get("val/best_iteration")
+    explicit_variant = p.get("variant")
     return {
         "run_id": run.info.run_id,
         "run_name": p.get("run_name", run.info.run_name),
-        "variant": _variant(run, varying_keys, baseline),
-        "variant_label": _variant_label(run, varying_keys, baseline),
+        "variant": explicit_variant or _variant(run, varying_keys, baseline),
+        "variant_label": (
+            explicit_variant
+            if explicit_variant
+            else _variant_label(run, varying_keys, baseline)
+        ),
         "seed": p.get("seed", ""),
         "n_train": t.get("n_train", ""),
         "n_val": t.get("n_val", ""),
