@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.selector import FeatureSelector
+from fdml.features.selector import FeatureSelector
 
 
 class TestFeatureSelector:

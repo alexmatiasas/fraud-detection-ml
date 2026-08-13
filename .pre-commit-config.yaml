@@ -32,6 +32,7 @@ repos:
       - id: name-tests-test
         args: [--pytest-test-first]
       - id: pretty-format-json
+        exclude: ^schemas/
         args:
           - --autofix
       - id: check-ast

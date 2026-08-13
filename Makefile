@@ -1,4 +1,4 @@
-.PHONY: help setup install lint test train serve docker-build clean
+.PHONY: help setup install lint test train ablation serve docker-build clean
 
 # Variables
 PYTHON := uv run python
@@ -16,7 +16,7 @@ install:  ## Instala dependencias con uv
 	uv sync --extra dev
 
 hooks:  ## Instala pre-commit hooks
-	uv run pre-commit install --hook-type commit-msg --hook-type pre-commit
+	uv run prek install --hook-type commit-msg --hook-type pre-commit
 
 ## ── Calidad de código ────────────────────────────────────────────────────────
 lint:  ## Linting con ruff
@@ -45,26 +45,42 @@ data-convert:  ## Convierte CSVs a Parquet con tipos optimizados
 
 ## ── Config schemas ────────────────────────────────────────────────────────────
 schemas:  ## Genera JSON Schema desde modelos Pydantic
-	$(PYTHON) -m src.schemas.generate
+	$(PYTHON) -m fdml.schemas.generate
 
 .PHONY: schemas
 
-## ── Pipeline ─────────────────────────────────────────────────────────────────
-features:  ## Construye features desde datos procesados
-	$(PYTHON) -m src.features.build_features
+## ── DVC Pipeline ────────────────────────────────────────────────────────────
+dvc-repro:  ## Corre el pipeline completo con DVC
+	uv run dvc repro
 
-train:  ## Entrena modelo con config por defecto
-	$(PYTHON) -m src.models.train
+dvc-exp-run:  ## Corre experimento DVC (comparable con dvc exp show)
+	uv run dvc exp run
 
-train-config:  ## Entrena con config específica (uso: make train-config CONFIG=configs/lgbm.yaml)
-	$(PYTHON) -m src.models.train --config $(CONFIG)
+dvc-exp-show:  ## Muestra tabla comparativa de experimentos
+	uv run dvc exp show
+
+dvc-metrics-diff:  ## Compara métricas entre experimentos
+	uv run dvc metrics diff
+
+dvc-plots-diff:  ## Compara plots entre experimentos (abrir HTML)
+	uv run dvc plots diff
+
+## ── Pipeline (directo, sin DVC) ─────────────────────────────────────────────
+train:  ## Entrena modelo (pasa args via ARGS: make train ARGS="model.name=xgboost")
+	$(PYTHON) -m fdml.models.train $(ARGS)
+
+ablation:  ## Feature ablation study (leave-one-group-out, ver make train ablation.enabled=true)
+	$(PYTHON) -m fdml.models.train.ablation $(ARGS)
+
+evaluate:  ## Evaluación completa (métricas, plots, model card)
+	$(PYTHON) -m fdml.models.evaluate
 
 ## ── API ──────────────────────────────────────────────────────────────────────
 serve:  ## Levanta la API localmente
-	uv run uvicorn src.api.main:app --reload --port 8000
+	uv run uvicorn fdml.api.main:app --reload --port 8000
 
 serve-prod:  ## Levanta la API en modo producción
-	uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2
+	uv run uvicorn fdml.api.main:app --host 0.0.0.0 --port 8000 --workers 2
 
 ## ── MLflow ───────────────────────────────────────────────────────────────────
 mlflow-ui:  ## Abre MLflow UI
@@ -72,10 +88,10 @@ mlflow-ui:  ## Abre MLflow UI
 
 ## ── Docker ───────────────────────────────────────────────────────────────────
 docker-build:  ## Construye imagen Docker (sin datos)
-	docker build -t fraud-detection-ml:latest .
+	docker build -t fdml:latest .
 
 docker-run:  ## Corre el contenedor de la API
-	docker run -p 8000:8000 fraud-detection-ml:latest
+	docker run -p 8000:8000 fdml:latest
 
 ## ── Limpieza ─────────────────────────────────────────────────────────────────
 clean:  ## Limpia caches y archivos temporales
@@ -86,5 +102,5 @@ clean:  ## Limpia caches y archivos temporales
 	@echo "Limpieza completada"
 
 clean-data:  ## Elimina datos procesados (conserva raw)
-	rm -rf data/processed/* data/features/*
-	touch data/processed/.gitkeep data/features/.gitkeep
+	rm -rf data/processed/*
+	touch data/processed/.gitkeep

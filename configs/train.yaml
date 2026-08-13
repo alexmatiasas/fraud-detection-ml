@@ -1,4 +1,4 @@
-$schema: ../schemas/train.schema.json
+# $schema: ../schemas/train.schema.json
 # ── Reproducibilidad ──────────────────────────────────────────────────────────
 seed: 42
 
@@ -11,18 +11,25 @@ data:
   train_identity: data/raw/train_identity.parquet
   test_transaction: data/raw/test_transaction.parquet
   test_identity: data/raw/test_identity.parquet
+  # Cap del fold de train a las primeras N filas por tiempo (0 = todas).
+  # Para experimentos rápidos (Fase A/B): 200000 deja el val intacto.
+  max_train_rows: 0
 
 # ── Split ─────────────────────────────────────────────────────────────────────
 # Usamos split temporal, no aleatorio — crítico para fraude
 # Los datos de train son anteriores a los de test en la competencia
 split:
-  strategy: temporal      # "temporal" | "random"
+  strategy: temporal
   time_col: TransactionDT
   test_size: 0.2
+  # Embargo: hueco temporal (segundos) descartado entre train y validation
+  # para evitar leakage de features agregadas (card_*, frecuencias). El gap
+  # real train->test de la competencia es ~30 días; 2 días es conservador.
+  embargo_seconds: 172800
 
 # ── Modelo ────────────────────────────────────────────────────────────────────
 model:
-  name: lightgbm          # "lightgbm" | "xgboost" | "logistic_regression"
+  name: lightgbm
   artifact_dir: models/
 
   # Hiperparámetros base (Optuna los optimiza partiendo de aquí)
@@ -42,42 +49,56 @@ model:
 
 # ── Optuna HPO ────────────────────────────────────────────────────────────────
 optuna:
-  enabled: false           # true para correr HPO completo
+  enabled: false
   n_trials: 50
   timeout_seconds: 3600
-  metric: roc_auc          # métrica a optimizar
+  metric: roc_auc
   direction: maximize
   study_name: fraud_lgbm_v1
+  save_best_params: true
 
 # ── Early stopping ────────────────────────────────────────────────────────────
 early_stopping:
   enabled: true
   rounds: 100
   eval_metric: auc
+  # Subconjunto fijo y estratificado del fold de validación usado SOLO para
+  # early stopping y la curva val/auc por iteración (métricas finales se
+  # calculan sobre el val completo). Eval de AUC en 118k filas cuesta ~4s/iter;
+  # con 20k filas baja a <1s. 0 = fold completo.
+  eval_max_rows: 20000
 
-# ── Métricas de evaluación ────────────────────────────────────────────────────
-# Para fraude: accuracy es INÚTIL (96.5% baseline).
-# Average Precision (PR AUC) > ROC AUC > F2.
-evaluation:
-  metrics:
-    - roc_auc             # métrica principal de la competencia
-    - average_precision   # AUC-PR: más informativa en clases desbalanceadas
-    - f1_score
-    - precision
-    - recall
-  threshold: 0.5
+  # Muestra fija y aleatoria de filas de TRAIN usada SOLO para la curva
+  # train/auc por iteración (ver overfitting vs validation). El modelo sigue
+  # entrenando sobre el train completo. 0 = desactivado.
+  train_eval_max_rows: 50000
+
+# ── Training callbacks (per-iteration logging) ──────────────────────────────
+training_callbacks:
+  log_per_iteration: true
+  # Cada log_metric remoto a DagsHub cuesta ~1.5s; cada 10 iteraciones la curva
+  # val/auc sigue siendo legible y los experimentos corren ~10x más rápido.
+  mlflow_every: 10
+  dvclive: false
 
 # ── MLflow ────────────────────────────────────────────────────────────────────
+# Minimal config for train.py. Full config in configs/mlflow.yaml.
 mlflow:
   experiment_name: fraud-detection
   run_name: lgbm_baseline
-  tracking_uri: mlruns/    # train.py lo sobreescribe con dagshub.init() si hay .env
   log_model: true
-  log_feature_importance: true
-  log_shap: true           # SHAP values para explicabilidad
+  # Etiqueta de grupo de experimento (A_baseline, B_reg, ...). Vacío = sin tag.
+  # Se loguea como tag 'experiment' y se usa para filtrar runs en compare_runs.py.
+  experiment_tag: ""
 
-# ── SHAP ──────────────────────────────────────────────────────────────────────
-shap:
-  enabled: true
-  max_display: 20          # top N features en el summary plot
-  sample_size: 1000        # muestra para SHAP (dataset completo es lento)
+# ── Feature ablation study ────────────────────────────────────────────────────
+# Leave-one-group-out: fixed model params (no Optuna), same temporal split for
+# every variant. Compares AUC/AP of the full feature set against each variant
+# with one engineered/selection group toggled OFF. Set enabled: true and run
+# `make train`. Each variant × seed becomes one MLflow run (tag D_ablation).
+# max_train_rows caps the training set (temporal order kept).
+ablation:
+  enabled: false
+  max_train_rows: 0
+  seeds: [40, 41, 42]
+  report_path: models/feature_ablation.csv

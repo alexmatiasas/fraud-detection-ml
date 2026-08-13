@@ -1,9 +1,10 @@
+import numpy as np
 import pandas as pd
 from hypothesis import given
-from hypothesis.extra.pandas import data_frames, column, range_indexes
+from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.strategies import integers
 
-from src.features.time import TimeFeatureExtractor
+from fdml.features.time import TimeFeatureExtractor
 
 
 class TestTimeFeatures:
@@ -18,6 +19,30 @@ class TestTimeFeatures:
     def test_day_of_month(self, sample_df: pd.DataFrame):
         result = TimeFeatureExtractor().transform(sample_df)
         assert list(result["day_of_month"]) == [0, 1, 2, 0]
+
+
+class TestCyclicEncoding:
+    def test_sin_cos_columns_created(self, sample_df: pd.DataFrame):
+        result = TimeFeatureExtractor().transform(sample_df)
+        for feature in ("hour_of_day", "day_of_week", "day_of_month"):
+            assert f"{feature}_sin" in result.columns
+            assert f"{feature}_cos" in result.columns
+
+    def test_wrap_continuity(self):
+        df = pd.DataFrame({"TransactionDT": [23 * 3600, 1 * 3600]})
+        result = TimeFeatureExtractor(use_dow=False, use_dom=False).transform(df)
+        assert np.isclose(
+            result["hour_of_day_cos"].iloc[0], result["hour_of_day_cos"].iloc[1]
+        )
+        assert np.isclose(
+            result["hour_of_day_sin"].iloc[0], -result["hour_of_day_sin"].iloc[1]
+        )
+
+    def test_sin_cos_disabled_omits_columns(self, sample_df: pd.DataFrame):
+        result = TimeFeatureExtractor(use_sin_cos=False).transform(sample_df)
+        assert "hour_of_day" in result.columns
+        assert "hour_of_day_sin" not in result.columns
+        assert "hour_of_day_cos" not in result.columns
 
 
 class TestPartialUsage:

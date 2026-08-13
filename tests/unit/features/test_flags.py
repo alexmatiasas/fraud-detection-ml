@@ -1,9 +1,9 @@
 import pandas as pd
-from hypothesis import given, assume
-from hypothesis.extra.pandas import data_frames, column, range_indexes
-from hypothesis.strategies import sampled_from, one_of, none
+from hypothesis import assume, given
+from hypothesis.extra.pandas import column, data_frames, range_indexes
+from hypothesis.strategies import none, one_of, sampled_from
 
-from src.features.flags import MFlagEncoder
+from fdml.features.flags import MFlagEncoder
 
 
 class TestBinaryMFlags:

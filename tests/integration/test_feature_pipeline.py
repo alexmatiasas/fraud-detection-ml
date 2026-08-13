@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from sklearn.pipeline import Pipeline
 
-from src.features.factory import create_pipeline, load_config
+from fdml.features.factory import create_pipeline, load_fe_config
 
 _NROWS = 200
 _RNG = np.random.default_rng(42)
@@ -11,7 +11,7 @@ _RNG = np.random.default_rng(42)
 
 @pytest.fixture(scope="module")
 def cfg():
-    return load_config()
+    return load_fe_config()
 
 
 @pytest.fixture(scope="module")
@@ -66,6 +66,27 @@ def raw_df() -> pd.DataFrame:
                 "object"
             ),
             "id_03": _RNG.uniform(0, 1, n).round(4),
+            "id_30": _RNG.choice(
+                ["Windows 10", "Windows 7", "iOS 11.2.1", "Android 7.0", None],
+                n,
+                p=[0.3, 0.25, 0.2, 0.15, 0.1],
+            ),
+            "id_31": _RNG.choice(
+                [
+                    "chrome 63.0",
+                    "mobile safari 11.0",
+                    "ie 11.0 for desktop",
+                    "opera",
+                    None,
+                ],
+                n,
+                p=[0.35, 0.3, 0.2, 0.1, 0.05],
+            ),
+            "id_33": _RNG.choice(
+                ["1920x1080", "1366x768", "1334x750", None],
+                n,
+                p=[0.4, 0.3, 0.2, 0.1],
+            ),
             # ── M flags ─────────────────────────────────────
             "M1": _RNG.choice(["T", "F", None], n),
             "M2": _RNG.choice(["T", "F", None], n),
@@ -140,7 +161,10 @@ class TestEngineeredFeatures:
 
     def test_m4_preserved_as_category(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
-        assert isinstance(X["M4"].dtype, pd.CategoricalDtype)
+        # M4 stays categorical through the mflags step (M0/M1/M2/None) and is
+        # ordinal-encoded by the pipeline's `categories` step into int32 codes.
+        assert X["M4"].dtype.name == "int32"
+        assert set(X["M4"].unique()) == {0, 1, 2, 3}
 
     def test_hour_of_day_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
@@ -151,6 +175,42 @@ class TestEngineeredFeatures:
         X = pipeline.fit_transform(raw_df)
         freq_cols = [c for c in X.columns if c.endswith("_freq")]
         assert len(freq_cols) >= 3
+
+    def test_numeric_code_freq_not_created(
+        self, pipeline: Pipeline, raw_df: pd.DataFrame
+    ):
+        X = pipeline.fit_transform(raw_df)
+        assert "card3_freq" not in X.columns
+        assert "addr2_freq" not in X.columns
+
+    def test_identity_ua_freq_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "id_30_freq" in X.columns
+        assert "id_31_freq" in X.columns
+        assert "id_33_freq" in X.columns
+
+    def test_d2_dropped(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "D2" not in X.columns
+
+    def test_has_identity_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "has_identity" in X.columns
+        assert set(X["has_identity"].unique()) <= {0, 1}
+
+    def test_amount_features_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "TransactionAmt_log" in X.columns
+        assert "is_round_amount" in X.columns
+
+    def test_cyclic_encoding_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "hour_of_day_sin" in X.columns
+        assert "hour_of_day_cos" in X.columns
+
+    def test_email_match_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
+        X = pipeline.fit_transform(raw_df)
+        assert "p_r_domain_match" in X.columns
 
     def test_card_aggregation_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
@@ -186,7 +246,11 @@ class TestFeatureToggle:
         p, _ = create_pipeline(cfg)
         p.set_params(mflags__enabled=False)
         X = p.fit_transform(raw_df)
-        assert X["M1"].dtype.name == "object"  # still T/F/None
+        # The flags step is off, so raw T/F/None survive to the `categories`
+        # step, which ordinal-encodes the raw strings (3 codes) instead of the
+        # binary T→1/F→0/NaN→-1 mapping.
+        assert X["M1"].dtype.name == "int32"
+        assert set(X["M1"].unique()) == {0, 1, 2}
 
 
 class TestTrainTestConsistency:

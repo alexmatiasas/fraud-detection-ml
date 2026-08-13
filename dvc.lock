@@ -37,8 +37,8 @@ stages:
       md5: 43b41ede9e8aeb0d224f61ff795f4abc.dir
       size: 157449730
       nfiles: 6
-  features:
-    cmd: uv run python -m src.features.build_features
+  train:
+    cmd: uv run python -m fdml.models.train
     deps:
     - path: configs/data.yaml
       hash: md5
@@ -46,164 +46,80 @@ stages:
       size: 500
     - path: configs/features.yaml
       hash: md5
-      md5: 5b0a69e77ec57a4fc9a343a762958eb4
-      size: 4675
+      md5: d7b0b259521a3b2913378bd8e91bdd94
+      size: 7099
+    - path: configs/train.yaml
+      hash: md5
+      md5: 0b084876e631c9202b25b15105d145f6
+      size: 5078
     - path: data/processed
       hash: md5
       md5: 43b41ede9e8aeb0d224f61ff795f4abc.dir
       size: 157449730
       nfiles: 6
-    - path: src/features/
+    - path: src/fdml/features/
       hash: md5
-      md5: 573258259d4ca8ceb43390ae0d99aed0.dir
-      size: 88624
-      nfiles: 35
-    - path: src/schemas/
+      md5: fd047ce48c1fa66a16f8ea34ca012388.dir
+      size: 99407
+      nfiles: 34
+    - path: src/fdml/models/
       hash: md5
-      md5: 82b78de0ede1325deefbbe647ca37355.dir
-      size: 41586
-      nfiles: 10
+      md5: db42a10181475f8ef7f58786fc50fb37.dir
+      size: 320882
+      nfiles: 42
+    - path: src/fdml/schemas/
+      hash: md5
+      md5: 5f71066b57bbe59204b8e99c01bf1e17.dir
+      size: 78379
+      nfiles: 14
     params:
-      configs/data.yaml:
-        features_dir: ${base_dir}/features
-        processed_dir: ${base_dir}/processed
-      configs/features.yaml:
-        encoding:
-          low_cardinality_max_values: 50
-          high_cardinality_strategy: frequency
-          match_flags_encoding:
-            T: 1
-            F: 0
-            nan: -1
-        engineered:
-          datetime:
-          - hour_of_day
-          - day_of_week
-          - day_of_month
-          device_os: true
-          device_brand: true
-          card_aggregations:
-            group_by:
-            - card1
-            - card2
-            - card3
-            - card5
-            aggregations:
-              TransactionAmt:
-              - mean
-              - std
-              - max
-              - count
-          frequency_encoding:
-          - P_emaildomain
-          - R_emaildomain
-          - DeviceInfo
-          - card1
-        identity:
-          categorical:
-          - DeviceType
-          - DeviceInfo
-          id_features:
-          - id_01
-          - id_02
-          - id_03
-          - id_04
-          - id_05
-          - id_06
-          - id_07
-          - id_08
-          - id_09
-          - id_10
-          - id_11
-          - id_12
-          - id_13
-          - id_14
-          - id_15
-          - id_16
-          - id_17
-          - id_18
-          - id_19
-          - id_20
-          - id_21
-          - id_22
-          - id_23
-          - id_24
-          - id_25
-          - id_26
-          - id_27
-          - id_28
-          - id_29
-          - id_30
-          - id_31
-          - id_32
-          - id_33
-          - id_34
-          - id_35
-          - id_36
-          - id_37
-          - id_38
-        imputation:
-          numerical: -999
-          categorical: missing
-        transaction:
-          target: isFraud
-          numerical:
-          - TransactionAmt
-          - TransactionDT
-          - dist1
-          - dist2
-          categorical:
-          - ProductCD
-          - card4
-          - card6
-          - P_emaildomain
-          - R_emaildomain
-          - M1
-          - M2
-          - M3
-          - M4
-          - M5
-          - M6
-          - M7
-          - M8
-          - M9
-          high_cardinality:
-          - card1
-          - card2
-          - card3
-          - card5
-          - addr1
-          - addr2
-          count_features:
-          - C1
-          - C2
-          - C4
-          - C5
-          - C6
-          - C7
-          - C8
-          - C9
-          - C10
-          - C11
-          - C12
-          - C13
-          - C14
-          delta_features:
-          - D1
-          - D2
-          - D3
-          - D4
-          - D5
-          - D10
-          - D11
-          - D15
-          vesta_features:
-            include: true
-            variance_threshold: 0.01
-            correlation_threshold: 0.95
+      configs/train.yaml:
+        early_stopping:
+          enabled: true
+          rounds: 100
+          eval_metric: auc
+          eval_max_rows: 20000
+          train_eval_max_rows: 50000
+        model:
+          name: lightgbm
+          artifact_dir: models/
+          params:
+            n_estimators: 1000
+            learning_rate: 0.05
+            max_depth: 8
+            num_leaves: 127
+            min_child_samples: 100
+            subsample: 0.8
+            colsample_bytree: 0.8
+            reg_alpha: 0.1
+            reg_lambda: 1.0
+            scale_pos_weight: 27.6
+            random_state: 42
+            n_jobs: -1
+        split:
+          strategy: temporal
+          time_col: TransactionDT
+          test_size: 0.2
+          embargo_seconds: 172800
     outs:
-    - path: data/features
+    - path: dvclive/metrics.json
       hash: md5
-      md5: 3f0702f95c927e3ac5ac7a5114a8e10f.dir
-      size: 149981596
-      nfiles: 3
+      md5: 201788bc507ed2364d1b850de3d803cf
+      size: 513
+    - path: dvclive/plots/metrics
+      hash: md5
+      md5: 68ca77d5ec903e07c6e43e1b5d940d9f.dir
+      size: 497
+      nfiles: 13
+    - path: dvclive/plots/sklearn/precision_recall.json
+      hash: md5
+      md5: b7a357820ecb6d24b23b0c5d6d6fc0d9
+      size: 17944054
+    - path: dvclive/plots/sklearn/roc.json
+      hash: md5
+      md5: 4e324cb7c767ebe70676f65f8af1ffbd
+      size: 789459
+    - path: models/pipeline.joblib
+      hash: md5
+      md5: 0e9e6dff5870cab229b0e8d2c10227f3
+      size: 6234582

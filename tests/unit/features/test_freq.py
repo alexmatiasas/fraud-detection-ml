@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.features.freq import FrequencyEncoder
+from fdml.features.freq import FrequencyEncoder
 
 
 class TestFrequencyEncoding:

@@ -2,41 +2,51 @@ stages:
   download:
     cmd: uv run python scripts/download_data.py
     outs:
-    - data/raw:
-        persist: true
+      - data/raw:
+          persist: true
     frozen: true
   prepare:
     cmd: uv run python scripts/prepare_data.py
     deps:
-    - configs/data.yaml
-    - data/raw
+      - configs/data.yaml
+      - data/raw
     params:
-    - configs/data.yaml:
-      - base_dir
-      - files
-      - join_key
-      - target
+      - configs/data.yaml:
+          - base_dir
+          - files
+          - join_key
+          - target
     outs:
-    - data/processed:
-        persist: true
-  features:
-    cmd: uv run python -m src.features.build_features
+      - data/processed:
+          persist: true
+  train:
+    cmd: uv run python -m fdml.models.train
     deps:
-    - configs/features.yaml
-    - configs/data.yaml
-    - data/processed
-    - src/features/
-    - src/schemas/
+      - configs/train.yaml
+      - configs/features.yaml
+      - configs/data.yaml
+      - src/fdml/models/
+      - src/fdml/features/
+      - src/fdml/schemas/
+      - data/processed
     params:
-    - configs/features.yaml:
-      - transaction
-      - identity
-      - engineered
-      - encoding
-      - imputation
-    - configs/data.yaml:
-      - processed_dir
-      - features_dir
+      - configs/train.yaml:
+          - model
+          - split
+          - early_stopping
     outs:
-    - data/features:
-        persist: true
+      - models/pipeline.joblib
+    metrics:
+      - dvclive/metrics.json:
+          cache: false
+    plots:
+      - dvclive/plots/metrics:
+          cache: false
+      -  dvclive/plots/sklearn/roc.json:
+          template: simple
+          x: fpr
+          y: tpr
+      -  dvclive/plots/sklearn/precision_recall.json:
+          template: simple
+          x: recall
+          y: precision
