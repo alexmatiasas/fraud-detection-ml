@@ -14,8 +14,8 @@ help:  ## Shows this message
 ## ── Setup ────────────────────────────────────────────────────────────────────
 setup: install hooks  ## Full installation: environment and hooks
 
-install:  ## Install dependences with uv
-	uv sync --extra dev
+install:  ## Install dependences with uv (dev + train + api extras)
+	uv sync --extra dev --extra train --extra api
 
 hooks:  ## Installs pre-commit hooks
 	uv run prek install --hook-type commit-msg --hook-type pre-commit
@@ -90,11 +90,11 @@ mlflow-ui:  ## Opens MLflow UI
 	uv run mlflow ui --port 5000
 
 ## ── Docker ───────────────────────────────────────────────────────────────────
-docker-build:  ## Builds Docker image (without data)
-	docker build -t fdml:latest .
+docker-build:  ## Builds the API-only Docker image (fdml-api)
+	docker build -t fdml-api:latest .
 
-docker-run:  ## Runs the container of the API
-	docker run -p 8000:8000 fdml:latest
+docker-run:  ## Runs the API container locally (needs DAGSHUB_*/FDML_API_KEY env)
+	docker run --env-file .env -p 8000:8000 fdml-api:latest
 
 ## ── Cleaning ─────────────────────────────────────────────────────────────────
 clean:  ## Cleans caches and temporal files
