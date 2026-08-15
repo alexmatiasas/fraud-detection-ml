@@ -1,50 +1,35 @@
+"""OpenAPI metadata for the fraud detection service."""
+
 TITLE = "IEEE-CIS Fraud Detection"
-
-SUMMARY = "This is an API to serve a model for fraud detection using the dataset from IEEE CIS"
-
+SUMMARY = "REST API serving the IEEE-CIS fraud detection model."
 DESCRIPTION = """
-### Description
-Links:
-
-- [IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection)
+# IEEE-CIS Fraud Detection
+Serves live fraud predictions from a LightGBM pipeline trained on the
+[IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection)
+dataset. Predictions are scored by TransactionID against a labeled sample of
+the temporal validation fold, so the full feature pipeline runs server-side.
 """
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 tags_metadata = [
     {
-        "name": "models",
-        "description": "The model fetching from here",
-    },
-    {
         "name": "predict",
-        "description": "Manage predictions. So _fancy_ they have their own docs.",
-        "externalDocs": {
-            "description": "google",
-            "url": "https://google.com/",
-        },
+        "description": "Fraud prediction by TransactionID",
     },
     {
-        "name": "health",
-        "description": "Just the health check. If all good, this responds",
-        "externalDocs": {
-            "description": "google",
-            "url": "https://google.com/",
-        },
-    },
-    {
-        "name": "ready",
-        "description": "An endpoint to verify if this model is ready",
-        "externalDocs": {
-            "description": "google",
-            "url": "https://google.com/",
-        },
+        "name": "model",
+        "description": "Model metadata and reload",
     },
     {
         "name": "metrics",
-        "description": "An endpoint to get metrics from a model",
-        "externalDocs": {
-            "description": "google",
-            "url": "https://google.com/",
-        },
+        "description": "Offline evaluation metrics from models/report.json",
+    },
+    {
+        "name": "health",
+        "description": "Liveness probe — the API process is up",
+    },
+    {
+        "name": "ready",
+        "description": "Readiness probe — the model is loaded",
     },
 ]
