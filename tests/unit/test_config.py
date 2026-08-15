@@ -23,6 +23,8 @@ class TestResolveMlflowTracking:
         assert cfg.tracking.backend == "dagshub"
 
     def test_no_dotenv_leaves_uri_untouched(self, tmp_path, monkeypatch):
+        for var in ("DAGSHUB_TOKEN", "DAGSHUB_USERNAME", "DAGSHUB_REPO"):
+            monkeypatch.delenv(var, raising=False)
         cfg = load_mlflow_config()
         original = cfg.tracking.tracking_uri
         monkeypatch.chdir(tmp_path)
