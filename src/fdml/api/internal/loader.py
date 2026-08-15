@@ -24,7 +24,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from fdml.models.config import load_mlflow_config, resolve_mlflow_tracking
+from fdml.config import load_mlflow_config, resolve_mlflow_tracking
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +144,71 @@ class ModelLoader:
                 return
 
         raise ModelLoadError("No model available. Tried: " + "; ".join(errors))
+
+    def load_version(self, version: int) -> None:
+        """Load a specific version of the configured model from the MLflow registry.
+
+        Used by ``PUT /v1/model/switch`` to hot-swap the served model without a
+        restart. Raises ``ModelLoadError`` if MLflow is unreachable or the
+        version does not exist.
+        """
+        import mlflow
+        from mlflow import MlflowClient
+        from mlflow.exceptions import MlflowException
+
+        resolve_mlflow_tracking(load_mlflow_config())
+        client = MlflowClient()
+
+        try:
+            mv = client.get_model_version(self._mlflow_model, version)
+        except MlflowException as exc:
+            raise ModelLoadError(
+                f"Version {version} of {self._mlflow_model} not found: {exc}"
+            ) from exc
+
+        try:
+            model_uri = f"models:/{self._mlflow_model}/{version}"
+            self._pipeline = mlflow.sklearn.load_model(model_uri)
+        except MlflowException as exc:
+            raise ModelLoadError(
+                f"Could not load {self._mlflow_model} v{version} from MLflow: {exc}"
+            ) from exc
+        self._source = "mlflow"
+        self._version = mv.version
+        self._run_id = mv.run_id
+        self._report = _read_report(self._report_path)
+        self._loaded_at = datetime.now(timezone.utc)
+        logger.info("  Model switched to %s version %d", self._mlflow_model, version)
+
+    def list_versions(self) -> list[dict[str, Any]]:
+        """All versions of the configured model in the MLflow registry.
+
+        Returns an empty list when the registry is unreachable (e.g. local dev
+        with a joblib pipeline) so the endpoint degrades gracefully.
+        """
+        from mlflow import MlflowClient
+        from mlflow.exceptions import MlflowException
+
+        try:
+            resolve_mlflow_tracking(load_mlflow_config())
+            client = MlflowClient()
+            versions = client.search_model_versions(f"name='{self._mlflow_model}'")
+        except MlflowException as exc:
+            logger.warning("  Could not list registry versions: %s", exc)
+            return []
+
+        rows: list[dict[str, Any]] = []
+        for v in sorted(versions, key=lambda item: item.version, reverse=True):
+            rows.append(
+                {
+                    "version": v.version,
+                    "status": v.status,
+                    "run_id": v.run_id,
+                    "aliases": getattr(v, "aliases", []) or [],
+                    "active": self._source == "mlflow" and v.version == self._version,
+                }
+            )
+        return rows
 
     def _load_from_mlflow(self) -> bool:
         import mlflow
