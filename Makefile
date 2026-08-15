@@ -1,106 +1,109 @@
-.PHONY: help setup install lint test train ablation serve docker-build clean
+.PHONY: help setup install lint test train ablation serve-dev docker-build clean schemas
 
 # Variables
 PYTHON := uv run python
 DATA_DIR := data/raw
+RUFF_RUN := uv run ruff
+DVC_RUN := uv run dvc
 
-## ── Ayuda ────────────────────────────────────────────────────────────────────
-help:  ## Muestra este mensaje
+## ── Help ────────────────────────────────────────────────────────────────────
+help:  ## Shows this message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 ## ── Setup ────────────────────────────────────────────────────────────────────
-setup: install hooks  ## Instalación completa: entorno + hooks
+setup: install hooks  ## Full installation: environment and hooks
 
-install:  ## Instala dependencias con uv
+install:  ## Install dependences with uv
 	uv sync --extra dev
 
-hooks:  ## Instala pre-commit hooks
+hooks:  ## Installs pre-commit hooks
 	uv run prek install --hook-type commit-msg --hook-type pre-commit
 
-## ── Calidad de código ────────────────────────────────────────────────────────
-lint:  ## Linting con ruff
-	uv run ruff check src/ tests/
+## ── Code Quality ────────────────────────────────────────────────────────
+lint:  ## Linting with ruff
+	$(RUFF_RUN) check src/ tests/
 
-format:  ## Formatea código con ruff
-	uv run ruff format src/ tests/
+format:  ## Formats code with ruff
+	$(RUFF_RUN) format src/ tests/
 
 ## ── Tests ────────────────────────────────────────────────────────────────────
-test:  ## Corre todos los tests con cobertura
-	uv run python -m pytest
+test:  ## Run all tests in coverage
+	$(PYTHON) -m pytest
 
-test-fast:  ## Tests sin reporte de cobertura (más rápido)
-	uv run python -m pytest --no-cov
+test-fast:  ## Tests without test converge (faster)
+	$(PYTHON) -m pytest --no-cov
 
-## ── Datos ────────────────────────────────────────────────────────────────────
-data-download:  ## Descarga el dataset de Kaggle (requiere kaggle CLI configurado)
-	@echo "Descargando dataset IEEE-CIS Fraud Detection..."
+## ── Data ────────────────────────────────────────────────────────────────────
+data-download:  ## Downloads dataset from kaggle (needs a Kaggle API key)
+	@echo "Downloading dataset IEEE-CIS Fraud Detection..."
 	kaggle competitions download -c ieee-fraud-detection -p $(DATA_DIR)
 	unzip -o $(DATA_DIR)/ieee-fraud-detection.zip -d $(DATA_DIR)
 	rm $(DATA_DIR)/ieee-fraud-detection.zip
-	@echo "Dataset listo en $(DATA_DIR)"
+	@echo "Ready dataset in $(DATA_DIR)"
 
-data-convert:  ## Convierte CSVs a Parquet con tipos optimizados
+data-convert:  ## Transforms CSV file to Parquet file with optimized types.
 	$(PYTHON) scripts/prepare_data.py
 
 ## ── Config schemas ────────────────────────────────────────────────────────────
-schemas:  ## Genera JSON Schema desde modelos Pydantic
+schemas:  ## Generates JSON Schema from Pydantic models
 	$(PYTHON) -m fdml.schemas.generate
 
-.PHONY: schemas
-
 ## ── DVC Pipeline ────────────────────────────────────────────────────────────
-dvc-repro:  ## Corre el pipeline completo con DVC
-	uv run dvc repro
+dvc-repro:  ## Runs full pipeline with DVC
+	$(DVC_RUN) repro
 
-dvc-exp-run:  ## Corre experimento DVC (comparable con dvc exp show)
-	uv run dvc exp run
+dvc-exp-run:  ## Runs expetiment in DVC (comparable with `dvc exp show`)
+	$(DVC_RUN) exp run
 
-dvc-exp-show:  ## Muestra tabla comparativa de experimentos
-	uv run dvc exp show
+dvc-exp-show:  ## Shows comparative table between experiments
+	$(DVC_RUN) exp show
 
-dvc-metrics-diff:  ## Compara métricas entre experimentos
-	uv run dvc metrics diff
+dvc-metrics-diff:  ## Compare metrics between experiments
+	$(DVC_RUN) metrics diff
 
-dvc-plots-diff:  ## Compara plots entre experimentos (abrir HTML)
-	uv run dvc plots diff
+dvc-plots-diff:  ## Compare plots between experiments (open HTML)
+	$(DVC_RUN) plots diff
 
-## ── Pipeline (directo, sin DVC) ─────────────────────────────────────────────
-train:  ## Entrena modelo (pasa args via ARGS: make train ARGS="model.name=xgboost")
+## ── Pipeline (direct, without DVC) ─────────────────────────────────────────────
+train:  ## Trains model (pass args through ARGS: make train ARGS="model.name=xgboost")
 	$(PYTHON) -m fdml.models.train $(ARGS)
 
-ablation:  ## Feature ablation study (leave-one-group-out, ver make train ablation.enabled=true)
+ablation:  ## Feature ablation study (leave-one-group-out, see make train ablation.enabled=true)
 	$(PYTHON) -m fdml.models.train.ablation $(ARGS)
 
-evaluate:  ## Evaluación completa (métricas, plots, model card)
+evaluate:  ## Full evaluation (metrics, plots, model card)
 	$(PYTHON) -m fdml.models.evaluate
 
 ## ── API ──────────────────────────────────────────────────────────────────────
-serve:  ## Levanta la API localmente
-	uv run uvicorn fdml.api.main:app --reload --port 8000
+sample:  ## Generates a stratified sample from the validation fold for demos (ARGS="--size 5000")
+	$(PYTHON) scripts/generate_sample.py $(ARGS)
 
-serve-prod:  ## Levanta la API en modo producción
+serve-dev:  ## Sets up the API locally
+	uv run fastapi dev
+
+serve-prod:  ## Sets up the API in production mode
 	uv run uvicorn fdml.api.main:app --host 0.0.0.0 --port 8000 --workers 2
 
 ## ── MLflow ───────────────────────────────────────────────────────────────────
-mlflow-ui:  ## Abre MLflow UI
+mlflow-ui:  ## Opens MLflow UI
 	uv run mlflow ui --port 5000
 
 ## ── Docker ───────────────────────────────────────────────────────────────────
-docker-build:  ## Construye imagen Docker (sin datos)
+docker-build:  ## Builds Docker image (without data)
 	docker build -t fdml:latest .
 
-docker-run:  ## Corre el contenedor de la API
+docker-run:  ## Runs the container of the API
 	docker run -p 8000:8000 fdml:latest
 
-## ── Limpieza ─────────────────────────────────────────────────────────────────
-clean:  ## Limpia caches y archivos temporales
+## ── Cleaning ─────────────────────────────────────────────────────────────────
+clean:  ## Cleans caches and temporal files
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name .pytest_cache -exec rm -rf {} +
 	find . -type d -name .ruff_cache -exec rm -rf {} +
 	find . -name "*.pyc" -delete
-	@echo "Limpieza completada"
+	@echo "Finished cleaning"
 
-clean-data:  ## Elimina datos procesados (conserva raw)
+clean-data:  ## Removes processed data (preserves raw)
 	rm -rf data/processed/*
 	touch data/processed/.gitkeep
