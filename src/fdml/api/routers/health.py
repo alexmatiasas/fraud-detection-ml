@@ -4,7 +4,7 @@ from fastapi import APIRouter
 
 from fdml.api.schemas.health import HealthStatus
 
-health_router = APIRouter(prefix="/health", tags=["health"])
+health_router = APIRouter(prefix="/v1/health", tags=["health"])
 
 
 @health_router.get("/", response_model=HealthStatus)

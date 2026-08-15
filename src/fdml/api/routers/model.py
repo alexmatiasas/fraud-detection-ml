@@ -1,14 +1,16 @@
-"""Model metadata and (protected) reload endpoints."""
+"""Model metadata, reload, and switch endpoints."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from fdml.api.dependencies import get_loader, get_model_loader, verify_api_key
 from fdml.api.internal.loader import ModelLoader
+from fdml.api.limiter import limiter
 from fdml.api.schemas.model import ModelInfo
+from fdml.api.schemas.models import ModelSwitchRequest, ModelSwitchResponse
 
-model_router = APIRouter(prefix="/model", tags=["model"])
+model_router = APIRouter(prefix="/v1/model", tags=["model"])
 
 _METRIC_KEYS = (
     "roc_auc",
@@ -24,8 +26,13 @@ _METRIC_KEYS = (
 )
 
 
+def _metric_summary(report: dict) -> dict:
+    return {key: report[key] for key in _METRIC_KEYS if key in report}
+
+
 @model_router.get("/info", response_model=ModelInfo)
-def info(loader: ModelLoader = Depends(get_loader)) -> ModelInfo:
+@limiter.limit("120/minute")
+def info(request: Request, loader: ModelLoader = Depends(get_loader)) -> ModelInfo:
     """Current model version, source, and evaluation metrics."""
     report = loader.report
     return ModelInfo(
@@ -35,12 +42,14 @@ def info(loader: ModelLoader = Depends(get_loader)) -> ModelInfo:
         version=loader.version,
         loaded_at=loader.loaded_at.isoformat() if loader.loaded_at else None,
         n_features=report.get("n_features"),
-        metrics={key: report[key] for key in _METRIC_KEYS if key in report},
+        metrics=_metric_summary(report),
     )
 
 
 @model_router.put("/reload")
+@limiter.limit("10/minute")
 def reload(
+    request: Request,
     loader: ModelLoader = Depends(get_model_loader),
     _: str = Depends(verify_api_key),
 ) -> dict[str, str]:
@@ -51,3 +60,22 @@ def reload(
         "source": loader.source or "",
         "loaded_at": loader.loaded_at.isoformat() if loader.loaded_at else "",
     }
+
+
+@model_router.put("/switch", response_model=ModelSwitchResponse)
+@limiter.limit("10/minute")
+def switch(
+    request: Request,
+    req: ModelSwitchRequest,
+    loader: ModelLoader = Depends(get_model_loader),
+    _: str = Depends(verify_api_key),
+) -> ModelSwitchResponse:
+    """Hot-swap the served model to a specific registry version."""
+    loader.load_version(req.version)
+    return ModelSwitchResponse(
+        model_name=loader._mlflow_model,
+        version=req.version,
+        source=loader.source or "",
+        loaded_at=loader.loaded_at.isoformat() if loader.loaded_at else "",
+        details=_metric_summary(loader.report),
+    )

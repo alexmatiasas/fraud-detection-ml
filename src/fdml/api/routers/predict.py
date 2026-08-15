@@ -6,13 +6,16 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from fdml.api.dependencies import get_loader
 from fdml.api.internal.loader import ModelLoader, to_model_input
+from fdml.api.limiter import limiter
 from fdml.api.schemas.predict import PredictionRequest, PredictionResponse
 
-predict_router = APIRouter(prefix="/predict", tags=["predict"])
+predict_router = APIRouter(prefix="/v1/predict", tags=["predict"])
+
+BATCH_MAX = 50
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -53,20 +56,26 @@ def _score(loader: ModelLoader, transaction_id: int) -> PredictionResponse:
 
 
 @predict_router.post("/", response_model=PredictionResponse)
+@limiter.limit("60/minute")
 def predict(
-    request: PredictionRequest, loader: ModelLoader = Depends(get_loader)
+    request: Request,
+    req: PredictionRequest,
+    loader: ModelLoader = Depends(get_loader),
 ) -> PredictionResponse:
     """Score a single transaction by TransactionID.
 
     The full raw row is pulled from the demo sample and scored through the
     complete feature pipeline so the model sees its full 341-feature space.
     """
-    return _score(loader, request.transaction_id)
+    return _score(loader, req.transaction_id)
 
 
 @predict_router.post("/batch", response_model=list[PredictionResponse])
+@limiter.limit("20/minute")
 def batch_predict(
-    requests: list[PredictionRequest], loader: ModelLoader = Depends(get_loader)
+    request: Request,
+    requests: list[PredictionRequest] = Body(..., max_length=BATCH_MAX),
+    loader: ModelLoader = Depends(get_loader),
 ) -> list[PredictionResponse]:
-    """Score multiple transactions in one call."""
+    """Score multiple transactions in one call (max 50)."""
     return [_score(loader, req.transaction_id) for req in requests]
