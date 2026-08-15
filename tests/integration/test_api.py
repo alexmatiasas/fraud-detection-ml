@@ -58,20 +58,20 @@ def make_client(loader) -> TestClient:
 
 
 def test_health(loader) -> None:
-    resp = make_client(loader).get("/health/")
+    resp = make_client(loader).get("/v1/health/")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
 
 def test_ready_when_model_loaded(loader) -> None:
-    resp = make_client(loader).get("/ready/")
+    resp = make_client(loader).get("/v1/ready/")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ready", "model_loaded": True}
 
 
 def test_predict_by_transaction_id(loader) -> None:
     client = make_client(loader)
-    resp = client.post("/predict/", json={"transaction_id": 2})
+    resp = client.post("/v1/predict/", json={"transaction_id": 2})
     assert resp.status_code == 200
     body = resp.json()
     assert body["transaction_id"] == 2
@@ -85,12 +85,12 @@ def test_predict_by_transaction_id(loader) -> None:
 def test_predict_threshold_applied(loader) -> None:
     loader._pipeline = FakePipeline(proba=0.95)
     client = make_client(loader)
-    body = client.post("/predict/", json={"transaction_id": 1}).json()
+    body = client.post("/v1/predict/", json={"transaction_id": 1}).json()
     assert body["is_fraud"] is True  # 0.95 >= 0.8
 
 
 def test_predict_unknown_transaction_404(loader) -> None:
-    resp = make_client(loader).post("/predict/", json={"transaction_id": 999})
+    resp = make_client(loader).post("/v1/predict/", json={"transaction_id": 999})
     assert resp.status_code == 404
     assert "not found" in resp.json()["detail"]
 
@@ -98,14 +98,20 @@ def test_predict_unknown_transaction_404(loader) -> None:
 def test_predict_batch(loader) -> None:
     client = make_client(loader)
     resp = client.post(
-        "/predict/batch", json=[{"transaction_id": 1}, {"transaction_id": 3}]
+        "/v1/predict/batch", json=[{"transaction_id": 1}, {"transaction_id": 3}]
     )
     assert resp.status_code == 200
     assert [r["transaction_id"] for r in resp.json()] == [1, 3]
 
 
+def test_batch_rejects_too_many_transactions(loader) -> None:
+    items = [{"transaction_id": 1}] * 51  # BATCH_MAX = 50
+    resp = make_client(loader).post("/v1/predict/batch", json=items)
+    assert resp.status_code == 422
+
+
 def test_model_info(loader) -> None:
-    resp = make_client(loader).get("/model/info")
+    resp = make_client(loader).get("/v1/model/info")
     assert resp.status_code == 200
     body = resp.json()
     assert body["model_name"] == "lightgbm"
@@ -115,26 +121,99 @@ def test_model_info(loader) -> None:
 
 
 def test_metrics_endpoint(loader) -> None:
-    resp = make_client(loader).get("/metrics/")
+    resp = make_client(loader).get("/v1/metrics/")
     assert resp.status_code == 200
     assert resp.json()["roc_auc"] == pytest.approx(0.9124)
     assert resp.json()["best_threshold"] == pytest.approx(0.8)
 
 
+def test_list_models(loader, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        loader,
+        "list_versions",
+        lambda: [
+            {
+                "version": 49,
+                "status": "READY",
+                "run_id": "abc123",
+                "aliases": ["champion"],
+                "active": True,
+            },
+            {
+                "version": 51,
+                "status": "ARCHIVED",
+                "run_id": "def456",
+                "aliases": [],
+                "active": False,
+            },
+        ],
+    )
+    resp = make_client(loader).get("/v1/models/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 2
+    assert body[0]["version"] == 49
+    assert body[0]["aliases"] == ["champion"]
+    assert body[0]["active"] is True
+    assert body[1]["active"] is False
+
+
+def test_list_models_degrades_to_empty(loader, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(loader, "list_versions", lambda: [])
+    resp = make_client(loader).get("/v1/models/")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 def test_reload_requires_api_key(loader) -> None:
-    resp = make_client(loader).put("/model/reload")
+    resp = make_client(loader).put("/v1/model/reload")
     assert resp.status_code in (401, 403, 422)
 
 
 def test_reload_with_valid_key(loader, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FDML_API_KEY", "secret")
     client = make_client(loader)
-    resp = client.put("/model/reload", headers={"X-API-Key": "secret"})
+    resp = client.put("/v1/model/reload", headers={"X-API-Key": "secret"})
     assert resp.status_code == 200
     assert resp.json()["status"] == "reloaded"
 
 
 def test_reload_with_invalid_key(loader, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FDML_API_KEY", "secret")
-    resp = make_client(loader).put("/model/reload", headers={"X-API-Key": "wrong"})
+    resp = make_client(loader).put("/v1/model/reload", headers={"X-API-Key": "wrong"})
+    assert resp.status_code == 401
+
+
+def test_switch_requires_api_key(loader) -> None:
+    resp = make_client(loader).put("/v1/model/switch", json={"version": 51})
+    assert resp.status_code in (401, 403, 422)
+
+
+def test_switch_with_valid_key(loader, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FDML_API_KEY", "secret")
+
+    def fake_switch(version: int) -> None:
+        loader._version = version
+        loader._source = "mlflow"
+
+    monkeypatch.setattr(loader, "load_version", fake_switch)
+    client = make_client(loader)
+    resp = client.put(
+        "/v1/model/switch",
+        json={"version": 51},
+        headers={"X-API-Key": "secret"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "switched"
+    assert body["version"] == 51
+    assert body["source"] == "mlflow"
+    assert loader.version == 51
+
+
+def test_switch_with_invalid_key(loader, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FDML_API_KEY", "secret")
+    resp = make_client(loader).put(
+        "/v1/model/switch", json={"version": 51}, headers={"X-API-Key": "wrong"}
+    )
     assert resp.status_code == 401
