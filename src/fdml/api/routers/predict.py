@@ -11,9 +11,10 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fdml.api.dependencies import get_loader
 from fdml.api.internal.loader import ModelLoader, to_model_input
 from fdml.api.limiter import limiter
+from fdml.api.metadata import API_PREFIX
 from fdml.api.schemas.predict import PredictionRequest, PredictionResponse
 
-predict_router = APIRouter(prefix="/v1/predict", tags=["predict"])
+predict_router = APIRouter(prefix=f"{API_PREFIX}/predict", tags=["predict"])
 
 BATCH_MAX = 50
 

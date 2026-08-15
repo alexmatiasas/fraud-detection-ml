@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, Request
 from fdml.api.dependencies import get_loader
 from fdml.api.internal.loader import ModelLoader
 from fdml.api.limiter import limiter
+from fdml.api.metadata import API_PREFIX
 from fdml.api.schemas.models import ModelVersionInfo
 
-models_router = APIRouter(prefix="/v1/models", tags=["model"])
+models_router = APIRouter(prefix=f"{API_PREFIX}/models", tags=["model"])
 
 
 @models_router.get("/", response_model=list[ModelVersionInfo])

@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, Request
 from fdml.api.dependencies import get_loader
 from fdml.api.internal.loader import ModelLoader
 from fdml.api.limiter import limiter
+from fdml.api.metadata import API_PREFIX
 
-metrics_router = APIRouter(prefix="/v1/metrics", tags=["metrics"])
+metrics_router = APIRouter(prefix=f"{API_PREFIX}/metrics", tags=["metrics"])
 
 _METRIC_KEYS = (
     "model_name",

@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, Request
 from fdml.api.dependencies import get_loader, get_model_loader, verify_api_key
 from fdml.api.internal.loader import ModelLoader
 from fdml.api.limiter import limiter
+from fdml.api.metadata import API_PREFIX
 from fdml.api.schemas.model import ModelInfo
 from fdml.api.schemas.models import ModelSwitchRequest, ModelSwitchResponse
 
-model_router = APIRouter(prefix="/v1/model", tags=["model"])
+model_router = APIRouter(prefix=f"{API_PREFIX}/model", tags=["model"])
 
 _METRIC_KEYS = (
     "roc_auc",

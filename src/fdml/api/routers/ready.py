@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends
 
 from fdml.api.dependencies import get_loader
 from fdml.api.internal.loader import ModelLoader
+from fdml.api.metadata import API_PREFIX
 from fdml.api.schemas.health import ReadyStatus
 
-ready_router = APIRouter(prefix="/v1/ready", tags=["ready"])
+ready_router = APIRouter(prefix=f"{API_PREFIX}/ready", tags=["ready"])
 
 
 @ready_router.get("/", response_model=ReadyStatus)
