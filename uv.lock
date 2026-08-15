@@ -1808,7 +1808,7 @@ wheels = [
 
 [[package]]
 name = "fraud-detection-ml"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
@@ -1824,7 +1824,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scikit-learn" },
     { name = "uvicorn", extra = ["standard"] },
-    { name = "xgboost" },
 ]
 
 [package.optional-dependencies]
@@ -1861,6 +1860,7 @@ train = [
     { name = "shap", version = "0.50.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.12' and sys_platform != 'darwin')" },
     { name = "shap", version = "0.52.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')" },
     { name = "tqdm" },
+    { name = "xgboost" },
 ]
 
 [package.dev-dependencies]
@@ -1913,7 +1913,7 @@ requires-dist = [
     { name = "textual", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "tqdm", marker = "extra == 'train'", specifier = ">=4.66.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.42.0" },
-    { name = "xgboost", specifier = ">=3.2.0" },
+    { name = "xgboost", marker = "extra == 'train'", specifier = ">=3.2.0" },
 ]
 provides-extras = ["api", "train", "dev"]
 
