@@ -2,22 +2,35 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from fdml.api.dependencies import get_model_loader
 from fdml.api.internal.loader import ModelLoadError
+from fdml.api.limiter import limiter, rate_limit_exceeded_handler
 from fdml.api.metadata import DESCRIPTION, SUMMARY, TITLE, VERSION, tags_metadata
 from fdml.api.routers.health import health_router
 from fdml.api.routers.metrics import metrics_router
 from fdml.api.routers.model import model_router
+from fdml.api.routers.models import models_router
 from fdml.api.routers.predict import predict_router
 from fdml.api.routers.ready import ready_router
 
 logger = logging.getLogger(__name__)
+
+# Origins allowed to call the API from a browser. The personal webpage is
+# hosted on Vercel; a demo page anywhere else is allowed for local dev.
+ALLOWED_ORIGINS = [
+    "https://alexmatias.vercel.app",
+    "http://localhost:4321",  # Astro dev server
+]
 
 
 @asynccontextmanager
@@ -42,10 +55,41 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.middleware("http")
+async def log_request(request: Request, call_next):
+    """Structured JSON log line per request (timestamp, latency, status)."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    latency_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        json.dumps(
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "latency_ms": round(latency_ms, 1),
+            }
+        )
+    )
+    return response
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["*"],
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 app.include_router(predict_router)
 app.include_router(health_router)
 app.include_router(ready_router)
 app.include_router(model_router)
+app.include_router(models_router)
 app.include_router(metrics_router)
 
 
