@@ -61,7 +61,7 @@ class ModelLoader:
         self._loaded_at: datetime | None = None
         self._source: str | None = None
         self._run_id: str | None = None
-        self._version: int | None = None
+        self._version: str | None = None
 
         self._mlflow_model = mlflow_model
         self._mlflow_alias = mlflow_alias
@@ -91,7 +91,7 @@ class ModelLoader:
         return self._run_id
 
     @property
-    def version(self) -> int | None:
+    def version(self) -> str | None:
         return self._version
 
     @property
@@ -152,15 +152,15 @@ class ModelLoader:
         restart. Raises ``ModelLoadError`` if MLflow is unreachable or the
         version does not exist.
         """
-        import mlflow
         from mlflow import MlflowClient
         from mlflow.exceptions import MlflowException
+        from mlflow.sklearn import load_model
 
         resolve_mlflow_tracking(load_mlflow_config())
         client = MlflowClient()
 
         try:
-            mv = client.get_model_version(self._mlflow_model, version)
+            mv = client.get_model_version(self._mlflow_model, str(version))
         except MlflowException as exc:
             raise ModelLoadError(
                 f"Version {version} of {self._mlflow_model} not found: {exc}"
@@ -168,7 +168,7 @@ class ModelLoader:
 
         try:
             model_uri = f"models:/{self._mlflow_model}/{version}"
-            self._pipeline = mlflow.sklearn.load_model(model_uri)
+            self._pipeline = load_model(model_uri)
         except MlflowException as exc:
             raise ModelLoadError(
                 f"Could not load {self._mlflow_model} v{version} from MLflow: {exc}"
@@ -198,10 +198,10 @@ class ModelLoader:
             return []
 
         rows: list[dict[str, Any]] = []
-        for v in sorted(versions, key=lambda item: item.version, reverse=True):
+        for v in sorted(versions, key=lambda item: int(item.version), reverse=True):
             rows.append(
                 {
-                    "version": v.version,
+                    "version": int(v.version),
                     "status": v.status,
                     "run_id": v.run_id,
                     "aliases": getattr(v, "aliases", []) or [],
@@ -211,8 +211,8 @@ class ModelLoader:
         return rows
 
     def _load_from_mlflow(self) -> bool:
-        import mlflow
         from mlflow import MlflowClient
+        from mlflow.sklearn import load_model
 
         resolve_mlflow_tracking(load_mlflow_config())
         client = MlflowClient()
@@ -225,7 +225,7 @@ class ModelLoader:
         self._run_id = version.run_id
         self._source = "mlflow"
         model_uri = f"models:/{self._mlflow_model}/{version.version}"
-        self._pipeline = mlflow.sklearn.load_model(model_uri)
+        self._pipeline = load_model(model_uri)
         return True
 
     def _latest_registry_version(self, client: Any) -> Any | None:
@@ -274,7 +274,8 @@ class ModelLoader:
         """
         if self._sample is None:
             return None
-        match = self._sample[self._sample["TransactionID"] == transaction_id]
+        mask = self._sample["TransactionID"] == transaction_id
+        match = self._sample.loc[mask]
         if match.empty:
             return None
         return match
