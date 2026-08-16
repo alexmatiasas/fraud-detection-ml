@@ -24,6 +24,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from fdml.api.internal.registry import download_report
 from fdml.config import load_mlflow_config, resolve_mlflow_tracking
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,7 @@ class ModelLoader:
                 logger.warning("  Model source '%s' failed: %s", candidate, exc)
                 continue
             if ok:
-                self._report = _read_report(self._report_path)
+                self._report = self._load_report()
                 self._loaded_at = datetime.now(timezone.utc)
                 logger.info(
                     "  Model loaded from %s (%d features)",
@@ -176,7 +177,7 @@ class ModelLoader:
         self._source = "mlflow"
         self._version = mv.version
         self._run_id = mv.run_id
-        self._report = _read_report(self._report_path)
+        self._report = self._load_report()
         self._loaded_at = datetime.now(timezone.utc)
         logger.info("  Model switched to %s version %d", self._mlflow_model, version)
 
@@ -253,6 +254,26 @@ class ModelLoader:
         self._run_id = None
         self._version = None
         return True
+
+    def _load_report(self) -> dict[str, Any]:
+        """Evaluation report, from the local file or the MLflow run as fallback.
+
+        The 11MB ``report.json`` is not shipped in the container image, so a
+        fresh deploy has no local copy. When the model came from MLflow we
+        pull the report straight from the run's artifacts; otherwise the
+        report stays ``{}`` and the API falls back to default values.
+        """
+        report = _read_report(self._report_path)
+        if report or self._source != "mlflow" or not self._run_id:
+            return report
+        try:
+            from mlflow import MlflowClient
+
+            resolve_mlflow_tracking(load_mlflow_config())
+            return download_report(MlflowClient(), self._run_id)
+        except Exception as exc:  # noqa: BLE001 - registry may be unreachable
+            logger.warning("  Could not fetch report.json from MLflow: %s", exc)
+            return {}
 
     # ── sample ───────────────────────────────────────────────────────────
     def load_sample(self, path: str | None = None) -> None:
