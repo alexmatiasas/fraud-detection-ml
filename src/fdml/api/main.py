@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from fdml.api.dependencies import get_model_loader
+from fdml.api.dependencies import get_model_loader, get_multi_loader
 from fdml.api.internal.loader import ModelLoadError
+from fdml.api.internal.registry import ModelRegistryError
 from fdml.api.limiter import limiter, rate_limit_exceeded_handler
 from fdml.api.metadata import DESCRIPTION, SUMMARY, TITLE, VERSION, tags_metadata
 from fdml.api.routers.health import health_router
@@ -35,13 +36,19 @@ ALLOWED_ORIGINS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load the model and demo sample once at startup."""
+    """Load the model(s) and demo sample once at startup."""
     loader = get_model_loader()
     try:
         loader.load()
     except ModelLoadError as exc:
         logger.warning("Model not loaded at startup: %s", exc)
     loader.load_sample()
+
+    multi = get_multi_loader()
+    try:
+        multi.load()
+    except ModelRegistryError as exc:
+        logger.warning("Model registry not loaded at startup: %s", exc)
     yield
 
 
