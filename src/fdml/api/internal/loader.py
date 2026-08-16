@@ -24,6 +24,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from fdml.api.internal.explain import compute_explanation
 from fdml.api.internal.registry import download_report
 from fdml.config import load_mlflow_config, resolve_mlflow_tracking
 
@@ -301,6 +302,42 @@ class ModelLoader:
             return None
         return match
 
+    def list_transactions(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """Summaries of the demo-sample transactions for the selection UI.
+
+        Returns ``(total, page)``; the page holds ``TransactionID``, amount,
+        product code, and the ground-truth fraud label. Missing columns are
+        skipped so the summary survives sample layout changes.
+        """
+        if self._sample is None:
+            return 0, []
+        cols = [
+            c
+            for c in ("TransactionID", "TransactionAmt", "ProductCD", "isFraud")
+            if c in self._sample.columns
+        ]
+        if not cols:
+            return len(self._sample), []
+        df = self._sample[cols]
+        total = len(df)
+        page = df.iloc[offset : offset + limit] if limit else df.iloc[offset:]
+
+        records: list[dict[str, Any]] = []
+        for _, row in page.iterrows():
+            record: dict[str, Any] = {}
+            if "TransactionID" in cols:
+                record["transaction_id"] = int(row["TransactionID"])
+            if "TransactionAmt" in cols:
+                record["amount"] = float(row["TransactionAmt"])
+            if "ProductCD" in cols:
+                record["product_cd"] = str(row["ProductCD"])
+            if "isFraud" in cols:
+                record["is_fraud"] = bool(int(row["isFraud"]))
+            records.append(record)
+        return total, records
+
     # ── prediction ───────────────────────────────────────────────────────
     def predict_proba(self, X_raw: pd.DataFrame) -> np.ndarray:
         """Positive-class probabilities for a raw (pre-FE) DataFrame."""
@@ -313,6 +350,12 @@ class ModelLoader:
         if not self.is_loaded:
             raise ModelLoadError("Model not loaded")
         return self._pipeline.named_steps["features"].transform(X_raw)
+
+    def explain(self, X_raw: pd.DataFrame, top_k: int = 20) -> dict[str, Any] | None:
+        """Tree SHAP explanation, or ``None`` when unavailable."""
+        if not self.is_loaded:
+            return None
+        return compute_explanation(self._pipeline, X_raw, top_k=top_k)
 
 
 def to_model_input(row: pd.DataFrame) -> pd.DataFrame:
