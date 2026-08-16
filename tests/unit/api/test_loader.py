@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import fdml.api.internal.loader as loader_mod
 from fdml.api.internal.loader import (
     ModelLoadError,
     ModelLoader,
@@ -159,3 +160,41 @@ def test_model_version_marks_mlflow_source() -> None:
     assert loader.model_version == "fraud-detection-lgbm:3"
     loader._source = "local"
     assert loader.model_version is None
+
+
+def test_report_falls_back_to_mlflow_when_local_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loader = ModelLoader(report_path=str(tmp_path / "report.json"))
+    loader._source = "mlflow"
+    loader._run_id = "run-abc"
+
+    monkeypatch.setattr(loader_mod, "resolve_mlflow_tracking", lambda cfg: cfg)
+    monkeypatch.setattr("mlflow.MlflowClient", lambda *a, **k: object())
+    monkeypatch.setattr(
+        loader_mod,
+        "download_report",
+        lambda client, run_id: {
+            "model_name": "lightgbm",
+            "best_threshold": 0.8,
+            "n_features": 341,
+        },
+    )
+
+    report = loader._load_report()
+    assert report["model_name"] == "lightgbm"
+    assert report["best_threshold"] == 0.8
+
+
+def test_report_no_mlflow_fallback_for_local_source(tmp_path: Path) -> None:
+    loader = ModelLoader(report_path=str(tmp_path / "report.json"))
+    loader._source = "local"
+    loader._run_id = None
+    assert loader._load_report() == {}
+
+
+def test_report_no_mlflow_fallback_without_run_id(tmp_path: Path) -> None:
+    loader = ModelLoader(report_path=str(tmp_path / "report.json"))
+    loader._source = "mlflow"
+    loader._run_id = None
+    assert loader._load_report() == {}
