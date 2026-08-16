@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import fdml.api.dependencies as deps
+from fdml.api.internal.registry import ModelRegistryError, RegisteredModel
 
 
 class FakePipeline:
@@ -17,6 +18,71 @@ class FakePipeline:
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         return np.full((len(X), 2), self._proba)
+
+
+class FakeMultiLoader:
+    """Minimal stand-in for MultiModelLoader."""
+
+    def __init__(
+        self,
+        models: dict[str, RegisteredModel] | None = None,
+        proba: float = 0.35,
+    ) -> None:
+        self.default_model = "fraud-detection-lgbm"
+        self._models = models or {}
+        self._proba = proba
+        self._loaded: set[str] = set()
+
+    def load(self, force: bool = False) -> None:
+        return None
+
+    def iter_models(self) -> list[RegisteredModel]:
+        return list(self._models.values())
+
+    def model_names(self) -> list[str]:
+        return list(self._models)
+
+    def get(self, name: str) -> RegisteredModel | None:
+        return self._models.get(name)
+
+    def is_default(self, name: str) -> bool:
+        return name == self.default_model
+
+    def is_loaded_model(self, name: str) -> bool:
+        return name in self._loaded
+
+    def predict_proba(self, name: str, X: pd.DataFrame) -> np.ndarray:
+        if name not in self._models:
+            raise KeyError(f"Model '{name}' is not registered")
+        model = self._models[name]
+        if model.error is not None:
+            raise ModelRegistryError(model.error)
+        self._loaded.add(name)
+        return np.full(len(X), self._proba)
+
+
+def make_registered_model(
+    name: str,
+    version: int,
+    run_id: str,
+    threshold: float = 0.8,
+    roc_auc: float = 0.9124,
+    error: str | None = None,
+) -> RegisteredModel:
+    return RegisteredModel(
+        name=name,
+        version=version,
+        status="READY",
+        run_id=run_id,
+        aliases=["champion"] if name == "fraud-detection-lgbm" else [],
+        report={
+            "model_name": name.replace("fraud-detection-", ""),
+            "n_features": 341,
+            "roc_auc": roc_auc,
+            "best_threshold": threshold,
+        },
+        error=error,
+    )
 
 
 @pytest.fixture
@@ -49,6 +115,22 @@ def loader(monkeypatch: pytest.MonkeyPatch):
     yield loader
     monkeypatch.setattr(loader, "_sample", None)
     monkeypatch.setattr(loader, "_pipeline", None)
+
+
+@pytest.fixture
+def multi_loader(monkeypatch: pytest.MonkeyPatch):
+    models = {
+        "fraud-detection-lgbm": make_registered_model(
+            "fraud-detection-lgbm", 49, "abc123", threshold=0.8
+        ),
+        "fraud-detection-xgboost": make_registered_model(
+            "fraud-detection-xgboost", 7, "def456", threshold=0.65, roc_auc=0.9010
+        ),
+    }
+    fake = FakeMultiLoader(models=models, proba=0.35)
+    monkeypatch.setattr(deps, "_multi_loader", fake)
+    yield fake
+    monkeypatch.setattr(deps, "_multi_loader", None)
 
 
 def make_client(loader) -> TestClient:
@@ -127,42 +209,107 @@ def test_metrics_endpoint(loader) -> None:
     assert resp.json()["best_threshold"] == pytest.approx(0.8)
 
 
-def test_list_models(loader, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        loader,
-        "list_versions",
-        lambda: [
-            {
-                "version": 49,
-                "status": "READY",
-                "run_id": "abc123",
-                "aliases": ["champion"],
-                "active": True,
-            },
-            {
-                "version": 51,
-                "status": "ARCHIVED",
-                "run_id": "def456",
-                "aliases": [],
-                "active": False,
-            },
-        ],
-    )
+def test_list_models(loader, multi_loader) -> None:
     resp = make_client(loader).get("/v1/models/")
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body) == 2
-    assert body[0]["version"] == 49
-    assert body[0]["aliases"] == ["champion"]
-    assert body[0]["active"] is True
-    assert body[1]["active"] is False
+    assert body["default"] == "fraud-detection-lgbm"
+    assert len(body["models"]) == 2
+    lgbm, xgb = body["models"]
+    assert lgbm["name"] == "fraud-detection-lgbm"
+    assert lgbm["version"] == 49
+    assert lgbm["aliases"] == ["champion"]
+    assert lgbm["active"] is True
+    assert lgbm["metrics"]["roc_auc"] == pytest.approx(0.9124)
+    assert xgb["name"] == "fraud-detection-xgboost"
+    assert xgb["active"] is False
 
 
-def test_list_models_degrades_to_empty(loader, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(loader, "list_versions", lambda: [])
+def test_list_models_degrades_to_empty(loader, multi_loader, monkeypatch) -> None:
+    monkeypatch.setattr(multi_loader, "_models", {})
     resp = make_client(loader).get("/v1/models/")
     assert resp.status_code == 200
-    assert resp.json() == []
+    body = resp.json()
+    assert body["models"] == []
+
+
+def test_model_detail(loader, multi_loader) -> None:
+    resp = make_client(loader).get("/v1/models/fraud-detection-xgboost")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "fraud-detection-xgboost"
+    assert body["version"] == 7
+    assert body["best_threshold"] == pytest.approx(0.65)
+    assert body["metrics"]["roc_auc"] == pytest.approx(0.9010)
+    assert body["active"] is False
+
+
+def test_model_detail_unknown_404(loader, multi_loader) -> None:
+    resp = make_client(loader).get("/v1/models/nope")
+    assert resp.status_code == 404
+    assert "not registered" in resp.json()["detail"]
+
+
+def test_predict_with_named_model(loader, multi_loader) -> None:
+    client = make_client(loader)
+    resp = client.post(
+        "/v1/predict/fraud-detection-xgboost", json={"transaction_id": 2}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["transaction_id"] == 2
+    assert body["probability"] == pytest.approx(0.35)
+    assert body["is_fraud"] is False  # 0.35 < threshold 0.65
+    assert body["threshold"] == pytest.approx(0.65)
+    assert body["model_version"] == "fraud-detection-xgboost:7"
+
+
+def test_predict_with_unknown_model_404(loader, multi_loader) -> None:
+    resp = make_client(loader).post("/v1/predict/nope", json={"transaction_id": 1})
+    assert resp.status_code == 404
+    assert "not registered" in resp.json()["detail"]
+
+
+def test_compare_all_models(loader, multi_loader) -> None:
+    resp = make_client(loader).post("/v1/predict/compare", json={"transaction_id": 2})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["transaction_id"] == 2
+    assert body["raw"]["TransactionAmt"] == pytest.approx(5000.0)
+    names = [p["model"] for p in body["predictions"]]
+    assert names == ["fraud-detection-lgbm", "fraud-detection-xgboost"]
+    lgbm = body["predictions"][0]
+    assert lgbm["probability"] == pytest.approx(0.35)
+    assert lgbm["is_fraud"] is False  # 0.35 < threshold 0.8
+    assert lgbm["threshold"] == pytest.approx(0.8)
+    assert lgbm["version"] == 49
+    xgb = body["predictions"][1]
+    assert xgb["threshold"] == pytest.approx(0.65)
+    assert xgb["is_fraud"] is False
+
+
+def test_compare_selected_models(loader, multi_loader) -> None:
+    resp = make_client(loader).post(
+        "/v1/predict/compare",
+        json={"transaction_id": 1, "models": ["fraud-detection-xgboost"]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [p["model"] for p in body["predictions"]] == ["fraud-detection-xgboost"]
+
+
+def test_compare_unknown_transaction_404(loader, multi_loader) -> None:
+    resp = make_client(loader).post("/v1/predict/compare", json={"transaction_id": 999})
+    assert resp.status_code == 404
+
+
+def test_compare_reports_model_error(loader, multi_loader) -> None:
+    multi_loader._models["fraud-detection-xgboost"].error = "boom"
+    resp = make_client(loader).post("/v1/predict/compare", json={"transaction_id": 1})
+    assert resp.status_code == 200
+    items = {p["model"]: p for p in resp.json()["predictions"]}
+    assert items["fraud-detection-xgboost"]["error"] == "boom"
+    assert items["fraud-detection-xgboost"]["probability"] is None
 
 
 def test_reload_requires_api_key(loader) -> None:
