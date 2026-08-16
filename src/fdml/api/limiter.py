@@ -8,7 +8,6 @@ lives here so routers import a single instance.
 from __future__ import annotations
 
 from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -19,9 +18,7 @@ limiter = Limiter(key_func=get_remote_address)
 RETRY_AFTER_SECONDS = "60"
 
 
-def rate_limit_exceeded_handler(
-    request: Request, exc: RateLimitExceeded
-) -> JSONResponse:
+def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
     """429 response with the standard rate-limit headers attached."""
     response = JSONResponse(
         status_code=429,
