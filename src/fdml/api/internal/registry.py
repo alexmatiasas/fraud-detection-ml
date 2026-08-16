@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from fdml.api.internal.explain import compute_explanation
 from fdml.api.internal.metrics import DEFAULT_THRESHOLD, METRIC_KEYS
 from fdml.config import load_mlflow_config, resolve_mlflow_tracking
 
@@ -188,6 +189,16 @@ class MultiModelLoader:
         """Positive-class probabilities for ``name``, loading on demand."""
         pipeline = self._get_pipeline(name)
         return pipeline.predict_proba(X_raw)[:, 1]
+
+    def explain(
+        self, name: str, X_raw: pd.DataFrame, top_k: int = 20
+    ) -> dict[str, Any] | None:
+        """Tree SHAP explanation for ``name``, or ``None`` when unavailable."""
+        try:
+            pipeline = self._get_pipeline(name)
+        except (ModelRegistryError, KeyError):
+            return None
+        return compute_explanation(pipeline, X_raw, top_k=top_k)
 
     def _get_pipeline(self, name: str) -> Any:
         if name in self._pipelines:

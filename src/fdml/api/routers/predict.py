@@ -1,4 +1,8 @@
-"""Fraud prediction by TransactionID lookup against the demo sample."""
+"""Fraud prediction by TransactionID lookup against the demo sample.
+
+Supports optional raw-feature overrides (\"what if the amount were 500?\")
+and per-prediction SHAP explanations.
+"""
 
 from __future__ import annotations
 
@@ -9,12 +13,17 @@ import pandas as pd
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from fdml.api.dependencies import get_loader, get_multi_loader
+from fdml.api.internal.explain import OverrideError, apply_overrides
 from fdml.api.internal.loader import ModelLoader, to_model_input
 from fdml.api.internal.registry import ModelRegistryError, MultiModelLoader
 from fdml.api.limiter import limiter
 from fdml.api.metadata import API_PREFIX
 from fdml.api.schemas.models import CompareItem, CompareRequest, CompareResponse
-from fdml.api.schemas.predict import PredictionRequest, PredictionResponse
+from fdml.api.schemas.predict import (
+    Explanation,
+    PredictionRequest,
+    PredictionResponse,
+)
 
 predict_router = APIRouter(prefix=f"{API_PREFIX}/predict", tags=["predict"])
 
@@ -36,7 +45,13 @@ def _raw_dict(row: pd.DataFrame) -> dict[str, Any]:
     return {key: _to_jsonable(value) for key, value in first.items() if pd.notna(value)}
 
 
-def _score(loader: ModelLoader, transaction_id: int) -> PredictionResponse:
+def _score(
+    loader: ModelLoader,
+    transaction_id: int,
+    overrides: dict[str, Any] | None = None,
+    include_shap: bool = False,
+    top_k: int = 20,
+) -> PredictionResponse:
     row = loader.lookup(transaction_id)
     if row is None:
         raise HTTPException(
@@ -44,9 +59,15 @@ def _score(loader: ModelLoader, transaction_id: int) -> PredictionResponse:
             detail=f"Transaction {transaction_id} not found in demo sample",
         )
 
+    try:
+        row, overrides_applied = apply_overrides(row, overrides)
+    except OverrideError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     X_raw = to_model_input(row)
     probability = float(loader.predict_proba(X_raw)[0])
     threshold = float(loader.report.get("best_threshold", 0.5))
+    explanation = _explanation(loader.explain(X_raw, top_k=top_k), include_shap)
 
     return PredictionResponse(
         transaction_id=transaction_id,
@@ -55,7 +76,15 @@ def _score(loader: ModelLoader, transaction_id: int) -> PredictionResponse:
         threshold=threshold,
         model_version=loader.model_version,
         raw=_raw_dict(row),
+        overrides_applied=overrides_applied or None,
+        explanation=explanation,
     )
+
+
+def _explanation(raw: dict[str, Any] | None, include_shap: bool) -> Explanation | None:
+    if not include_shap or raw is None:
+        return None
+    return Explanation(**raw)
 
 
 @predict_router.post("/", response_model=PredictionResponse)
@@ -69,8 +98,15 @@ def predict(
 
     The full raw row is pulled from the demo sample and scored through the
     complete feature pipeline so the model sees its full 341-feature space.
+    Optional ``overrides`` mutate raw features before scoring; ``include_shap``
+    adds a per-prediction SHAP explanation.
     """
-    return _score(loader, req.transaction_id)
+    return _score(
+        loader,
+        req.transaction_id,
+        overrides=req.overrides,
+        include_shap=req.include_shap,
+    )
 
 
 @predict_router.post("/batch", response_model=list[PredictionResponse])
@@ -80,7 +116,11 @@ def batch_predict(
     requests: list[PredictionRequest] = Body(..., max_length=BATCH_MAX),
     loader: ModelLoader = Depends(get_loader),
 ) -> list[PredictionResponse]:
-    """Score multiple transactions in one call (max 50)."""
+    """Score multiple transactions in one call (max 50).
+
+    Overrides and SHAP explanations are not computed for batch calls; use the
+    single endpoint for interactive \"what if\" exploration.
+    """
     return [_score(loader, req.transaction_id) for req in requests]
 
 
@@ -99,15 +139,27 @@ def _score_named(
     name: str,
     transaction_id: int,
     row: pd.DataFrame,
+    overrides: dict[str, Any] | None = None,
+    include_shap: bool = False,
+    top_k: int = 20,
 ) -> PredictionResponse:
     info = multi.get(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Model '{name}' not registered")
+
+    try:
+        row, overrides_applied = apply_overrides(row, overrides)
+    except OverrideError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     try:
         probability = float(multi.predict_proba(name, to_model_input(row))[0])
     except (ModelRegistryError, KeyError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     threshold = info.best_threshold
+    explanation = _explanation(
+        multi.explain(name, to_model_input(row), top_k=top_k), include_shap
+    )
     return PredictionResponse(
         transaction_id=transaction_id,
         is_fraud=probability >= threshold,
@@ -115,6 +167,8 @@ def _score_named(
         threshold=threshold,
         model_version=f"{name}:{info.version}" if info.version else name,
         raw=_raw_dict(row),
+        overrides_applied=overrides_applied or None,
+        explanation=explanation,
     )
 
 
@@ -164,6 +218,17 @@ def predict_with_model(
     loader: ModelLoader = Depends(get_loader),
     multi: MultiModelLoader = Depends(get_multi_loader),
 ) -> PredictionResponse:
-    """Score a single transaction with a specific registered model."""
+    """Score a single transaction with a specific registered model.
+
+    Supports the same ``overrides`` and ``include_shap`` options as the
+    default predict endpoint.
+    """
     row = _row_or_404(loader, req.transaction_id)
-    return _score_named(multi, name, req.transaction_id, row)
+    return _score_named(
+        multi,
+        name,
+        req.transaction_id,
+        row,
+        overrides=req.overrides,
+        include_shap=req.include_shap,
+    )
