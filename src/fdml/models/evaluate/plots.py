@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     average_precision_score,
@@ -25,7 +26,7 @@ class Plotter(ABC):
         """Base filename without extension, e.g. ``roc_curve``."""
 
     @abstractmethod
-    def _plot(self, ax: plt.Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None: ...
+    def _plot(self, ax: Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None: ...
 
     def figure_size(self) -> tuple[int, int]:
         return (6, 5)
@@ -51,7 +52,7 @@ class ROCCurvePlotter(Plotter):
     def filename(self) -> str:
         return "roc_curve"
 
-    def _plot(self, ax: plt.Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
+    def _plot(self, ax: Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
         fpr, tpr, _ = roc_curve(y_true, y_proba)
         auc = roc_auc_score(y_true, y_proba)
         n_pos = int(np.sum(y_true))
@@ -90,7 +91,7 @@ class PRCurvePlotter(Plotter):
     def filename(self) -> str:
         return "pr_curve"
 
-    def _plot(self, ax: plt.Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
+    def _plot(self, ax: Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
         precision, recall, _ = precision_recall_curve(y_true, y_proba)
         ap = average_precision_score(y_true, y_proba)
         baseline = float(np.mean(y_true))
@@ -131,7 +132,7 @@ class CalibrationPlotter(Plotter):
     def filename(self) -> str:
         return "calibration_curve"
 
-    def _plot(self, ax: plt.Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
+    def _plot(self, ax: Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
         prob_true, prob_pred = calibration_curve(
             y_true, y_proba, n_bins=self._n_bins, strategy="uniform"
         )
@@ -164,7 +165,7 @@ class LearningCurvePlotter(Plotter):
     def figure_size(self) -> tuple[int, int]:
         return (6, 5)
 
-    def _plot(self, ax: plt.Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
+    def _plot(self, ax: Axes, y_true: np.ndarray, y_proba: np.ndarray) -> None:
         pass  # Learning curves handle their own plotting in stability module
 
 
