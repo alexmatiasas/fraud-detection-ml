@@ -8,12 +8,22 @@ from fdml.api.dependencies import get_multi_loader
 from fdml.api.internal.registry import MultiModelLoader, RegisteredModel
 from fdml.api.limiter import limiter
 from fdml.api.metadata import API_PREFIX
-from fdml.api.schemas.models import ModelList, RegisteredModelInfo
+from fdml.api.schemas.models import (
+    FeatureImportance,
+    ModelList,
+    RegisteredModelInfo,
+)
 
 models_router = APIRouter(prefix=f"{API_PREFIX}/models", tags=["model"])
 
+TOP_FEATURES = 20
+
 
 def _to_info(multi: MultiModelLoader, info: RegisteredModel) -> RegisteredModelInfo:
+    top_features = [
+        FeatureImportance(feature=item["feature"], importance=float(item["importance"]))
+        for item in info.report.get("top_features", [])[:TOP_FEATURES]
+    ]
     return RegisteredModelInfo(
         name=info.name,
         version=info.version,
@@ -25,6 +35,7 @@ def _to_info(multi: MultiModelLoader, info: RegisteredModel) -> RegisteredModelI
         n_features=info.n_features,
         best_threshold=info.best_threshold,
         metrics=info.metric_summary(),
+        top_features=top_features or None,
         error=info.error,
     )
 
