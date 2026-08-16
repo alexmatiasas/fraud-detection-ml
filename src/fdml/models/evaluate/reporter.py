@@ -10,6 +10,7 @@ from typing import Any
 import mlflow
 import numpy as np
 import pandas as pd
+from mlflow.data.pandas_dataset import from_pandas
 from pydantic import BaseModel, ConfigDict
 from rich.console import Console
 from rich.table import Table
@@ -203,11 +204,11 @@ class MLflowReporter(Reporter):
         self._split_strategy = split_strategy
 
     def report(self, report: EvaluationReport, eval_cfg: EvaluateConfig) -> None:
-        if mlflow.active_run() is None:
+        run = mlflow.active_run()
+        if run is None:
             logger.warning("  MLflowReporter: no active run, skipping")
             return
 
-        run = mlflow.active_run()
         run_id = run.info.run_id
 
         mlflow.set_tags(
@@ -243,7 +244,7 @@ class MLflowReporter(Reporter):
             extra["val/cost_best_threshold"] = report.cost_best_threshold or 0.0
         for k, v in report.recall_at_k.items():
             extra[f"val/recall_at_top_{float(k):.2f}"] = v
-        if report.ci_lower is not None:
+        if report.ci_lower is not None and report.ci_upper is not None:
             extra["val/ap_ci_lower"] = report.ci_lower
             extra["val/ap_ci_upper"] = report.ci_upper
         if report.auc_adv is not None:
@@ -328,9 +329,7 @@ def log_dataset_lineage(
                     "ignore",
                     message="Hint: Inferred schema contains integer column",
                 )
-                dataset = mlflow.data.from_pandas(
-                    df, targets="isFraud", name="transactions"
-                )
+                dataset = from_pandas(df, targets="isFraud", name="transactions")
             mlflow.log_input(dataset, context=context)
             logger.info("  MLflow: dataset lineage logged (context=%s)", context)
         except Exception as exc:
@@ -357,7 +356,7 @@ class DVCLiveReporter(Reporter):
             return
 
         try:
-            from dvclive import Live
+            from dvclive.live import Live
 
             dvclive_dir = eval_cfg.dvclive.dir
             with Live(
@@ -396,7 +395,7 @@ class DVCLiveReporter(Reporter):
                 for k, v in report.recall_at_k.items():
                     live.log_metric(f"recall_at_top_{float(k):.2f}", v)
 
-                if report.ci_lower is not None:
+                if report.ci_lower is not None and report.ci_upper is not None:
                     live.log_metric("ap_ci_lower", report.ci_lower)
                     live.log_metric("ap_ci_upper", report.ci_upper)
                 if report.auc_adv is not None:
