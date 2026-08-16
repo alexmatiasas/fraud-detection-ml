@@ -60,6 +60,9 @@ class FakeMultiLoader:
         self._loaded.add(name)
         return np.full(len(X), self._proba)
 
+    def explain(self, name: str, X: pd.DataFrame, top_k: int = 20) -> dict | None:
+        return None
+
 
 def make_registered_model(
     name: str,
@@ -177,6 +180,94 @@ def test_predict_unknown_transaction_404(loader) -> None:
     assert "not found" in resp.json()["detail"]
 
 
+def test_predict_with_overrides(loader) -> None:
+    client = make_client(loader)
+    resp = client.post(
+        "/v1/predict/",
+        json={
+            "transaction_id": 2,
+            "overrides": {"TransactionAmt": 999.0, "card1": 15000},
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["overrides_applied"] == {"TransactionAmt": 999.0, "card1": 15000}
+    assert body["raw"]["TransactionAmt"] == pytest.approx(999.0)
+    assert body["raw"]["card1"] == 15000
+    assert body["probability"] == pytest.approx(0.35)
+
+
+def test_predict_with_unknown_override_422(loader) -> None:
+    resp = make_client(loader).post(
+        "/v1/predict/", json={"transaction_id": 1, "overrides": {"NotAColumn": 1}}
+    )
+    assert resp.status_code == 422
+    assert "Unknown feature" in resp.json()["detail"]
+
+
+def test_predict_with_bad_override_value_422(loader) -> None:
+    resp = make_client(loader).post(
+        "/v1/predict/",
+        json={"transaction_id": 1, "overrides": {"TransactionAmt": "abc"}},
+    )
+    assert resp.status_code == 422
+    assert "expects a number" in resp.json()["detail"]
+
+
+def test_predict_with_shap(loader, monkeypatch) -> None:
+    def fake_explain(X, top_k=20):  # noqa: ANN001, ANN202
+        return {
+            "base_value": -1.5,
+            "n_features": 2,
+            "top_features": [{"feature": "TransactionAmt", "value": 99.0, "shap": 0.5}],
+        }
+
+    monkeypatch.setattr(loader, "explain", fake_explain)
+    resp = make_client(loader).post(
+        "/v1/predict/", json={"transaction_id": 1, "include_shap": True}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["explanation"]["base_value"] == pytest.approx(-1.5)
+    assert body["explanation"]["top_features"][0]["feature"] == "TransactionAmt"
+    assert body["explanation"]["top_features"][0]["shap"] == pytest.approx(0.5)
+
+
+def test_predict_shap_absent_when_not_requested(loader) -> None:
+    resp = make_client(loader).post("/v1/predict/", json={"transaction_id": 1})
+    assert resp.status_code == 200
+    assert resp.json()["explanation"] is None
+
+
+def test_predict_shap_absent_when_unavailable(loader) -> None:
+    resp = make_client(loader).post(
+        "/v1/predict/", json={"transaction_id": 1, "include_shap": True}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["explanation"] is None  # fake pipeline has no tree model
+
+
+def test_list_transactions(loader) -> None:
+    resp = make_client(loader).get("/v1/transactions/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 3
+    assert len(body["transactions"]) == 3
+    first = body["transactions"][0]
+    assert first["transaction_id"] == 1
+    assert first["amount"] == pytest.approx(99.0)
+    assert first["product_cd"] == "W"
+    assert first["is_fraud"] is False
+
+
+def test_list_transactions_paginated(loader) -> None:
+    resp = make_client(loader).get("/v1/transactions/?limit=2&offset=1")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 3
+    assert [t["transaction_id"] for t in body["transactions"]] == [2, 3]
+
+
 def test_predict_batch(loader) -> None:
     client = make_client(loader)
     resp = client.post(
@@ -244,6 +335,25 @@ def test_model_detail(loader, multi_loader) -> None:
     assert body["active"] is False
 
 
+def test_model_detail_top_features(loader, multi_loader) -> None:
+    multi_loader._models["fraud-detection-lgbm"].report["top_features"] = [
+        {"feature": "TransactionAmt", "importance": 0.0674},
+        {"feature": "TransactionDT", "importance": 0.0644},
+    ]
+    resp = make_client(loader).get("/v1/models/fraud-detection-lgbm")
+    assert resp.status_code == 200
+    top = resp.json()["top_features"]
+    assert top is not None
+    assert len(top) == 2
+    assert top[0] == {"feature": "TransactionAmt", "importance": pytest.approx(0.0674)}
+
+
+def test_model_detail_top_features_none_when_absent(loader, multi_loader) -> None:
+    resp = make_client(loader).get("/v1/models/fraud-detection-lgbm")
+    assert resp.status_code == 200
+    assert resp.json()["top_features"] is None
+
+
 def test_model_detail_unknown_404(loader, multi_loader) -> None:
     resp = make_client(loader).get("/v1/models/nope")
     assert resp.status_code == 404
@@ -262,6 +372,17 @@ def test_predict_with_named_model(loader, multi_loader) -> None:
     assert body["is_fraud"] is False  # 0.35 < threshold 0.65
     assert body["threshold"] == pytest.approx(0.65)
     assert body["model_version"] == "fraud-detection-xgboost:7"
+
+
+def test_predict_with_named_model_and_overrides(loader, multi_loader) -> None:
+    resp = make_client(loader).post(
+        "/v1/predict/fraud-detection-xgboost",
+        json={"transaction_id": 1, "overrides": {"TransactionAmt": 1.0}},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["overrides_applied"] == {"TransactionAmt": 1.0}
+    assert body["raw"]["TransactionAmt"] == pytest.approx(1.0)
 
 
 def test_predict_with_unknown_model_404(loader, multi_loader) -> None:
