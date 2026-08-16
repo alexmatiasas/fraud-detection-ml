@@ -74,4 +74,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health/')"]
 
-CMD ["uvicorn", "fdml.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Cloud Run injects $PORT (default 8080) and routes all traffic to it, so
+# uvicorn must bind there — the shell form expands the env var. Locally
+# ($PORT unset) it falls back to 8000, matching `make docker-run`.
+CMD ["sh", "-c", "uvicorn fdml.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
