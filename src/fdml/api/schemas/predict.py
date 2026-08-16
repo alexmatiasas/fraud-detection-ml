@@ -18,6 +18,34 @@ class PredictionRequest(BaseModel):
     transaction_id: int = Field(
         ..., description="TransactionID present in the demo sample"
     )
+    overrides: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional raw-feature overrides applied before scoring, e.g. "
+            '{"TransactionAmt": 500.0, "ProductCD": "W"}. Values are '
+            "cast to the column dtype; unknown features return 422."
+        ),
+    )
+    include_shap: bool = Field(
+        default=False,
+        description="When true, include a per-prediction SHAP explanation",
+    )
+
+
+class ShapContribution(BaseModel):
+    feature: str = Field(..., description="Feature-engineered column name")
+    value: float | str | bool | None = Field(
+        default=None, description="Current feature value for the scored row"
+    )
+    shap: float = Field(..., description="SHAP contribution of this feature")
+
+
+class Explanation(BaseModel):
+    base_value: float = Field(..., description="Expected model output (log-odds)")
+    n_features: int = Field(..., description="Width of the feature-engineered space")
+    top_features: list[ShapContribution] = Field(
+        default_factory=list, description="Top contributors by |SHAP|, descending"
+    )
 
 
 class PredictionResponse(BaseModel):
@@ -33,6 +61,28 @@ class PredictionResponse(BaseModel):
         description=(
             "The raw transaction row from the demo sample, including the "
             "ground-truth isFraud label when present (for prediction vs "
-            "actual comparison)"
+            "actual comparison). Reflects any overrides applied."
         ),
+    )
+    overrides_applied: dict[str, Any] | None = Field(
+        default=None, description="Normalized overrides that changed the scored row"
+    )
+    explanation: Explanation | None = Field(
+        default=None, description="SHAP explanation, when requested and available"
+    )
+
+
+class TransactionSummary(BaseModel):
+    transaction_id: int = Field(..., description="TransactionID in the demo sample")
+    amount: float | None = Field(default=None, description="TransactionAmt")
+    product_cd: str | None = Field(default=None, description="ProductCD")
+    is_fraud: bool | None = Field(
+        default=None, description="Ground-truth fraud label from the sample"
+    )
+
+
+class TransactionList(BaseModel):
+    total: int = Field(..., description="Total transactions in the demo sample")
+    transactions: list[TransactionSummary] = Field(
+        default_factory=list, description="One summary per transaction on the page"
     )

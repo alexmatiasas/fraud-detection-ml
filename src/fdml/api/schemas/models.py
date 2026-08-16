@@ -45,6 +45,13 @@ class ModelSwitchResponse(BaseModel):
     )
 
 
+class FeatureImportance(BaseModel):
+    """One feature-importance entry from the evaluation report."""
+
+    feature: str = Field(..., description="Feature-engineered column name")
+    importance: float = Field(..., description="Importance score (model-specific)")
+
+
 class RegisteredModelInfo(BaseModel):
     """A single registered model in the MLflow registry (leaderboard entry)."""
 
@@ -71,6 +78,10 @@ class RegisteredModelInfo(BaseModel):
     )
     metrics: dict[str, Any] = Field(
         default_factory=dict, description="Key evaluation metrics from report.json"
+    )
+    top_features: list[FeatureImportance] | None = Field(
+        default=None,
+        description="Most important features (by training importance), top 20",
     )
     error: str | None = Field(
         default=None, description="Load error when the model cannot be served"
