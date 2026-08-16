@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -25,7 +26,7 @@ def _eval_cfg() -> EvaluateConfig:
 
 
 def _report(**overrides) -> EvaluationReport:
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         model_name="lightgbm",
         split_strategy="temporal",
         n_features=100,
@@ -217,7 +218,7 @@ class TestLogDatasetLineage:
 
         with (
             patch("mlflow.active_run", return_value=MagicMock()),
-            patch("mlflow.data.from_pandas") as mock_from,
+            patch("fdml.models.evaluate.reporter.from_pandas") as mock_from,
             patch("mlflow.log_input") as mock_input,
         ):
             log_dataset_lineage(X_train, y_train, X_val, y_val)
@@ -236,7 +237,7 @@ class TestLogDatasetLineage:
         y = pd.Series([0])
         with (
             patch("mlflow.active_run", return_value=None),
-            patch("mlflow.data.from_pandas") as mock_from,
+            patch("fdml.models.evaluate.reporter.from_pandas") as mock_from,
         ):
             log_dataset_lineage(X, y, X, y)
         mock_from.assert_not_called()

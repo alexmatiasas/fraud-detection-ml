@@ -8,7 +8,7 @@ from fdml.features.base import BaseFeatureTransformer
 class TestBaseFeatureTransformer:
     def test_cannot_instantiate_abstract(self):
         with pytest.raises(TypeError):
-            BaseFeatureTransformer()
+            BaseFeatureTransformer()  # type: ignore[reportAbstractUsage]
 
     def test_get_params_returns_enabled(self):
         class Concrete(BaseFeatureTransformer):

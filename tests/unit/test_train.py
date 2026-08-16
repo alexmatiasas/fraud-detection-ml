@@ -194,8 +194,10 @@ class TestFitModel:
                 cfg,
                 callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
             )
-            hist = client.get_metric_history(mlflow.active_run().info.run_id, "val/auc")
-        assert len(hist) > 0
+            run = mlflow.active_run()
+            assert run is not None
+            hist = client.get_metric_history(run.info.run_id, "val/auc")
+            assert len(hist) > 0
 
     def test_lgbm_logs_train_curve_when_enabled(self, tmp_path):
         cfg = load_train_config(
@@ -218,15 +220,13 @@ class TestFitModel:
                 cfg,
                 callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
             )
-            train_hist = client.get_metric_history(
-                mlflow.active_run().info.run_id, "train/auc"
-            )
-            val_hist = client.get_metric_history(
-                mlflow.active_run().info.run_id, "val/auc"
-            )
-        assert len(train_hist) > 0
-        assert len(train_hist) == len(val_hist)
-        assert train_hist[-1].step == val_hist[-1].step
+            run = mlflow.active_run()
+            assert run is not None
+            train_hist = client.get_metric_history(run.info.run_id, "train/auc")
+            val_hist = client.get_metric_history(run.info.run_id, "val/auc")
+            assert len(train_hist) > 0
+            assert len(train_hist) == len(val_hist)
+            assert train_hist[-1].step == val_hist[-1].step
 
     def test_lgbm_skips_train_curve_when_disabled(self, tmp_path):
         cfg = load_train_config(
@@ -253,10 +253,10 @@ class TestFitModel:
                 cfg,
                 callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
             )
-            train_hist = client.get_metric_history(
-                mlflow.active_run().info.run_id, "train/auc"
-            )
-        assert len(train_hist) == 0
+            run = mlflow.active_run()
+            assert run is not None
+            train_hist = client.get_metric_history(run.info.run_id, "train/auc")
+            assert len(train_hist) == 0
 
     def test_disabled_early_stopping_fits_plain(self):
         cfg = load_train_config(cli_args=["early_stopping.enabled=false"])

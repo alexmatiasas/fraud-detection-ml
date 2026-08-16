@@ -1,5 +1,6 @@
 import pytest
 from omegaconf import OmegaConf
+from pathlib import Path
 
 from fdml.models.config import (
     load_mlflow_config,
@@ -73,7 +74,7 @@ class TestLoadTrainConfig:
         cfg = load_train_config(cli_args=["--help", "split.test_size=0.25"])
         assert cfg.split.test_size == 0.25
 
-    def test_custom_config_path(self, tmp_path: pytest.TempPathFactory):
+    def test_custom_config_path(self, tmp_path: Path):
         custom = tmp_path / "custom.yaml"
         custom.write_text(
             OmegaConf.to_yaml(
@@ -91,15 +92,13 @@ class TestLoadTrainConfig:
         assert cfg.model.name == "xgboost"
         assert cfg.model.params.max_depth == 10
 
-    def test_invalid_config_raises_validation_error(
-        self, tmp_path: pytest.TempPathFactory
-    ):
+    def test_invalid_config_raises_validation_error(self, tmp_path: Path):
         bad = tmp_path / "bad.yaml"
         bad.write_text("seed: not_a_number\nmodel: {name: lightgbm, params: {}}")
         with pytest.raises(Exception):  # pydantic.ValidationError
             load_train_config(str(bad))
 
-    def test_invalid_model_name_raises(self, tmp_path: pytest.TempPathFactory):
+    def test_invalid_model_name_raises(self, tmp_path: Path):
         bad = tmp_path / "bad_model.yaml"
         bad.write_text(
             OmegaConf.to_yaml({"model": {"name": "invalid_model", "params": {}}})

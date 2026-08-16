@@ -25,7 +25,7 @@ def loader(monkeypatch: pytest.MonkeyPatch):
     loader._pipeline = FakePipeline(proba=0.35)
     loader._source = "test"
     loader._run_id = "abc123"
-    loader._version = 1
+    loader._version = "1"
     loader._report = {
         "model_name": "lightgbm",
         "n_features": 341,

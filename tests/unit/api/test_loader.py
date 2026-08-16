@@ -79,8 +79,12 @@ def test_predict_proba_raises_when_not_loaded() -> None:
 def test_lookup_returns_none_outside_sample() -> None:
     loader = ModelLoader()
     loader._sample = pd.DataFrame({"TransactionID": [1, 2], "x": [0.1, 0.2]})
-    assert loader.lookup(1).iloc[0]["x"] == pytest.approx(0.1)
-    assert loader.lookup(2).iloc[0]["x"] == pytest.approx(0.2)
+    row_1 = loader.lookup(1)
+    row_2 = loader.lookup(2)
+    assert row_1 is not None
+    assert row_2 is not None
+    assert row_1.iloc[0]["x"] == pytest.approx(0.1)
+    assert row_2.iloc[0]["x"] == pytest.approx(0.2)
     assert loader.lookup(999) is None
 
 
@@ -151,7 +155,7 @@ def test_load_sample_missing_is_tolerated(tmp_path: Path) -> None:
 def test_model_version_marks_mlflow_source() -> None:
     loader = ModelLoader()
     loader._source = "mlflow"
-    loader._version = 3
+    loader._version = "3"
     assert loader.model_version == "fraud-detection-lgbm:3"
     loader._source = "local"
     assert loader.model_version is None
