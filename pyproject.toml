@@ -2,7 +2,6 @@
 name = "fraud-detection-ml"
 version = "1.0.0"
 description = "End-to-end ML pipeline for IEEE-CIS fraud detection"
-readme = "README.md"
 requires-python = ">=3.11"
 # The base set is exactly what the serving API needs. Training-only packages
 # (xgboost, dvc, optuna, shap, ...) live in the `train` optional group so the
@@ -13,7 +12,7 @@ dependencies = [
     "fastapi[standard]>=0.135.1",
     "joblib>=1.5.3",
     "lightgbm>=4.6.0",
-    "mlflow>=3.10.1",
+    "mlflow-skinny>=3.10.1",
     "numpy>=2.4.3",
     "omegaconf>=2.3.0",
     "pandas>=2.3.3",
