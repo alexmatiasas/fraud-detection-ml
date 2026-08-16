@@ -8,7 +8,7 @@
 # versions resolved locally; uv never re-resolves the dependency graph.
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS builder
 
-ENV UV_COMPILE_BYTECODE=1 \
+ENV UV_COMPILE_BYTECODE=0 \
     UV_LINK_MODE=copy \
     UV_NO_DEV=1 \
     UV_PYTHON_DOWNLOADS=0 \
@@ -36,6 +36,15 @@ COPY data/samples/ data/samples/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --extra api --no-dev --frozen
 
+# Layer 3: strip the venv. Compiled bytecode, tests, and type stubs are not
+# needed at runtime; removing them keeps the image lean without touching code.
+RUN find /app/.venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null; \
+    find /app/.venv -name "*.pyc" -delete 2>/dev/null; \
+    find /app/.venv -name "*.pyo" -delete 2>/dev/null; \
+    find /app/.venv -name "*.pyi" -delete 2>/dev/null; \
+    find /app/.venv -type d \( -name "tests" -o -name "test" \) -exec rm -rf {} + 2>/dev/null; \
+    true
+
 # ── Runtime stage ──────────────────────────────────────────────────────────────
 FROM python:3.11-slim
 
@@ -46,6 +55,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Run as non-root: the API only reads files, so it needs no write access.
 RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --create-home --home-dir /app appuser
+
+# libgomp1 (OpenMP) is required by lightgbm at runtime; python:3.11-slim does
+# not ship it. scikit-learn bundles its own copy, but the loader searches the
+# system paths for libgomp.so.1 when importing lightgbm.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
