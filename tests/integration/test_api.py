@@ -154,6 +154,13 @@ def test_ready_when_model_loaded(loader) -> None:
     assert resp.json() == {"status": "ready", "model_loaded": True}
 
 
+def test_ready_503_when_model_not_loaded(loader) -> None:
+    loader._pipeline = None
+    resp = make_client(loader).get("/v1/ready/")
+    assert resp.status_code == 503
+    assert resp.json() == {"status": "not_ready", "model_loaded": False}
+
+
 def test_predict_by_transaction_id(loader) -> None:
     client = make_client(loader)
     resp = client.post("/v1/predict/", json={"transaction_id": 2})
@@ -485,3 +492,56 @@ def test_switch_with_invalid_key(loader, monkeypatch: pytest.MonkeyPatch) -> Non
         "/v1/model/switch", json={"version": 51}, headers={"X-API-Key": "wrong"}
     )
     assert resp.status_code == 401
+
+
+# ── rate limiting ─────────────────────────────────────────────────────────
+def _reset_limiter() -> None:
+    from fdml.api.limiter import limiter
+
+    limiter.reset()
+
+
+def test_predict_rate_limit_429_after_budget(loader) -> None:
+    """Exhaust the 60/min predict budget and expect a 429 with Retry-After."""
+    _reset_limiter()
+    client = make_client(loader)
+    try:
+        first = client.post("/v1/predict/", json={"transaction_id": 1})
+        assert first.status_code == 200
+
+        statuses = [
+            client.post("/v1/predict/", json={"transaction_id": 1}).status_code
+            for _ in range(60)
+        ]
+        assert statuses[-1] == 429
+        assert statuses.count(429) >= 1  # only the tail hits the wall
+
+        last = client.post("/v1/predict/", json={"transaction_id": 1})
+        assert last.status_code == 429
+        assert last.json()["detail"] == "Rate limit exceeded. Try again later."
+        assert last.headers["Retry-After"] == "60"
+    finally:
+        _reset_limiter()
+
+
+def test_batch_rate_limit_429_after_budget(loader) -> None:
+    """The 20/min batch budget also 429s past the limit."""
+    _reset_limiter()
+    client = make_client(loader)
+    try:
+        for _ in range(20):
+            resp = client.post("/v1/predict/batch", json=[{"transaction_id": 1}])
+            assert resp.status_code == 200
+
+        resp = client.post("/v1/predict/batch", json=[{"transaction_id": 1}])
+        assert resp.status_code == 429
+        assert resp.headers["Retry-After"] == "60"
+    finally:
+        _reset_limiter()
+
+
+def test_rate_limits_reset_between_tests(loader) -> None:
+    """After a budget-exhausting test, reset() leaves a fresh window."""
+    _reset_limiter()
+    resp = make_client(loader).post("/v1/predict/", json={"transaction_id": 1})
+    assert resp.status_code == 200
