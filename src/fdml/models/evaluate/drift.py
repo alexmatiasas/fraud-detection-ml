@@ -33,7 +33,7 @@ def adversarial_validation(
         n_estimators=100, max_depth=6, random_state=42, n_jobs=-1, verbose=0
     )
     clf.fit(X_adv, y_adv)
-    p_adv = clf.predict_proba(X_adv)[:, 1]
+    p_adv = np.asarray(clf.predict_proba(X_adv))[:, 1]
     auc_adv = roc_auc_score(y_adv, p_adv)
 
     fig, ax = plt.subplots(figsize=(6, 4))
