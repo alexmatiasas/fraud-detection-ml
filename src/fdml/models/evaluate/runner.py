@@ -124,7 +124,7 @@ def evaluate(
         seg_df = per_segment_analysis(
             y_true,
             y_proba,
-            X_val[eval_cfg.segments.columns],
+            X_val.loc[:, eval_cfg.segments.columns],
             min_samples=eval_cfg.segments.min_samples,
         )
 
@@ -351,7 +351,7 @@ def main() -> None:
         test_size=train_cfg.split.test_size,
         embargo_seconds=train_cfg.split.embargo_seconds,
     )
-    train_idx, val_idx = next(splitter.split(df, df["isFraud"]))
+    train_idx, val_idx = next(splitter.split(df, df["isFraud"].to_numpy()))
 
     X_train, X_val = (
         df.drop(columns=["isFraud"]).iloc[train_idx],
