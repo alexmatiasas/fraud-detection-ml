@@ -7,8 +7,10 @@ import os
 from fastapi import Depends, Header, HTTPException
 
 from fdml.api.internal.loader import ModelLoader
+from fdml.api.internal.registry import MultiModelLoader
 
 _loader: ModelLoader | None = None
+_multi_loader: MultiModelLoader | None = None
 
 
 def get_model_loader() -> ModelLoader:
@@ -17,6 +19,14 @@ def get_model_loader() -> ModelLoader:
     if _loader is None:
         _loader = ModelLoader()
     return _loader
+
+
+def get_multi_loader() -> MultiModelLoader:
+    """Singleton accessor for the multi-model registry loader."""
+    global _multi_loader
+    if _multi_loader is None:
+        _multi_loader = MultiModelLoader()
+    return _multi_loader
 
 
 def get_loader(loader: ModelLoader = Depends(get_model_loader)) -> ModelLoader:
