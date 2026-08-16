@@ -23,6 +23,7 @@ from fdml.api.routers.model import model_router
 from fdml.api.routers.models import models_router
 from fdml.api.routers.predict import predict_router
 from fdml.api.routers.ready import ready_router
+from fdml.api.routers.transactions import transactions_router
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ app.include_router(ready_router)
 app.include_router(model_router)
 app.include_router(models_router)
 app.include_router(metrics_router)
+app.include_router(transactions_router)
 
 
 @app.exception_handler(ModelLoadError)
