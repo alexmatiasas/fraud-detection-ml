@@ -6,29 +6,13 @@ from fastapi import APIRouter, Depends, Request
 
 from fdml.api.dependencies import get_loader, get_model_loader, verify_api_key
 from fdml.api.internal.loader import ModelLoader
+from fdml.api.internal.metrics import metric_summary
 from fdml.api.limiter import limiter
 from fdml.api.metadata import API_PREFIX
 from fdml.api.schemas.model import ModelInfo
 from fdml.api.schemas.models import ModelSwitchRequest, ModelSwitchResponse
 
 model_router = APIRouter(prefix=f"{API_PREFIX}/model", tags=["model"])
-
-_METRIC_KEYS = (
-    "roc_auc",
-    "average_precision",
-    "f1",
-    "precision",
-    "recall",
-    "best_f1",
-    "best_threshold",
-    "brier",
-    "expected_cost",
-    "fraud_rate",
-)
-
-
-def _metric_summary(report: dict) -> dict:
-    return {key: report[key] for key in _METRIC_KEYS if key in report}
 
 
 @model_router.get("/info", response_model=ModelInfo)
@@ -43,7 +27,7 @@ def info(request: Request, loader: ModelLoader = Depends(get_loader)) -> ModelIn
         version=int(loader.version) if loader.version else None,
         loaded_at=loader.loaded_at.isoformat() if loader.loaded_at else None,
         n_features=report.get("n_features"),
-        metrics=_metric_summary(report),
+        metrics=metric_summary(report),
     )
 
 
@@ -78,5 +62,5 @@ def switch(
         version=req.version,
         source=loader.source or "",
         loaded_at=loader.loaded_at.isoformat() if loader.loaded_at else "",
-        details=_metric_summary(loader.report),
+        details=metric_summary(loader.report),
     )
