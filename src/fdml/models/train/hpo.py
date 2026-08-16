@@ -7,6 +7,7 @@ from typing import Any
 
 import lightgbm as lgb
 import mlflow
+import numpy as np
 import optuna
 import pandas as pd
 import xgboost as xgb
@@ -181,7 +182,7 @@ def _objective(
     else:
         model.fit(X_train, y_train)
 
-    y_proba = model.predict_proba(X_val)[:, 1]
+    y_proba = np.asarray(model.predict_proba(X_val))[:, 1]
 
     from sklearn.metrics import roc_auc_score
 
