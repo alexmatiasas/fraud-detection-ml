@@ -17,8 +17,13 @@ from fdml.models.train.runner import _get_splitter
 @pytest.fixture()
 def small_data() -> pd.DataFrame:
     processed_dir = Path(load_train_config().data.processed_dir)
+    data_file = processed_dir / "train_transaction.parquet"
+    if not data_file.exists():
+        pytest.skip(
+            f"Training data not found at {data_file} (run `dvc pull` to fetch datasets)"
+        )
     train = pd.read_parquet(
-        processed_dir / "train_transaction.parquet",
+        data_file,
         columns=[
             "TransactionID",
             "isFraud",
