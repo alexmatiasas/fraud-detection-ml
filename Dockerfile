@@ -23,7 +23,7 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --extra api --no-dev --no-install-project --frozen
+    uv sync --no-dev --no-install-project --frozen
 
 # Layer 2: project source + install the package itself into .venv.
 # Only the files uv needs are copied, so unrelated edits (Makefile, CI, ...)
@@ -34,7 +34,7 @@ COPY src/ src/
 COPY configs/ configs/
 COPY data/samples/ data/samples/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --extra api --no-dev --frozen
+    uv sync --no-dev --frozen
 
 # Layer 3: strip the venv. Compiled bytecode, tests, and type stubs are not
 # needed at runtime; removing them keeps the image lean without touching code.
