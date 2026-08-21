@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
+from fdml.api.context import request_id as request_id_ctx
 from fdml.api.dependencies import get_model_loader, get_multi_loader
 from fdml.api.internal.loader import ModelLoadError
 from fdml.api.internal.registry import ModelRegistryError
@@ -66,13 +68,23 @@ app = FastAPI(
 
 @app.middleware("http")
 async def log_request(request: Request, call_next):
-    """Structured JSON log line per request (timestamp, latency, status)."""
+    """Structured JSON log line per request (request_id, timestamp, latency, status).
+
+    Accepts an optional client-provided ``X-Request-ID`` header for
+    distributed tracing; otherwise generates a short UUID.
+    """
+    rid = request.headers.get("x-request-id", uuid.uuid4().hex[:12])
+    token = request_id_ctx.set(rid)
     start = time.perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_ctx.reset(token)
     latency_ms = (time.perf_counter() - start) * 1000
     logger.info(
         json.dumps(
             {
+                "request_id": rid,
                 "method": request.method,
                 "path": request.url.path,
                 "status": response.status_code,
@@ -80,6 +92,7 @@ async def log_request(request: Request, call_next):
             }
         )
     )
+    response.headers["X-Request-ID"] = rid
     return response
 
 

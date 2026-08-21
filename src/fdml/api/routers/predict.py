@@ -6,12 +6,15 @@ and per-prediction SHAP explanations.
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
+from fdml.api.context import request_id as request_id_ctx
 from fdml.api.dependencies import get_loader, get_multi_loader
 from fdml.api.internal.explain import OverrideError, apply_overrides
 from fdml.api.internal.loader import ModelLoader, to_model_input
@@ -26,6 +29,7 @@ from fdml.api.schemas.predict import (
 )
 
 predict_router = APIRouter(prefix=f"{API_PREFIX}/predict", tags=["predict"])
+audit_logger = logging.getLogger("fdml.api.audit")
 
 BATCH_MAX = 50
 
@@ -37,6 +41,30 @@ def _to_jsonable(value: Any) -> Any:
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
     return value
+
+
+def _audit_log(
+    transaction_id: int,
+    probability: float,
+    is_fraud: bool,
+    model_version: str | None,
+    overrides_used: bool,
+    shap_computed: bool,
+) -> None:
+    """Structured audit line for every scored prediction."""
+    audit_logger.info(
+        json.dumps(
+            {
+                "request_id": request_id_ctx.get(),
+                "transaction_id": transaction_id,
+                "probability": round(probability, 6),
+                "is_fraud": is_fraud,
+                "model_version": model_version,
+                "overrides_used": overrides_used,
+                "shap_computed": shap_computed,
+            }
+        )
+    )
 
 
 def _raw_dict(row: pd.DataFrame) -> dict[str, Any]:
@@ -69,7 +97,7 @@ def _score(
     threshold = float(loader.report.get("best_threshold", 0.5))
     explanation = _explanation(loader.explain(X_raw, top_k=top_k), include_shap)
 
-    return PredictionResponse(
+    response = PredictionResponse(
         transaction_id=transaction_id,
         is_fraud=probability >= threshold,
         probability=probability,
@@ -79,6 +107,15 @@ def _score(
         overrides_applied=overrides_applied or None,
         explanation=explanation,
     )
+    _audit_log(
+        transaction_id,
+        probability,
+        response.is_fraud,
+        loader.model_version,
+        overrides_used=bool(overrides_applied),
+        shap_computed=explanation is not None,
+    )
+    return response
 
 
 def _explanation(raw: dict[str, Any] | None, include_shap: bool) -> Explanation | None:
@@ -160,16 +197,26 @@ def _score_named(
     explanation = _explanation(
         multi.explain(name, to_model_input(row), top_k=top_k), include_shap
     )
-    return PredictionResponse(
+    model_version = f"{name}:{info.version}" if info.version else name
+    response = PredictionResponse(
         transaction_id=transaction_id,
         is_fraud=probability >= threshold,
         probability=probability,
         threshold=threshold,
-        model_version=f"{name}:{info.version}" if info.version else name,
+        model_version=model_version,
         raw=_raw_dict(row),
         overrides_applied=overrides_applied or None,
         explanation=explanation,
     )
+    _audit_log(
+        transaction_id,
+        probability,
+        response.is_fraud,
+        model_version,
+        overrides_used=bool(overrides_applied),
+        shap_computed=explanation is not None,
+    )
+    return response
 
 
 def _compare_item(multi: MultiModelLoader, name: str, row: pd.DataFrame) -> CompareItem:
