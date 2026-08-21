@@ -31,6 +31,9 @@ jobs:
       - name: Check formatting
         run: uv run ruff format --check src/ tests/
 
+      - name: Audit dependencies
+        run: uvx pip-audit --strict
+
       - name: Type check with basedpyright
         run: uv run basedpyright src/
 
