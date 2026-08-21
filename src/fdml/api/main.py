@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -27,13 +29,17 @@ from fdml.api.routers.predict import predict_router
 from fdml.api.routers.ready import ready_router
 from fdml.api.routers.transactions import transactions_router
 
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN"),
+    traces_sample_rate=0.1,
+    environment=os.environ.get("ENVIRONMENT", "production"),
+)
+
 logger = logging.getLogger(__name__)
 
-# Origins allowed to call the API from a browser. The personal webpage is
-# hosted on Vercel; a demo page anywhere else is allowed for local dev.
 ALLOWED_ORIGINS = [
     "https://alexmatias.vercel.app",
-    "http://localhost:4321",  # Astro dev server
+    "http://localhost:4321",
 ]
 
 
@@ -68,11 +74,7 @@ app = FastAPI(
 
 @app.middleware("http")
 async def log_request(request: Request, call_next):
-    """Structured JSON log line per request (request_id, timestamp, latency, status).
-
-    Accepts an optional client-provided ``X-Request-ID`` header for
-    distributed tracing; otherwise generates a short UUID.
-    """
+    """Structured JSON log line per request (request_id, timestamp, latency, status)."""
     rid = request.headers.get("x-request-id", uuid.uuid4().hex[:12])
     token = request_id_ctx.set(rid)
     start = time.perf_counter()
