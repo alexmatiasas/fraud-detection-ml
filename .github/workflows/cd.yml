@@ -59,6 +59,7 @@ jobs:
             --image ${{ env.IMAGE }}:${{ github.ref_name }} \
             --region ${{ secrets.GCP_REGION }} \
             --platform managed \
+            --service-account fdml-deployer@${CLOUDSDK_CORE_PROJECT}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances 0 \
             --max-instances 3 \
