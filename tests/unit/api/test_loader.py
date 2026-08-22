@@ -198,3 +198,63 @@ def test_report_no_mlflow_fallback_without_run_id(tmp_path: Path) -> None:
     loader._source = "mlflow"
     loader._run_id = None
     assert loader._load_report() == {}
+
+
+class TestListTransactions:
+    def _loader_with_sample(self):
+        loader = ModelLoader()
+        loader._sample = pd.DataFrame(
+            {
+                "TransactionID": [1, 2, 3, 4, 5],
+                "TransactionAmt": [10.0, 20.0, 30.0, 40.0, 50.0],
+                "ProductCD": ["W", "C", "W", "W", "C"],
+                "isFraud": [0, 1, 0, 0, 1],
+            }
+        )
+        return loader
+
+    def test_returns_all_when_no_limit(self):
+        loader = self._loader_with_sample()
+        total, records = loader.list_transactions()
+        assert total == 5
+        assert len(records) == 5
+
+    def test_pagination(self):
+        loader = self._loader_with_sample()
+        total, page = loader.list_transactions(limit=2, offset=0)
+        assert total == 5
+        assert len(page) == 2
+        assert page[0]["transaction_id"] == 1
+        assert page[1]["transaction_id"] == 2
+
+    def test_offset(self):
+        loader = self._loader_with_sample()
+        _, page = loader.list_transactions(limit=2, offset=2)
+        assert page[0]["transaction_id"] == 3
+
+    def test_no_sample_returns_empty(self):
+        loader = ModelLoader()
+        total, records = loader.list_transactions()
+        assert total == 0
+        assert records == []
+
+    def test_record_fields(self):
+        loader = self._loader_with_sample()
+        _, records = loader.list_transactions(limit=1)
+        rec = records[0]
+        assert rec["transaction_id"] == 1
+        assert rec["amount"] == 10.0
+        assert rec["product_cd"] == "W"
+        assert rec["is_fraud"] is False
+
+
+class TestTransformAndExplain:
+    def test_transform_not_loaded_raises(self):
+        loader = ModelLoader()
+        with pytest.raises(ModelLoadError):
+            loader.transform(pd.DataFrame({"A": [1]}))
+
+    def test_explain_not_loaded_returns_none(self):
+        loader = ModelLoader()
+        result = loader.explain(pd.DataFrame({"A": [1]}))
+        assert result is None

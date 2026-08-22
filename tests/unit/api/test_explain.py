@@ -9,6 +9,8 @@ import pandas as pd
 import pytest
 
 from fdml.api.internal.explain import OverrideError, apply_overrides
+import fdml.api.internal.explain as explain_mod
+import sys
 
 
 def make_row() -> pd.DataFrame:
@@ -73,8 +75,6 @@ def test_compute_explanation_shap_missing(
 ) -> None:
     import builtins
 
-    import fdml.api.internal.explain as explain_mod
-
     real_import = builtins.__import__
 
     def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
@@ -108,7 +108,6 @@ class _FakeExplain:
 def test_compute_explanation_with_fake_shap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import sys
 
     import fdml.api.internal.explain as explain_mod
 
