@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "FilesCfg": {
+      "properties": {
+        "train_transaction": {
+          "default": "train_transaction.csv",
+          "description": "Filename for training transaction CSV",
+          "title": "Train Transaction",
+          "type": "string"
+        },
+        "train_identity": {
+          "default": "train_identity.csv",
+          "description": "Filename for training identity CSV",
+          "title": "Train Identity",
+          "type": "string"
+        },
+        "test_transaction": {
+          "default": "test_transaction.csv",
+          "description": "Filename for test transaction CSV",
+          "title": "Test Transaction",
+          "type": "string"
+        },
+        "test_identity": {
+          "default": "test_identity.csv",
+          "description": "Filename for test identity CSV",
+          "title": "Test Identity",
+          "type": "string"
+        },
+        "sample_submission": {
+          "default": "sample_submission.csv",
+          "description": "Filename for sample submission CSV",
+          "title": "Sample Submission",
+          "type": "string"
+        }
+      },
+      "title": "FilesCfg",
+      "type": "object"
+    },
+    "ValidationCfg": {
+      "properties": {
+        "target_values": {
+          "default": [
+            0,
+            1
+          ],
+          "description": "Expected unique values in target column",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Target Values",
+          "type": "array"
+        },
+        "transaction_id_unique": {
+          "default": true,
+          "description": "TransactionID must be unique",
+          "examples": [
+            true,
+            false
+          ],
+          "title": "Transaction Id Unique",
+          "type": "boolean"
+        },
+        "transaction_amt_positive": {
+          "default": true,
+          "description": "TransactionAmt must be positive",
+          "title": "Transaction Amt Positive",
+          "type": "boolean"
+        }
+      },
+      "title": "ValidationCfg",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "base_dir": {
+      "default": "data",
+      "description": "Root data directory",
+      "format": "path",
+      "title": "Base Dir",
+      "type": "string"
+    },
+    "raw_dir": {
+      "default": "data/raw",
+      "description": "Raw CSV directory",
+      "format": "path",
+      "title": "Raw Dir",
+      "type": "string"
+    },
+    "processed_dir": {
+      "default": "data/processed",
+      "description": "Processed Parquet directory",
+      "format": "path",
+      "title": "Processed Dir",
+      "type": "string"
+    },
+    "features_dir": {
+      "default": "data/features",
+      "description": "Feature Feather directory",
+      "format": "path",
+      "title": "Features Dir",
+      "type": "string"
+    },
+    "files": {
+      "$ref": "#/$defs/FilesCfg",
+      "description": "Input/output filenames"
+    },
+    "join_key": {
+      "default": "TransactionID",
+      "description": "Column used to merge transaction and identity tables",
+      "title": "Join Key",
+      "type": "string"
+    },
+    "target": {
+      "default": "isFraud",
+      "description": "Target column name",
+      "title": "Target",
+      "type": "string"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationCfg",
+      "description": "Data quality validation rules"
+    }
+  },
+  "required": [
+    "files",
+    "validation"
+  ],
+  "title": "DataConfig",
+  "type": "object"
+}

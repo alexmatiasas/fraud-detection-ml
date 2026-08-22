@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra train
+
+      - name: Lint with ruff
+        run: uv run ruff check src/ tests/
+
+      - name: Check formatting
+        run: uv run ruff format --check src/ tests/
+
+      - name: Audit dependencies
+        run: uvx pip-audit --strict
+
+      - name: Type check with basedpyright
+        run: uv run basedpyright src/
+
+      - name: Run tests with coverage
+        run: uv run python -m pytest --cov=src/fdml --cov-report=term-missing --cov-fail-under=80
+
+      - name: Validate configs
+        run: |
+          uv run python -c "
+          from omegaconf import OmegaConf
+          OmegaConf.load('configs/train.yaml')
+          OmegaConf.load('configs/features.yaml')
+          print('Configs OK')
+          "

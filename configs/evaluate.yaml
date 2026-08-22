@@ -1,0 +1,94 @@
+# $schema: ../schemas/evaluate.schema.json
+# ── Evaluación ────────────────────────────────────────────────────────────────
+# Para fraude: accuracy es INÚTIL (96.5% baseline).
+# Average Precision (PR AUC) > ROC AUC > F1.
+
+# ── Threshold tuning + bootstrap CI ───────────────────────────────────────────
+threshold:
+  threshold: 0.5
+  n_thresholds: 100
+  bootstrap: true
+  bootstrap_metric: average_precision
+  bootstrap_iterations: 1000
+  bootstrap_seed: 42
+
+# ── Segmentos ─────────────────────────────────────────────────────────────────
+segments:
+  enabled: true
+  columns:
+    - ProductCD
+    - card4
+  min_samples: 50
+
+# ── Learning curves (opt-in, re-entrena modelo N veces) ──────────────────────
+learning_curves:
+  enabled: false
+  train_sizes: [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+
+# ── Feature importance stability (opt-in, re-entrena N seeds) ─────────────────
+stability:
+  feature_importance: false
+  n_iterations: 10
+  seed: 42
+
+# ── Error analysis ────────────────────────────────────────────────────────────
+error_analysis:
+  enabled: true
+  features: [TransactionAmt]
+
+# ── Adversarial validation (opt-in, entrena RF extra) ────────────────────────
+adversarial_validation:
+  enabled: false
+  seed: 42
+
+# ── Model card ────────────────────────────────────────────────────────────────
+model_card:
+  enabled: true
+  filename: model_card.md
+
+# ── Plots ─────────────────────────────────────────────────────────────────────
+plots:
+  output_dir: models/
+  plots:
+    - roc_curve
+    - pr_curve
+    - calibration
+  output_format: webp  # png | webp (webp for web embedding)
+  dpi: 150
+  error_features: null
+
+# ── DVCLive (métricas para DVC: dvc metrics show, dvc plots diff) ──────────
+dvclive:
+  enabled: true
+  dir: dvclive
+  # Modo report de dvclive: null | html | notebook | md. 'notebook' solo dentro
+  # de un notebook (warn en CLI); null/html para runs de `make train`.
+  report: null
+
+# ── Report (JSON, sin dependencia de MLflow) ─────────────────────────────────
+report:
+  path: models/report.json
+
+# ── Costo esperado ────────────────────────────────────────────────────────────
+# Umbral de decisión que minimiza coste medio por transacción (no F1).
+# FN = fraude no bloqueado (10×), FP = revisión manual de transacción normal.
+costs:
+  enabled: true
+  false_positive_cost: 1.0
+  false_negative_cost: 10.0
+  n_thresholds: 100
+
+# ── F-beta ────────────────────────────────────────────────────────────────────
+# beta=2: el recall pesa 2× la precisión (fraude-friendly).
+f_beta:
+  enabled: true
+  beta: 2.0
+
+# ── Recall@top-k ──────────────────────────────────────────────────────────────
+# % de fraude capturado si se revisa el top-k% de mayor riesgo.
+recall_at_k:
+  enabled: true
+  fractions: [0.01, 0.05]
+
+# ── Brier (calibración de probabilidades) ─────────────────────────────────────
+brier: true

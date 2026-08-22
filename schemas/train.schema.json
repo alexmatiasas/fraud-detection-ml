@@ -1,0 +1,481 @@
+{
+  "$defs": {
+    "AblationCfg": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Run the feature ablation study instead of a single fit",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_train_rows": {
+          "default": 0,
+          "description": "Cap train rows per variant to keep the study fast (0 = all)",
+          "minimum": 0,
+          "title": "Max Train Rows",
+          "type": "integer"
+        },
+        "seeds": {
+          "description": "Seeds to run per variant (one MLflow run each). Empty falls back to the global TrainConfig.seed",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Seeds",
+          "type": "array"
+        },
+        "report_path": {
+          "default": "models/feature_ablation.csv",
+          "description": "Where to save the per-variant results table",
+          "title": "Report Path",
+          "type": "string"
+        }
+      },
+      "title": "AblationCfg",
+      "type": "object"
+    },
+    "DataPathsCfg": {
+      "properties": {
+        "raw_dir": {
+          "default": "data/raw",
+          "description": "Raw data directory",
+          "title": "Raw Dir",
+          "type": "string"
+        },
+        "processed_dir": {
+          "default": "data/processed",
+          "description": "Processed Parquet directory",
+          "title": "Processed Dir",
+          "type": "string"
+        },
+        "features_dir": {
+          "default": "data/features",
+          "description": "Feature Feather directory",
+          "title": "Features Dir",
+          "type": "string"
+        },
+        "train_transaction": {
+          "default": "data/raw/train_transaction.parquet",
+          "description": "Training transaction file",
+          "title": "Train Transaction",
+          "type": "string"
+        },
+        "train_identity": {
+          "default": "data/raw/train_identity.parquet",
+          "description": "Training identity file",
+          "title": "Train Identity",
+          "type": "string"
+        },
+        "test_transaction": {
+          "default": "data/raw/test_transaction.parquet",
+          "description": "Test transaction file",
+          "title": "Test Transaction",
+          "type": "string"
+        },
+        "test_identity": {
+          "default": "data/raw/test_identity.parquet",
+          "description": "Test identity file",
+          "title": "Test Identity",
+          "type": "string"
+        },
+        "max_train_rows": {
+          "default": 0,
+          "description": "Cap the training fold to the earliest N rows by time (validation stays untouched). 0 = use all rows",
+          "minimum": 0,
+          "title": "Max Train Rows",
+          "type": "integer"
+        }
+      },
+      "title": "DataPathsCfg",
+      "type": "object"
+    },
+    "EarlyStoppingCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable early stopping",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "rounds": {
+          "default": 100,
+          "description": "Patience rounds",
+          "minimum": 1,
+          "title": "Rounds",
+          "type": "integer"
+        },
+        "eval_metric": {
+          "default": "auc",
+          "description": "Early stopping evaluation metric",
+          "enum": [
+            "auc",
+            "average_precision"
+          ],
+          "title": "Eval Metric",
+          "type": "string"
+        },
+        "eval_max_rows": {
+          "default": 0,
+          "description": "Max rows of the validation fold used for early stopping and the per-iteration metric curve (0 = full fold). A fixed stratified subsample makes each iteration much cheaper; final metrics are still computed on the full validation fold",
+          "minimum": 0,
+          "title": "Eval Max Rows",
+          "type": "integer"
+        },
+        "train_eval_max_rows": {
+          "default": 50000,
+          "description": "Max rows of the training set used for the per-iteration TRAIN curve (train/auc), so overfitting vs validation is visible (0 = off). A fixed random sample keeps each iteration cheap; the model still trains on the full training set",
+          "minimum": 0,
+          "title": "Train Eval Max Rows",
+          "type": "integer"
+        }
+      },
+      "title": "EarlyStoppingCfg",
+      "type": "object"
+    },
+    "LightGBMParams": {
+      "properties": {
+        "n_estimators": {
+          "default": 1000,
+          "description": "Number of boosting rounds",
+          "minimum": 1,
+          "title": "N Estimators",
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 0.05,
+          "description": "Boosting learning rate",
+          "exclusiveMinimum": 0.0,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "max_depth": {
+          "default": 8,
+          "description": "Maximum tree depth (-1 = unlimited)",
+          "minimum": -1,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "num_leaves": {
+          "default": 127,
+          "description": "Maximum tree leaves",
+          "minimum": 1,
+          "title": "Num Leaves",
+          "type": "integer"
+        },
+        "min_child_samples": {
+          "default": 100,
+          "description": "Minimum data per child node",
+          "minimum": 1,
+          "title": "Min Child Samples",
+          "type": "integer"
+        },
+        "subsample": {
+          "default": 0.8,
+          "description": "Row sampling ratio per tree",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Subsample",
+          "type": "number"
+        },
+        "colsample_bytree": {
+          "default": 0.8,
+          "description": "Column sampling ratio per tree",
+          "exclusiveMinimum": 0.0,
+          "maximum": 1.0,
+          "title": "Colsample Bytree",
+          "type": "number"
+        },
+        "reg_alpha": {
+          "default": 0.1,
+          "description": "L1 regularization",
+          "minimum": 0.0,
+          "title": "Reg Alpha",
+          "type": "number"
+        },
+        "reg_lambda": {
+          "default": 1.0,
+          "description": "L2 regularization",
+          "minimum": 0.0,
+          "title": "Reg Lambda",
+          "type": "number"
+        },
+        "scale_pos_weight": {
+          "default": 27.6,
+          "description": "Class weight for positive class (~(1-0.035)/0.035)",
+          "exclusiveMinimum": 0.0,
+          "title": "Scale Pos Weight",
+          "type": "number"
+        },
+        "random_state": {
+          "default": 42,
+          "description": "PRNG seed",
+          "title": "Random State",
+          "type": "integer"
+        },
+        "n_jobs": {
+          "default": -1,
+          "description": "Parallel threads (-1 = all cores)",
+          "title": "N Jobs",
+          "type": "integer"
+        }
+      },
+      "title": "LightGBMParams",
+      "type": "object"
+    },
+    "MlflowCfg": {
+      "properties": {
+        "experiment_name": {
+          "default": "fraud-detection",
+          "description": "MLflow experiment name",
+          "title": "Experiment Name",
+          "type": "string"
+        },
+        "run_name": {
+          "default": "lgbm_baseline",
+          "description": "MLflow run name",
+          "title": "Run Name",
+          "type": "string"
+        },
+        "log_model": {
+          "default": true,
+          "description": "Log model artifact to MLflow",
+          "title": "Log Model",
+          "type": "boolean"
+        },
+        "experiment_tag": {
+          "default": "",
+          "description": "Experiment group label (e.g. 'A_baseline', 'B_reg'). Empty = no tag. Used to filter/compare runs across seeds and variants",
+          "title": "Experiment Tag",
+          "type": "string"
+        }
+      },
+      "title": "MlflowCfg",
+      "type": "object"
+    },
+    "ModelCfg": {
+      "properties": {
+        "name": {
+          "default": "lightgbm",
+          "description": "Model algorithm",
+          "enum": [
+            "lightgbm",
+            "xgboost",
+            "random_forest"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "artifact_dir": {
+          "default": "models/",
+          "description": "Directory for model artifacts",
+          "title": "Artifact Dir",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/LightGBMParams",
+          "description": "Model hyperparameters"
+        }
+      },
+      "title": "ModelCfg",
+      "type": "object"
+    },
+    "OptunaCfg": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable Optuna hyperparameter optimisation",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "n_trials": {
+          "default": 50,
+          "description": "Number of HPO trials",
+          "minimum": 1,
+          "title": "N Trials",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 3600,
+          "description": "HPO timeout (None = unlimited)",
+          "title": "Timeout Seconds"
+        },
+        "metric": {
+          "default": "roc_auc",
+          "description": "Metric to optimise",
+          "enum": [
+            "roc_auc",
+            "average_precision"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "direction": {
+          "default": "maximize",
+          "description": "Optimisation direction",
+          "enum": [
+            "maximize",
+            "minimize"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "study_name": {
+          "default": "fraud_lgbm_v1",
+          "description": "Optuna study name (persisted to DB)",
+          "title": "Study Name",
+          "type": "string"
+        },
+        "save_best_params": {
+          "default": true,
+          "description": "Save best HPO params to models/best_params_*.json",
+          "title": "Save Best Params",
+          "type": "boolean"
+        }
+      },
+      "title": "OptunaCfg",
+      "type": "object"
+    },
+    "ShapCfg": {
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Compute SHAP values at evaluation time",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "max_display": {
+          "default": 20,
+          "description": "Top-N features in summary plot",
+          "minimum": 1,
+          "title": "Max Display",
+          "type": "integer"
+        },
+        "sample_size": {
+          "default": 1000,
+          "description": "Sample size for SHAP computation (full dataset is expensive)",
+          "minimum": 1,
+          "title": "Sample Size",
+          "type": "integer"
+        }
+      },
+      "title": "ShapCfg",
+      "type": "object"
+    },
+    "SplitCfg": {
+      "properties": {
+        "strategy": {
+          "default": "temporal",
+          "description": "Split strategy \u2014 temporal is preferred for fraud",
+          "enum": [
+            "temporal",
+            "random"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        },
+        "time_col": {
+          "default": "TransactionDT",
+          "description": "Column used for temporal split",
+          "title": "Time Col",
+          "type": "string"
+        },
+        "test_size": {
+          "default": 0.2,
+          "description": "Fraction of data held out for validation",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Test Size",
+          "type": "number"
+        },
+        "embargo_seconds": {
+          "default": 0,
+          "description": "Time gap (in time_col units) dropped between train and validation to prevent leakage from aggregate features; the Kaggle train/test windows are ~30 days apart",
+          "minimum": 0,
+          "title": "Embargo Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "SplitCfg",
+      "type": "object"
+    },
+    "TrainingCallbacksCfg": {
+      "properties": {
+        "log_per_iteration": {
+          "default": true,
+          "description": "Log per-iteration validation metrics to MLflow + DVCLive",
+          "title": "Log Per Iteration",
+          "type": "boolean"
+        },
+        "mlflow_every": {
+          "default": 1,
+          "description": "Send one MLflow metric per this many iterations. Each remote log_metric call to DagsHub costs ~1.5s, so 10 keeps the curve while cutting experiment wall time ~10x. Console logging is unaffected",
+          "minimum": 1,
+          "title": "Mlflow Every",
+          "type": "integer"
+        },
+        "dvclive": {
+          "default": false,
+          "description": "Log per-iteration metrics via DVCLive (separate from eval dvclive)",
+          "title": "Dvclive",
+          "type": "boolean"
+        }
+      },
+      "title": "TrainingCallbacksCfg",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "seed": {
+      "default": 42,
+      "description": "Global PRNG seed",
+      "title": "Seed",
+      "type": "integer"
+    },
+    "data": {
+      "$ref": "#/$defs/DataPathsCfg",
+      "description": "Data file paths"
+    },
+    "split": {
+      "$ref": "#/$defs/SplitCfg",
+      "description": "Train/validation split configuration"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelCfg",
+      "description": "Model configuration"
+    },
+    "optuna": {
+      "$ref": "#/$defs/OptunaCfg",
+      "description": "Optuna HPO configuration"
+    },
+    "early_stopping": {
+      "$ref": "#/$defs/EarlyStoppingCfg",
+      "description": "Early stopping configuration"
+    },
+    "mlflow": {
+      "$ref": "#/$defs/MlflowCfg",
+      "description": "Minimal MLflow config"
+    },
+    "shap": {
+      "$ref": "#/$defs/ShapCfg",
+      "description": "SHAP explainability configuration"
+    },
+    "training_callbacks": {
+      "$ref": "#/$defs/TrainingCallbacksCfg",
+      "description": "Per-iteration training callbacks"
+    },
+    "ablation": {
+      "$ref": "#/$defs/AblationCfg",
+      "description": "Feature ablation study configuration"
+    }
+  },
+  "title": "TrainConfig",
+  "type": "object"
+}

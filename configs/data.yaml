@@ -1,0 +1,21 @@
+# $schema: ../schemas/data.schema.json
+
+base_dir: data
+raw_dir: ${base_dir}/raw
+processed_dir: ${base_dir}/processed
+features_dir: ${base_dir}/features
+
+files:
+  train_transaction: train_transaction.csv
+  train_identity: train_identity.csv
+  test_transaction: test_transaction.csv
+  test_identity: test_identity.csv
+  sample_submission: sample_submission.csv
+
+join_key: TransactionID
+target: isFraud
+
+validation:
+  target_values: [0, 1]
+  transaction_id_unique: true
+  transaction_amt_positive: true
