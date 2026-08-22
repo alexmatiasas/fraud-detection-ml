@@ -42,9 +42,14 @@ sentry_sdk.init(
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_ORIGINS = [
+DEFAULT_ORIGINS = [
     "https://alexmatias.vercel.app",
     "http://localhost:4321",
+]
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", ",".join(DEFAULT_ORIGINS)).split(",")
+    if o.strip()
 ]
 
 
