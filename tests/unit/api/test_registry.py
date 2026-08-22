@@ -254,3 +254,71 @@ def test_load_failure_records_error(no_dagshub, fake_load_model) -> None:
 def test_best_threshold_falls_back_on_bad_value() -> None:
     info = reg_mod.RegisteredModel(name="m", report={"best_threshold": "n/a"})
     assert info.best_threshold == pytest.approx(0.5)
+
+
+def test_n_features_non_int_fallback() -> None:
+    info = reg_mod.RegisteredModel(name="m", report={"n_features": "abc"})
+    assert info.n_features is None
+
+
+def test_download_report_empty_run_id() -> None:
+    result = reg_mod.download_report(None, None)
+    assert result == {}
+
+
+def test_default_model_property() -> None:
+    loader = MultiModelLoader(default_model="my-model")
+    assert loader.default_model == "my-model"
+
+
+def test_iter_models() -> None:
+    loader = MultiModelLoader()
+    loader._models = {
+        "a": reg_mod.RegisteredModel(name="a", version=1, run_id="r1"),
+        "b": reg_mod.RegisteredModel(name="b", version=2, run_id="r2"),
+    }
+    models = loader.iter_models()
+    assert len(models) == 2
+    assert {m.name for m in models} == {"a", "b"}
+
+
+def test_is_default() -> None:
+    loader = MultiModelLoader(default_model="fraud-detection-lgbm")
+    assert loader.is_default("fraud-detection-lgbm")
+    assert not loader.is_default("other-model")
+
+
+def test_load_skip_when_already_loaded(no_dagshub, install_client) -> None:
+    install_client(
+        versions={"m": [FakeModelVersion(1, "r")]},
+        reports={"r": {}},
+    )
+    loader = MultiModelLoader()
+    loader.load()
+    assert loader.is_loaded
+    loader.load(force=False)
+    assert loader.is_loaded
+
+
+def test_explain_returns_none_on_error(no_dagshub) -> None:
+    loader = MultiModelLoader()
+    result = loader.explain("unknown", pd.DataFrame({"x": [1]}))
+    assert result is None
+
+
+def test_get_pipeline_no_version(no_dagshub) -> None:
+    loader = MultiModelLoader()
+    loader._models = {"m": reg_mod.RegisteredModel(name="m", version=None, run_id="r")}
+    with pytest.raises(ModelRegistryError, match="no version"):
+        loader.predict_proba("m", pd.DataFrame({"x": [1]}))
+
+
+def test_get_pipeline_with_error(no_dagshub) -> None:
+    loader = MultiModelLoader()
+    loader._models = {
+        "m": reg_mod.RegisteredModel(
+            name="m", version=1, run_id="r", error="previous failure"
+        )
+    }
+    with pytest.raises(ModelRegistryError, match="previous failure"):
+        loader.predict_proba("m", pd.DataFrame({"x": [1]}))

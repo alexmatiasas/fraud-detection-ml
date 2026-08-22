@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
+from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
@@ -10,7 +12,6 @@ import pytest
 
 from fdml.api.internal.explain import OverrideError, apply_overrides
 import fdml.api.internal.explain as explain_mod
-import sys
 
 
 def make_row() -> pd.DataFrame:
@@ -128,3 +129,94 @@ def test_compute_explanation_with_fake_shap(
     assert top["feature"] == "TransactionAmt"
     assert top["shap"] == pytest.approx(0.5)
     assert top["value"] == pytest.approx(99.0)
+
+
+class TestCoerce:
+    def test_bool_to_int(self):
+        result = explain_mod._coerce(True, np.dtype("int64"), "col")
+        assert result == 1
+        assert isinstance(result, int)
+
+    def test_float_value(self):
+        result = explain_mod._coerce(3.14, np.dtype("float64"), "col")
+        assert result == pytest.approx(3.14)
+
+    def test_invalid_number_raises(self):
+        with pytest.raises(OverrideError):
+            explain_mod._coerce("not_a_number", np.dtype("float64"), "col")
+
+    def test_bool_dtype(self):
+        result = explain_mod._coerce(1, np.dtype("bool"), "col")
+        assert result is True
+
+    def test_datetime_value(self):
+        result = explain_mod._coerce("2024-01-01", np.dtype("datetime64[ns]"), "col")
+        assert isinstance(result, pd.Timestamp)
+
+    def test_invalid_datetime_raises(self):
+        with pytest.raises(OverrideError):
+            explain_mod._coerce("not-a-date", np.dtype("datetime64[ns]"), "col")
+
+    def test_string_fallback(self):
+        result = explain_mod._coerce(42, np.dtype("O"), "col")
+        assert result == "42"
+
+
+class TestJsonable:
+    def test_numpy_integer(self):
+        assert explain_mod._jsonable(np.int64(5)) == 5
+
+    def test_numpy_float(self):
+        assert explain_mod._jsonable(np.float64(3.14)) == pytest.approx(3.14)
+
+    def test_numpy_bool(self):
+        assert explain_mod._jsonable(np.bool_(True)) is True
+
+    def test_timestamp(self):
+        ts = pd.Timestamp("2024-01-01")
+        assert explain_mod._jsonable(ts) == "2024-01-01T00:00:00"
+
+    def test_nan_returns_none(self):
+        assert explain_mod._jsonable(np.nan) is None
+
+    def test_regular_value(self):
+        assert explain_mod._jsonable("hello") == "hello"
+
+
+class TestFeatureNames:
+    def test_dataframe_columns(self):
+        X = pd.DataFrame({"a": [1], "b": [2]})
+        names = explain_mod._feature_names(X, None, 2)
+        assert names == ["a", "b"]
+
+    def test_model_with_names(self):
+        model = MagicMock()
+        model.feature_names_in_ = ["x", "y"]
+        names = explain_mod._feature_names(np.array([[1, 2]]), model, 2)
+        assert names == ["x", "y"]
+
+    def test_fallback(self):
+        names = explain_mod._feature_names(np.array([[1, 2, 3]]), object(), 3)
+        assert names == ["feature_0", "feature_1", "feature_2"]
+
+
+class TestPositiveClassValues:
+    def test_list_of_two(self):
+        raw = [np.array([1, 2]), np.array([3, 4])]
+        result = explain_mod._positive_class_values(raw)
+        np.testing.assert_array_equal(result, [3, 4])
+
+    def test_single_element_list(self):
+        raw = [np.array([1, 2])]
+        result = explain_mod._positive_class_values(raw)
+        np.testing.assert_array_equal(result, [1, 2])
+
+    def test_plain_array(self):
+        raw = np.array([1, 2, 3])
+        result = explain_mod._positive_class_values(raw)
+        np.testing.assert_array_equal(result, [1, 2, 3])
+
+    def test_2d_array_first_row(self):
+        raw = np.array([[1, 2], [3, 4]])
+        result = explain_mod._positive_class_values(raw)
+        np.testing.assert_array_equal(result, [1, 2])
