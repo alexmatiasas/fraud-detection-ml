@@ -10,6 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import sentry_sdk
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,10 +30,14 @@ from fdml.api.routers.predict import predict_router
 from fdml.api.routers.ready import ready_router
 from fdml.api.routers.transactions import transactions_router
 
+load_dotenv()
 sentry_sdk.init(
     dsn=os.environ.get("SENTRY_DSN"),
+    send_default_pii=True,
+    enable_logs=True,
+    profile_session_sample_rate=1.0,
+    profile_lifecycle="trace",
     traces_sample_rate=0.1,
-    environment=os.environ.get("ENVIRONMENT", "production"),
 )
 
 logger = logging.getLogger(__name__)
