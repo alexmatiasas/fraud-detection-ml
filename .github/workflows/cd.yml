@@ -1,0 +1,96 @@
+name: CD
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/fdml-api
+  SERVICE: fdml-api
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write    # push to GHCR
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      # ── Docker build & push ────────────────────────────────────────────
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+
+      # ── Deploy to Cloud Run ────────────────────────────────────────────
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image ${{ env.IMAGE }}:${{ github.ref_name }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 3 \
+            --memory 2Gi \
+            --cpu 1 \
+            --timeout 300 \
+            --set-env-vars "\
+              DAGSHUB_USERNAME=${{ secrets.DAGSHUB_USERNAME }},\
+              DAGSHUB_REPO=${{ secrets.DAGSHUB_REPO }},\
+              DAGSHUB_TOKEN=${{ secrets.DAGSHUB_TOKEN }},\
+              FDML_API_KEY=${{ secrets.FDML_API_KEY }}"
+
+      # ── Smoke test ─────────────────────────────────────────────────────
+      - name: Get service URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --format 'value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for service to be ready
+        run: sleep 30
+
+      - name: Verify deployment
+        run: |
+          bash scripts/verify_deploy.sh "${{ steps.url.outputs.url }}"
+
+      - name: Summary
+        run: |
+          echo "## Deployment complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Image:** \`${{ env.IMAGE }}:${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **URL:** ${{ steps.url.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Docs:** ${{ steps.url.outputs.url }}/docs" >> "$GITHUB_STEP_SUMMARY"

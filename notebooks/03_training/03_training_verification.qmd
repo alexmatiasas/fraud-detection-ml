@@ -1,0 +1,705 @@
+---
+title: "03 — Training & MLflow verification"
+subtitle: "End-to-end training path, tracking, reproducibility, registry and serving on real data"
+format: html
+toc: true
+toc-location: left
+theme: darkly
+jupyter: fdml
+---
+
+# Goal
+
+Where `02_feature_engineering.qmd` verifies *feature transformers*, this notebook
+verifies the **training stack** that consumes them. Everything here runs on a
+temporal sample (`SAMPLE=80_000` rows) so the cells stay fast while exercising
+the *real* production code paths:
+
+- the temporal split and the logged split boundaries (no overlap);
+- the end-to-end train + evaluate flow, reusing the same reporters that
+  `runner.main()` uses (`ConsoleReporter`, `JSONFileReporter`,
+  `LoggingReporter`, `MLflowReporter`);
+- **reproducibility by seed** (same seed → identical metrics; different seed →
+  different model), which validates the seed wiring in the model builders;
+- the Model Registry **champion/challenger** flow driven by **ROC AUC**;
+- a **serving roundtrip**: load the logged model and predict with it;
+- a small **benchmark** across models (LGBM/XGB/RF), an ensemble, sampling
+  strategies (temporal vs stratified) and feature-group variations.
+
+All MLflow runs go to a **sandbox** SQLite store under `/tmp` — the project's
+`mlruns.db` is never touched.
+
+# 1. Setup
+
+```{python}
+import logging
+import os
+import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from fdml.utils.logging import ensure_logging
+from fdml.utils.paths import PROJECT_ROOT
+
+os.chdir(PROJECT_ROOT)  # config loads + data paths are project-root relative
+ensure_logging()
+
+SAMPLE = 80_000                                  # temporal head of the data
+TRACKING_URI = "sqlite:////tmp/fdml_training_verify.db"
+EXPERIMENT = "fdml-verify"
+TMP_DIR = Path("/tmp/fdml_training_verify")
+PLOT_DIR = TMP_DIR / "plots"
+TMP_DIR.mkdir(parents=True, exist_ok=True)
+PLOT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Clean sandbox between renders (idempotent).
+Path("/tmp/fdml_training_verify.db").unlink(missing_ok=True)
+
+print(f"SAMPLE={SAMPLE:,}  tracking={TRACKING_URI}")
+print(f"sandbox dir: {TMP_DIR}")
+```
+
+# 2. Data, sample, merge
+
+```{python}
+import time as _time
+
+from fdml.features.factory import load_data, load_data_config, merge_tables
+
+data_cfg = load_data_config()
+train_df, identity_df = load_data(data_cfg)
+df = merge_tables(train_df, identity_df)
+
+# Temporal head: earliest transactions (data is already chronological).
+df = df.sort_values("TransactionDT").head(SAMPLE).reset_index(drop=True)
+X = df.drop(columns=["isFraud"])
+y = df["isFraud"]
+
+print(f"rows={len(df):,}  cols={df.shape[1]:,}  fraud={y.mean():.2%}")
+print(f"time=[{df.TransactionDT.min():,}, {df.TransactionDT.max():,}]")
+print(f"identity coverage: {df.filter(regex='^id_').notna().any(axis=1).mean():.1%}")
+
+# The temporal head is a genuinely LOW-fraud slice of history: the full dataset
+# sits at 3.50% fraud while this early window (~19 days) hovers around 2.66%
+# (fraud rate varies by time — EDA deciles range 2.0-4.3%). This is expected for
+# a temporal head and NOT a sampling bug; any head-sized slice of the first few
+# deciles under-represents fraud. Consequences for this notebook:
+#   * ranking metrics (AUC/AP) are unaffected — they are threshold-free;
+#   * class-weighted outputs (labels, recall_at_k, expected cost) shift, so we
+#     recompute scale_pos_weight from the actual sample rate below.
+```
+
+# 3. Splits
+
+## 3.1 Temporal split — embargo, no overlap
+
+The temporal splitter sorts by `TransactionDT` and takes the first
+`(1 - test_size)` rows as train, the rest as validation. An **embargo** of
+`embargo_seconds` is dropped right before the boundary: aggregate features
+(`card_*` stats, frequency encodings) are learned from train, so a temporally
+adjacent row would inherit those values and leak the future into the past. The
+real Kaggle gap between the train and test windows is ~30 days; `train.yaml`
+uses a conservative 2-day embargo for this sample.
+
+```{python}
+from fdml.models.config import load_train_config
+from fdml.models.train.runner import _get_splitter
+
+cfg = load_train_config(cli_args=["seed=42"])
+embargo_s = cfg.split.embargo_seconds
+splitter = _get_splitter(cfg.split)
+train_idx, val_idx = next(splitter.split(df, y))
+
+X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+# The API contract is the RAW frame (string columns arrive as `object`, never
+# pandas `category`). Normalize the dtypes once so the logged model signature
+# matches what serving will actually receive.
+sig_input = X_val.astype(
+    {c: "object" for c in X_val.select_dtypes("category").columns}
+)
+
+train_tr = (int(X_train.TransactionDT.min()), int(X_train.TransactionDT.max()))
+val_tr = (int(X_val.TransactionDT.min()), int(X_val.TransactionDT.max()))
+gap_s = val_tr[0] - train_tr[1]
+
+# scale_pos_weight in train.yaml (27.6) is calibrated to the FULL dataset rate
+# (1-0.035)/0.035. This temporal head is a lower-fraud slice, so recompute the
+# weight from the actual train rate for the verification runs.
+pos_weight_prod = cfg.model.params.scale_pos_weight
+pos_weight_sample = (1 - y_train.mean()) / y_train.mean()
+
+print(f"embargo: {embargo_s:,}s = {embargo_s/86400:.1f} days")
+print(f"train: {len(X_train):,} rows  fraud={y_train.mean():.2%}  time=[{train_tr[0]:,}, {train_tr[1]:,}]")
+print(f"val:   {len(X_val):,} rows  fraud={y_val.mean():.2%}  time=[{val_tr[0]:,}, {val_tr[1]:,}]")
+print(f"gap train->val: {gap_s:,}s = {gap_s/86400:.1f} days")
+print(f"scale_pos_weight — prod(full data)={pos_weight_prod:.1f}  sample={pos_weight_sample:.1f}")
+# Params for every verification run in this notebook: production config, but
+# with the class weight recalibrated to the actual sample rate.
+sample_params = {
+    **cfg.model.params.model_dump(),
+    "scale_pos_weight": pos_weight_sample,
+}
+no_overlap = gap_s >= embargo_s
+print(f"embargo respected (val_dt_min - train_dt_max >= embargo): {no_overlap}")
+assert no_overlap, f"embargo broken — gap {gap_s}s < embargo {embargo_s}s"
+```
+
+## 3.2 Stratified random split (for comparison)
+
+`StratifiedSplitter` wraps `train_test_split(stratify=y)` — used later in the
+benchmark to contrast a random split against the honest temporal split.
+
+```{python}
+from fdml.models.split import StratifiedSplitter
+
+strat = StratifiedSplitter(test_size=cfg.split.test_size, random_state=cfg.seed)
+s_tr_idx, s_va_idx = next(strat.split(df, y))
+X_tr_s, X_va_s = X.iloc[s_tr_idx], X.iloc[s_va_idx]
+y_tr_s, y_va_s = y.iloc[s_tr_idx], y.iloc[s_va_idx]
+
+cmp_df = pd.DataFrame(
+    {
+        "split": ["temporal", "stratified"],
+        "train rows": [f"{len(X_train):,}", f"{len(X_tr_s):,}"],
+        "val rows": [f"{len(X_val):,}", f"{len(X_va_s):,}"],
+        "train fraud": [f"{y_train.mean():.2%}", f"{y_tr_s.mean():.2%}"],
+        "val fraud": [f"{y_val.mean():.2%}", f"{y_va_s.mean():.2%}"],
+    }
+)
+print(cmp_df.to_string(index=False))
+```
+
+# 4. Feature engineering (shared)
+
+Same pipeline as production. Categorical encoding is part of the pipeline (the
+`categories` step ordinal-encodes `object`/`category` columns into `int32` codes
+fitted on train), so `pipeline.transform` already returns the exact frame the
+model consumes — the logged model is self-contained for serving. The selector
+contract is re-asserted here, with the selector's real semantics (allow-list +
+dynamic V/count filtering): the output must contain **no phantom columns**
+(every non-`V` column must be declared), and the only declared columns allowed
+to go missing are `C_*` counts dropped by the correlation filter and
+`DeviceInfo` (replaced by `device_os`/`device_brand`). `V_*` columns are never
+declared statically — the `vfilter` step keeps those that pass the
+variance/correlation thresholds (236 on full data, fewer on this sample).
+
+```{python}
+from fdml.features.factory import create_pipeline, load_fe_config as load_features_config
+from fdml.models.train.runner import fit_transform_steps
+
+features_cfg = load_features_config()
+pipeline, feature_columns = create_pipeline(features_cfg)
+
+_t0 = _time.perf_counter()
+X_train_fe = fit_transform_steps(pipeline, X_train, y_train)
+X_val_fe = pipeline.transform(X_val)
+print(f"FE took {_time.perf_counter() - _t0:.1f}s")
+print(f"shape train={X_train_fe.shape}  val={X_val_fe.shape}")
+print(X_train_fe.dtypes.value_counts().to_string())
+
+feature_names = X_train_fe.columns.tolist()
+declared = set(feature_columns)
+v_cols = {c for c in feature_names if c.startswith("V")}
+non_v_out = set(feature_names) - v_cols
+
+phantom = sorted(non_v_out - declared)
+allowed_missing = set(features_cfg.transaction.count_features) | {"DeviceInfo"}
+unexpected_missing = sorted(declared - non_v_out - allowed_missing)
+
+print(f"declared      : {len(declared)} (incl. {sum(c.startswith('V') for c in feature_columns)} V)")
+print(f"output        : {len(feature_names)}  (V kept: {len(v_cols)})")
+print(f"phantom       : {len(phantom)} {phantom}")
+print(f"unexpected    : {len(unexpected_missing)} {unexpected_missing}")
+assert not phantom, "phantom columns (not declared, not V)"
+assert not unexpected_missing, "declared columns silently dropped"
+print(f"selector contract OK: {len(feature_names)} features, {len(v_cols)} V")
+```
+
+# 5. End-to-end run into the MLflow sandbox
+
+This reproduces `runner.main()` PHASE 5-6 on the sample: params and split
+boundaries are logged, the real reporters populate metrics/artifacts, the full
+pipeline is logged with a signature, and `_register_model` is called — all
+against the sandbox store.
+
+```{python}
+import joblib
+import mlflow
+import lightgbm as lgb
+import xgboost as xgb
+from mlflow.models import infer_signature
+from sklearn.pipeline import Pipeline
+
+from fdml.models.config import load_evaluation_config, load_mlflow_config
+from fdml.models.evaluate.runner import evaluate
+from fdml.models.evaluate.reporter import (
+    ConsoleReporter,
+    JSONFileReporter,
+    LoggingReporter,
+    MLflowReporter,
+    log_dataset_lineage,
+)
+from fdml.models.train.model_builder import model_builder_registry
+from fdml.models.train.runner import (
+    _build_callbacks,
+    _log_configs_and_env,
+    _log_git_tags,
+    _register_model,
+)
+
+mlflow_cfg = load_mlflow_config(
+    cli_args=[
+        f"tracking.tracking_uri={TRACKING_URI}",
+        "registry.enabled=true",
+    ]
+)
+eval_cfg = load_evaluation_config(
+    cli_args=[
+        "dvclive.enabled=false",
+        f"plots.output_dir={PLOT_DIR}",
+        f"report.path={TMP_DIR / 'report.json'}",
+    ]
+)
+
+mlflow.set_tracking_uri(mlflow_cfg.tracking.tracking_uri)
+from mlflow.tracking import MlflowClient as _MC
+
+_c = _MC()
+try:
+    _exp_id = _c.create_experiment(EXPERIMENT, artifact_location=str(TMP_DIR / "mlruns"))
+except Exception:
+    _exp_id = _c.get_experiment_by_name(EXPERIMENT).experiment_id
+mlflow.set_experiment(EXPERIMENT)
+
+
+def fit_model(
+    name: str,
+    params: dict,
+    seed: int = 42,
+    Xtr=None, Xva=None, ytr=None, yva=None,
+    callbacks=None,
+):
+    """Build via the registry (real path) and fit with early stopping."""
+    Xtr = X_train_fe if Xtr is None else Xtr
+    Xva = X_val_fe if Xva is None else Xva
+    ytr = y_train if ytr is None else ytr
+    yva = y_val if yva is None else yva
+    params = {**params, "random_state": seed}
+    model = model_builder_registry.build(name, params)
+    t0 = _time.perf_counter()
+    if isinstance(model, lgb.LGBMClassifier):
+        cb = [lgb.early_stopping(100, first_metric_only=True)] + (callbacks or [])
+        model.fit(
+            Xtr, ytr,
+            eval_set=[(Xva, yva)], eval_names=["validation"],
+            eval_metric="auc", callbacks=cb,
+        )
+    elif isinstance(model, xgb.XGBClassifier):
+        model.set_params(eval_metric="auc", early_stopping_rounds=100)
+        model.fit(
+            Xtr, ytr,
+            eval_set=[(Xva, yva)],
+            verbose=False,
+        )
+    else:
+        model.fit(Xtr, ytr)
+    return model, _time.perf_counter() - t0
+
+
+def run_and_register(seed: int, run_name: str):
+    """PHASE 5-6 replication: fit inside an active run, evaluate with real
+    reporters, register. Fitting inside the run mirrors runner.main() and lets
+    the per-iteration callback log `val/auc` to MLflow."""
+    params = {**sample_params, "random_state": seed}
+    callbacks = _build_callbacks(cfg)  # per-iteration val/auc → MLflow
+
+    with mlflow.start_run(run_name=run_name) as run:
+        run_id = run.info.run_id
+        _log_git_tags()
+        log_dataset_lineage(X_train, y_train, X_val, y_val)
+        model, fit_s = fit_model("lightgbm", params, seed=seed, callbacks=callbacks)
+        full_pipeline = Pipeline([("features", pipeline), ("model", model)])
+        y_proba = model.predict_proba(X_val_fe)[:, 1]
+        y_pred = model.predict(X_val_fe)
+
+        mlflow.log_params(params)
+        mlflow.log_params(
+            {
+                "seed": seed,
+                "train_dt_min": train_tr[0],
+                "train_dt_max": train_tr[1],
+                "val_dt_min": val_tr[0],
+                "val_dt_max": val_tr[1],
+            }
+        )
+        mlflow.log_metric("training_elapsed_s", round(fit_s, 1))
+        best_iter = getattr(model, "best_iteration_", None)
+        if best_iter is None:
+            best_iter = getattr(model, "best_iteration", None)
+        if best_iter is not None:
+            mlflow.log_metric("val/best_iteration", int(best_iter))
+
+        reporters = [
+            ConsoleReporter(),
+            JSONFileReporter(eval_cfg.report.path),
+            LoggingReporter(),
+            MLflowReporter(
+                mlflow_cfg=mlflow_cfg,
+                eval_cfg=eval_cfg,
+                model_name="lightgbm",
+                split_strategy="temporal",
+            ),
+        ]
+        report = evaluate(
+            model_name="lightgbm",
+            y_true=y_val.values,
+            y_proba=y_proba,
+            model=model,
+            pipeline=pipeline,
+            X_train=X_train_fe,
+            y_train=y_train,
+            X_val=X_val_fe,
+            feature_names=feature_names,
+            split_strategy="temporal",
+            eval_cfg=eval_cfg,
+            reporters=reporters,
+        )
+
+        _log_configs_and_env()
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Hint: Inferred schema contains integer column"
+            )
+            logging.getLogger("mlflow").setLevel(logging.ERROR)
+            signature = infer_signature(sig_input, y_pred.astype("int64"))
+            mlflow.sklearn.log_model(full_pipeline, "model", signature=signature)
+        _register_model(mlflow_cfg, auc=report.roc_auc, run_id=run_id)
+
+    return report, run_id, full_pipeline, model
+
+
+report_e2e, run_id_e2e, full_pipeline_e2e, model_e2e = run_and_register(
+    cfg.seed, "lgbm_temporal_seed42"
+)
+print(f"e2e run: {run_id_e2e}  AUC={report_e2e.roc_auc:.4f}  AP={report_e2e.average_precision:.4f}")
+```
+
+# 6. Tracking verification
+
+Query the sandbox run and assert that the params, metrics, artifacts and tags
+that `runner.main()` promises are actually there.
+
+```{python}
+from mlflow import MlflowClient
+
+client = MlflowClient(tracking_uri=TRACKING_URI)
+run = mlflow.get_run(run_id_e2e)
+
+print("— params —")
+print(
+    pd.DataFrame(
+        [{"param": k, "value": v} for k, v in sorted(run.data.params.items())]
+    ).to_string(index=False)
+)
+print()
+print("— metrics —")
+print(
+    pd.DataFrame(
+        [{"metric": k, "value": round(v, 6)} for k, v in sorted(run.data.metrics.items())]
+    ).to_string(index=False)
+)
+print()
+print("— tags —")
+print(
+    pd.DataFrame(
+        [
+            {"tag": k, "value": v}
+            for k, v in sorted(run.data.tags.items())
+            if not k.startswith("mlflow.")
+        ]
+    ).to_string(index=False)
+)
+```
+
+```{python}
+required_params = {
+    "seed", "n_estimators", "learning_rate", "num_leaves", "scale_pos_weight",
+    "random_state", "train_dt_min", "train_dt_max",
+    "val_dt_min", "val_dt_max",
+}
+required_metrics = {
+    "val/roc_auc", "val/average_precision", "val/f1", "val/f1_best",
+    "val/precision", "val/recall", "val/best_threshold", "val/fraud_rate",
+    "val/brier", "val/f_beta", "val/expected_cost", "val/cost_best_threshold",
+    "val/recall_at_top_0.01", "val/recall_at_top_0.05",
+    "val/ap_ci_lower", "val/ap_ci_upper", "val/auc", "val/best_iteration",
+    "training_elapsed_s",
+}
+required_tags = {
+    "git_branch", "git_commit", "model_name", "split_strategy",
+    "n_features", "n_train", "n_val",
+}
+
+missing_params = required_params - set(run.data.params)
+missing_metrics = required_metrics - set(run.data.metrics)
+missing_tags = required_tags - set(run.data.tags)
+assert not missing_params, f"missing params: {missing_params}"
+assert not missing_metrics, f"missing metrics: {missing_metrics}"
+assert not missing_tags, f"missing tags: {missing_tags}"
+print(f"params OK ({len(required_params)})  metrics OK ({len(required_metrics)})  tags OK")
+```
+
+```{python}
+def list_artifacts(client, run_id, prefix=""):
+    out = []
+    for a in client.list_artifacts(run_id, prefix):
+        out += (
+            list_artifacts(client, run_id, prefix=a.path)
+            if a.is_dir
+            else [a.path]
+        )
+    return sorted(out)
+
+
+artifacts = list_artifacts(client, run_id_e2e)
+print("— artifacts —")
+print("\n".join(artifacts))
+print()
+
+required_artifacts = {
+    "configs/train.yaml", "configs/features.yaml", "configs/evaluate.yaml",
+    "configs/mlflow.yaml", "env/pyproject.toml", "env/uv.lock",
+    "features/importance.json", "model_card.md", "report.json",
+    "plots/roc_curve.webp", "plots/pr_curve.webp", "plots/calibration_curve.webp",
+    "curves/threshold_curve.json", "curves/cost_curve.json",
+    "curves/roc.json", "curves/pr.json", "curves/calibration.json",
+    "segments/segments.json",
+}
+missing_artifacts = required_artifacts - set(artifacts)
+assert not missing_artifacts, f"missing artifacts: {missing_artifacts}"
+print(f"artifacts OK ({len(required_artifacts)})")
+
+# MLflow 3.13 stores logged models in a separate model store (not under the
+# run's artifact dir), so `model` cannot be asserted via list_artifacts.
+# The real contract is that the classic runs:/<run_id>/model URI resolves and
+# returns the trained pipeline.
+logged = mlflow.pyfunc.load_model(f"runs:/{run_id_e2e}/model")
+print("model store OK: runs:/<run_id>/model resolves ->", type(logged).__name__)
+```
+
+# 7. Reproducibility by seed
+
+The builders now honor `random_state` from params (wired to `cfg.seed`). Fitting
+twice with the same seed must give identical predictions; a different seed must
+change the model.
+
+```{python}
+from fdml.models.evaluate.metrics import compute_metrics
+
+m_a, _ = fit_model("lightgbm", sample_params, seed=42)
+p_a = m_a.predict_proba(X_val_fe)[:, 1]
+m_b, _ = fit_model("lightgbm", sample_params, seed=42)
+p_b = m_b.predict_proba(X_val_fe)[:, 1]
+m_c, _ = fit_model("lightgbm", sample_params, seed=43)
+p_c = m_c.predict_proba(X_val_fe)[:, 1]
+
+
+def auc_ap(y_true, p):
+    m = compute_metrics(y_true, p)
+    return m["roc_auc"], m["average_precision"]
+
+
+auc_a, ap_a = auc_ap(y_val.values, p_a)
+auc_b, ap_b = auc_ap(y_val.values, p_b)
+auc_c, ap_c = auc_ap(y_val.values, p_c)
+
+repro = pd.DataFrame(
+    {
+        "run": ["seed=42 (1st)", "seed=42 (2nd)", "seed=43"],
+        "auc": [auc_a, auc_b, auc_c],
+        "ap": [ap_a, ap_b, ap_c],
+    }
+)
+print(repro.to_string(index=False))
+
+max_diff_ab = float(np.abs(p_a - p_b).max())
+assert np.isclose(auc_a, auc_b, atol=1e-9), "same seed → identical AUC"
+assert np.isclose(ap_a, ap_b, atol=1e-9), "same seed → identical AP"
+assert abs(auc_a - auc_c) > 1e-3, "changing seed must change the model"
+print(f"same seed: max |Δp| = {max_diff_ab:.3e} (must be ~0)")
+print("reproducibility OK")
+```
+
+# 8. Model Registry — champion/challenger by ROC AUC
+
+Register a second model with a worse AUC (seed 43). It must become the
+`challenger`; the seed-42 run stays `champion`.
+
+```{python}
+report_s43, run_id_s43, *_ = run_and_register(43, "lgbm_temporal_seed43")
+
+champ = client.get_model_version_by_alias("fraud-detection-lgbm", "champion")
+chal = client.get_model_version_by_alias("fraud-detection-lgbm", "challenger")
+champ_auc = mlflow.get_run(champ.run_id).data.metrics["val/roc_auc"]
+chal_auc = mlflow.get_run(chal.run_id).data.metrics["val/roc_auc"]
+
+print(f"champion   -> v{champ.version} (run {champ.run_id[:8]})  AUC={champ_auc:.4f}")
+print(f"challenger -> v{chal.version} (run {chal.run_id[:8]})  AUC={chal_auc:.4f}")
+
+assert champ.run_id == run_id_e2e, "seed-42 run must be champion"
+assert chal.run_id == run_id_s43, "seed-43 run must be challenger"
+assert champ_auc > chal_auc, "champion AUC must beat challenger"
+print("registry OK (champion selected by ROC AUC)")
+```
+
+# 9. Serving roundtrip
+
+Load the logged model back from the sandbox store and predict with it. The
+logged artifact is the *full* pipeline (features + model), so it consumes raw
+validation rows — exactly what the API will do.
+
+```{python}
+import mlflow.pyfunc
+
+pyfunc_model = mlflow.pyfunc.load_model(f"runs:/{run_id_e2e}/model")
+y_pred_local = full_pipeline_e2e.predict(sig_input)
+y_pred_loaded = pyfunc_model.predict(sig_input)
+
+print(f"local predict : {len(y_pred_local):,} labels")
+print(f"loaded predict: {len(y_pred_loaded):,} labels")
+same = int((y_pred_local == y_pred_loaded).sum())
+print(f"identical labels: {same:,} / {len(y_pred_local):,}")
+assert np.array_equal(y_pred_local, y_pred_loaded), "served model must match local"
+print("serving roundtrip OK")
+```
+
+> Note for the API stage: the logged sklearn pipeline exposes **labels**
+> (`predict`), not probabilities. `make serve` will need probabilities, so the
+> API should load the model and call `predict_proba` directly, or we log a
+> custom pyfunc wrapper later.
+
+# 10. Model & config benchmark
+
+Fairness caveat: same sample, same temporal split, same early-stopping
+settings where available. This is a *small-sample* comparison — direction only,
+not final numbers.
+
+```{python}
+lgbm_params = sample_params
+xgb_params = {
+    "n_estimators": 500, "learning_rate": 0.05, "max_depth": 8,
+    "subsample": 0.8, "colsample_bytree": 0.8, "min_child_weight": 5.0,
+    "reg_alpha": 0.1, "reg_lambda": 1.0,
+}
+rf_params = {
+    "n_estimators": 300, "max_depth": 8, "min_child_samples": 50,
+    "subsample": 0.8, "colsample_bytree": 0.8,
+}
+
+rows: list[dict] = []
+
+
+def add_row(variant, y_true, p, fit_s):
+    m = compute_metrics(y_true, p)
+    rows.append(
+        {
+            "variant": variant,
+            "auc": m["roc_auc"],
+            "ap": m["average_precision"],
+            "f1": m["f1"],
+            "fit_s": round(fit_s, 1),
+        }
+    )
+
+
+m_l, t_l = fit_model("lightgbm", lgbm_params)
+p_l = m_l.predict_proba(X_val_fe)[:, 1]
+m_x, t_x = fit_model("xgboost", xgb_params)
+p_x = m_x.predict_proba(X_val_fe)[:, 1]
+m_r, t_r = fit_model("random_forest", rf_params)
+p_r = m_r.predict_proba(X_val_fe)[:, 1]
+
+add_row("lgbm (temporal)", y_val.values, p_l, t_l)
+add_row("xgboost (temporal)", y_val.values, p_x, t_x)
+add_row("random_forest (temporal)", y_val.values, p_r, t_r)
+
+p_ens = (p_l + p_x + p_r) / 3
+add_row("ensemble mean (lgbm+xgb+rf)", y_val.values, p_ens, t_l + t_x + t_r)
+
+print(pd.DataFrame(rows).to_string(index=False))
+```
+
+## 10.1 Sampling strategy
+
+```{python}
+def featurize_for(Xtr, Xva, ytr, fe_cfg=features_cfg):
+    pipe_v, _ = create_pipeline(fe_cfg)
+    Xtr_v = pipe_v.fit_transform(Xtr, ytr)
+    Xva_v = pipe_v.transform(Xva)
+    return Xtr_v, Xva_v
+
+
+X_tr_sf, X_va_sf = featurize_for(X_tr_s, X_va_s, y_tr_s)
+m_s, t_s = fit_model(
+    "lightgbm", lgbm_params,
+    Xtr=X_tr_sf, Xva=X_va_sf, ytr=y_tr_s, yva=y_va_s,
+)
+p_s = m_s.predict_proba(X_va_sf)[:, 1]
+add_row("lgbm (stratified random)", y_va_s.values, p_s, t_s)
+
+print(pd.DataFrame(rows).to_string(index=False))
+```
+
+## 10.2 Feature-group variations
+
+Reuse the ablation mutators to toggle one group off and measure the delta.
+
+```{python}
+from fdml.models.train.ablation import FEATURE_GROUPS, variant_features
+
+for key in ["frequency_encoding", "card_aggregations"]:
+    fe_v = variant_features(FEATURE_GROUPS[key])
+    Xtr_v, Xva_v = featurize_for(X_train, X_val, y_train, fe_cfg=fe_v)
+    m_v, t_v = fit_model(
+        "lightgbm", lgbm_params,
+        Xtr=Xtr_v, Xva=Xva_v, ytr=y_train, yva=y_val,
+    )
+    p_v = m_v.predict_proba(Xva_v)[:, 1]
+    add_row(f"lgbm (no {key})", y_val.values, p_v, t_v)
+
+summary = pd.DataFrame(rows).sort_values("auc", ascending=False)
+print(summary.to_string(index=False))
+```
+
+# 11. Conclusions
+
+Everything below was verified on a real 80k temporal sample:
+
+- **Split**: `train_dt_max < val_dt_min` (no temporal leakage); the logged
+  `train_dt_*` / `val_dt_*` params match the actual split.
+- **Tracking**: the run carries the model hyperparameters, seed, split
+  boundaries, `val/best_iteration`, training time, all evaluation metrics
+  (under the `val/` prefix, including the per-iteration `val/auc` curve),
+  configs/env artifacts, feature importance, model card, report, the raw
+  train/val datasets (lineage) and the logged model with signature.
+- **Reproducibility**: same seed → identical predictions (max `|Δp|` at machine
+  precision); seed 43 → different model. The `random_state` wiring is real.
+- **Registry**: the seed-42 model is `champion` by ROC AUC; the worse seed-43
+  model is `challenger`.
+- **Serving**: the logged model predicts identically to the local pipeline.
+
+Benchmark directions (sample-only): XGB ≈ LGBM, RF weaker on AUC/AP; a simple
+mean ensemble helps; the stratified (random) split flatters AUC/AP versus the
+honest temporal split — confirming why temporal is the default; dropping
+frequency encoding or card aggregations barely hurts here (ablation on the full
+data will decide).
+
+```{python}
+assert no_overlap
+assert report_e2e.roc_auc > 0.5 and report_e2e.average_precision > 0.03
+print("All checks passed ✔")
+```
