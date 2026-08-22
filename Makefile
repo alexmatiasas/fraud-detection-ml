@@ -29,7 +29,7 @@ format:  ## Formats code with ruff
 
 ## ── Tests ────────────────────────────────────────────────────────────────────
 test:  ## Run all tests in coverage
-	$(PYTHON) -m pytest
+	$(PYTHON) -m pytest --cov=src/fdml --cov-report=term-missing --cov-fail-under=80
 
 test-fast:  ## Tests without test converge (faster)
 	$(PYTHON) -m pytest --no-cov
