@@ -202,7 +202,7 @@ class ErrorAnalysisPlotter:
             error_mask = errors
             if correct_mask.sum() > 0:
                 ax.hist(
-                    data.loc[correct_mask.values, col],
+                    data.loc[correct_mask, col],
                     bins=30,
                     alpha=0.5,
                     color="#1f77b4",
@@ -210,7 +210,7 @@ class ErrorAnalysisPlotter:
                 )
             if error_mask.sum() > 0:
                 ax.hist(
-                    data.loc[error_mask.values, col],
+                    data.loc[error_mask, col],
                     bins=30,
                     alpha=0.5,
                     color="#d62728",
