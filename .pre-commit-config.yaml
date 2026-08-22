@@ -31,6 +31,7 @@ repos:
         args: [--branch, main, --branch, develop]
       - id: name-tests-test
         args: [--pytest-test-first]
+        exclude: ^tests/load/
       - id: pretty-format-json
         exclude: ^schemas/
         args:

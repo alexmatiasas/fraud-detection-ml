@@ -36,12 +36,14 @@ def raw_df() -> pd.DataFrame:
             "card4": _RNG.choice(["visa", "mastercard", "amex"], n),
             "card6": _RNG.choice(["credit", "debit"], n),
             "P_emaildomain": _RNG.choice(
-                ["gmail.com", "yahoo.com", "outlook.com", None],
+                np.asarray(
+                    ["gmail.com", "yahoo.com", "outlook.com", None], dtype=object
+                ),
                 n,
                 p=[0.4, 0.3, 0.2, 0.1],
             ),
             "R_emaildomain": _RNG.choice(
-                ["gmail.com", "yahoo.com", None],
+                np.asarray(["gmail.com", "yahoo.com", None], dtype=object),
                 n,
                 p=[0.4, 0.3, 0.3],
             ),
@@ -54,45 +56,58 @@ def raw_df() -> pd.DataFrame:
             "addr2": _RNG.integers(1, 100, n),
             # ── identity ────────────────────────────────────
             "DeviceType": _RNG.choice(
-                ["mobile", "desktop", None], n, p=[0.39, 0.59, 0.02]
+                np.asarray(["mobile", "desktop", None], dtype=object),
+                n,
+                p=[0.39, 0.59, 0.02],
             ),
             "DeviceInfo": _RNG.choice(
-                ["iPhone", "SM-G950U Build/NRD90M", "Windows", "Mac OS X", None],
+                np.asarray(
+                    ["iPhone", "SM-G950U Build/NRD90M", "Windows", "Mac OS X", None],
+                    dtype=object,
+                ),
                 n,
                 p=[0.2, 0.2, 0.3, 0.1, 0.2],
             ),
             "id_01": _RNG.uniform(-5, 5, n).round(2),
-            "id_02": _RNG.choice([True, False, None], n, p=[0.3, 0.3, 0.4]).astype(
-                "object"
-            ),
+            "id_02": _RNG.choice(
+                np.asarray([True, False, None], dtype=object), n, p=[0.3, 0.3, 0.4]
+            ).astype("object"),
             "id_03": _RNG.uniform(0, 1, n).round(4),
             "id_30": _RNG.choice(
-                ["Windows 10", "Windows 7", "iOS 11.2.1", "Android 7.0", None],
+                np.asarray(
+                    ["Windows 10", "Windows 7", "iOS 11.2.1", "Android 7.0", None],
+                    dtype=object,
+                ),
                 n,
                 p=[0.3, 0.25, 0.2, 0.15, 0.1],
             ),
             "id_31": _RNG.choice(
-                [
-                    "chrome 63.0",
-                    "mobile safari 11.0",
-                    "ie 11.0 for desktop",
-                    "opera",
-                    None,
-                ],
+                np.asarray(
+                    [
+                        "chrome 63.0",
+                        "mobile safari 11.0",
+                        "ie 11.0 for desktop",
+                        "opera",
+                        None,
+                    ],
+                    dtype=object,
+                ),
                 n,
                 p=[0.35, 0.3, 0.2, 0.1, 0.05],
             ),
             "id_33": _RNG.choice(
-                ["1920x1080", "1366x768", "1334x750", None],
+                np.asarray(["1920x1080", "1366x768", "1334x750", None], dtype=object),
                 n,
                 p=[0.4, 0.3, 0.2, 0.1],
             ),
             # ── M flags ─────────────────────────────────────
-            "M1": _RNG.choice(["T", "F", None], n),
-            "M2": _RNG.choice(["T", "F", None], n),
-            "M4": pd.Categorical(_RNG.choice(["M0", "M1", "M2", None], n)),
-            "M5": _RNG.choice(["T", "F", None], n),
-            "M6": _RNG.choice(["T", "F", None], n),
+            "M1": _RNG.choice(np.asarray(["T", "F", None], dtype=object), n),
+            "M2": _RNG.choice(np.asarray(["T", "F", None], dtype=object), n),
+            "M4": pd.Categorical(
+                _RNG.choice(np.asarray(["M0", "M1", "M2", None], dtype=object), n)
+            ),
+            "M5": _RNG.choice(np.asarray(["T", "F", None], dtype=object), n),
+            "M6": _RNG.choice(np.asarray(["T", "F", None], dtype=object), n),
             # ── count / delta ───────────────────────────────
             "C1": _RNG.uniform(0, 10, n),
             "C2": _RNG.uniform(0, 5, n),

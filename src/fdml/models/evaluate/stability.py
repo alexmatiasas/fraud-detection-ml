@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -87,7 +87,9 @@ def feature_importance_stability(
     rng = np.random.default_rng(seed)
     seeds = rng.integers(0, 10000, n_iterations).tolist()
 
-    importance_df = pd.DataFrame(index=range(n_iterations), columns=feature_names)
+    importance_df = pd.DataFrame(
+        index=range(n_iterations), columns=pd.Index(feature_names)
+    )
 
     for i, s in enumerate(seeds):
         cfg_name = model.__class__.__name__
@@ -114,20 +116,21 @@ def feature_importance_stability(
         if imp is not None and len(imp) == len(feature_names):
             importance_df.iloc[i] = imp
 
-    mean_imp = importance_df.mean(axis=0).sort_values(ascending=False)
-    std_imp = importance_df.std(axis=0)[mean_imp.index]
+    mean_imp = cast(pd.Series, importance_df.mean(axis=0)).sort_values(ascending=False)
+    std_imp = cast(pd.Series, importance_df.std(axis=0)).reindex(mean_imp.index)
 
     top_n = min(20, len(mean_imp))
+    feats = [str(x) for x in mean_imp.index.tolist()[:top_n]][::-1]
+    means = [float(x) for x in mean_imp.tolist()[:top_n]][::-1]
+    stds = [float(x) for x in std_imp.tolist()[:top_n]][::-1]
+
     fig, ax = plt.subplots(figsize=(8, 6))
-    y_pos = range(top_n)
-    ax.barh(list(y_pos), mean_imp.iloc[:top_n][::-1], xerr=std_imp.iloc[:top_n][::-1])
-    ax.set_yticks(list(y_pos))
-    ax.set_yticklabels(mean_imp.index[:top_n][::-1])
+    ax.barh(feats, means, xerr=stds)
     ax.set_xlabel("Mean feature importance")
     ax.set_title(f"Feature importance stability ({n_iterations} fits)")
 
     rank_df = importance_df.rank(axis=1, ascending=False)
-    rank_consistency = float(rank_df.std(axis=1).mean())
+    rank_consistency = float(cast(pd.Series, rank_df.std(axis=1)).mean())
     logger.info(
         "  Feature importance stability: mean rank std=%.2f (lower = more stable)",
         rank_consistency,

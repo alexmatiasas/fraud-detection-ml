@@ -76,7 +76,7 @@ class _MetricLogger:
         self._best: dict[str, tuple[float, int]] = {}
         self._live = None
         if log_dvclive:
-            from dvclive import Live
+            from dvclive.live import Live
 
             self._live = Live(dvcyaml=False, report="notebook")
 
@@ -215,8 +215,8 @@ class XGBoostIterationCallback(_MetricLogger, TrainingCallback):
         parsed: list[tuple[str, str, float, bool]] = []
         for data_name, metrics in evals_log.items():
             dataset_name = (
-                self._name_map.get(data_name)
-                if self._name_map
+                self._name_map[data_name]
+                if self._name_map and data_name in self._name_map
                 else _normalize_dataset_name(data_name)
             )
             for metric_name, values in metrics.items():

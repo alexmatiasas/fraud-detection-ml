@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,7 @@ from fdml.utils import logging as logging_utils
 @pytest.fixture()
 def isolated_logging(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[Path, list[logging.Handler]]:
+) -> Iterator[tuple[Path, list[logging.Handler]]]:
     """Snapshot root handlers and module state; restore them after the test.
 
     Returns the tmp dir and the list of handlers present at snapshot time

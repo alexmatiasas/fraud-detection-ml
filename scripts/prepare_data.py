@@ -1,15 +1,14 @@
 # TODO: refactor with sklearn classes
 
+import logging
 from pathlib import Path
 
-from omegaconf.dictconfig import DictConfig
-from omegaconf.listconfig import ListConfig
 import pandas as pd
 import pandera.pandas as pa
 from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
+from omegaconf.listconfig import ListConfig
 from pandera.pandas import Column, DataFrameSchema
-
-import logging
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)

@@ -183,8 +183,8 @@ def _log_predictions(model: Any, X_val: pd.DataFrame, y_val: pd.Series) -> None:
         y_path = Path(tmp) / "y_val.npy"
         np.save(proba_path, y_proba)
         np.save(y_path, np.asarray(y_val))
-        mlflow.log_artifact(proba_path)
-        mlflow.log_artifact(y_path)
+        mlflow.log_artifact(str(proba_path))
+        mlflow.log_artifact(str(y_path))
 
 
 def summarize(results: pd.DataFrame) -> pd.DataFrame:

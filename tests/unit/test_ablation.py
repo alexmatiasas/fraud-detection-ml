@@ -9,6 +9,7 @@ from fdml.features.id_encoder import IdCodeEncoder
 from fdml.models.train.ablation import (
     FEATURE_GROUPS,
     load_base_features,
+    summarize,
     variant_features,
 )
 
@@ -170,3 +171,24 @@ class TestFeatureGroups:
         variant = variant_features(FEATURE_GROUPS["id_codes_encoding"])
         _, cols = create_pipeline(variant)
         assert cols == base_cols
+
+
+class TestSummarize:
+    def test_groups_by_variant_and_computes_deltas(self):
+        results = pd.DataFrame(
+            {
+                "variant": ["baseline", "baseline", "no_vfilter", "no_vfilter"],
+                "seed": [1, 2, 1, 2],
+                "val_auc": [0.90, 0.92, 0.88, 0.87],
+                "val_ap": [0.50, 0.52, 0.48, 0.47],
+                "best_iteration": [100, 110, 95, 105],
+            }
+        )
+        summary = summarize(results)
+        assert len(summary) == 2
+        assert "delta_auc" in summary.columns
+        assert "delta_ap" in summary.columns
+        baseline = summary.loc[summary.variant == "baseline"]
+        assert baseline["delta_auc"].iloc[0] == 0.0
+        assert baseline["delta_ap"].iloc[0] == 0.0
+        assert summary.iloc[0]["variant"] == "baseline"

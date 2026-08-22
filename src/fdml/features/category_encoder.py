@@ -42,5 +42,5 @@ class CategoryEncoder(BaseFeatureTransformer):
             if col not in X.columns:
                 continue
             mapping = {cat: i for i, cat in enumerate(categories)}
-            X[col] = X[col].astype(str).map(mapping).fillna(-1).astype("int32")
+            X[col] = X.loc[:, col].astype(str).map(mapping).fillna(-1).astype("int32")
         return X

@@ -18,7 +18,9 @@ from fdml.models.train.runner import (
     _fit_model,
     _get_splitter,
     _sample_eval_set,
+    features_fingerprint,
 )
+from fdml.models.config import load_evaluation_config, save_model_card
 
 
 class TestCapTrainFold:
@@ -194,8 +196,10 @@ class TestFitModel:
                 cfg,
                 callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
             )
-            hist = client.get_metric_history(mlflow.active_run().info.run_id, "val/auc")
-        assert len(hist) > 0
+            run = mlflow.active_run()
+            assert run is not None
+            hist = client.get_metric_history(run.info.run_id, "val/auc")
+            assert len(hist) > 0
 
     def test_lgbm_logs_train_curve_when_enabled(self, tmp_path):
         cfg = load_train_config(
@@ -218,15 +222,13 @@ class TestFitModel:
                 cfg,
                 callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
             )
-            train_hist = client.get_metric_history(
-                mlflow.active_run().info.run_id, "train/auc"
-            )
-            val_hist = client.get_metric_history(
-                mlflow.active_run().info.run_id, "val/auc"
-            )
-        assert len(train_hist) > 0
-        assert len(train_hist) == len(val_hist)
-        assert train_hist[-1].step == val_hist[-1].step
+            run = mlflow.active_run()
+            assert run is not None
+            train_hist = client.get_metric_history(run.info.run_id, "train/auc")
+            val_hist = client.get_metric_history(run.info.run_id, "val/auc")
+            assert len(train_hist) > 0
+            assert len(train_hist) == len(val_hist)
+            assert train_hist[-1].step == val_hist[-1].step
 
     def test_lgbm_skips_train_curve_when_disabled(self, tmp_path):
         cfg = load_train_config(
@@ -253,10 +255,10 @@ class TestFitModel:
                 cfg,
                 callbacks=[IterationCallback(log_mlflow=True, log_console=False)],
             )
-            train_hist = client.get_metric_history(
-                mlflow.active_run().info.run_id, "train/auc"
-            )
-        assert len(train_hist) == 0
+            run = mlflow.active_run()
+            assert run is not None
+            train_hist = client.get_metric_history(run.info.run_id, "train/auc")
+            assert len(train_hist) == 0
 
     def test_disabled_early_stopping_fits_plain(self):
         cfg = load_train_config(cli_args=["early_stopping.enabled=false"])
@@ -341,3 +343,39 @@ class TestComputeMetrics:
         y_proba = np.array([1.0, 0.0])
         metrics = compute_metrics(y_true, y_proba)
         assert metrics["roc_auc"] == 0.0
+
+
+class TestFeaturesFingerprint:
+    def test_returns_hex_string(self):
+        from fdml.features.factory import load_fe_config
+
+        cfg = load_fe_config()
+        fp = features_fingerprint(cfg)
+        assert isinstance(fp, str)
+        assert len(fp) == 40
+        assert all(c in "0123456789abcdef" for c in fp)
+
+    def test_deterministic(self):
+        from fdml.features.factory import load_fe_config
+
+        cfg = load_fe_config()
+        assert features_fingerprint(cfg) == features_fingerprint(cfg)
+
+
+class TestSaveModelCard:
+    def test_creates_file(self, tmp_path):
+        path = tmp_path / "models" / "model_card.md"
+        result = save_model_card("# Model Card\nContent", path=str(path))
+        assert result.exists()
+        assert result.read_text().startswith("# Model Card")
+
+    def test_creates_parent_dirs(self, tmp_path):
+        path = tmp_path / "deep" / "nested" / "model_card.md"
+        save_model_card("test", path=str(path))
+        assert path.exists()
+
+
+class TestLoadEvaluationConfig:
+    def test_loads_with_defaults(self):
+        eval_cfg = load_evaluation_config()
+        assert eval_cfg is not None

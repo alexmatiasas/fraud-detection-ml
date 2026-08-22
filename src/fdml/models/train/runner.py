@@ -8,13 +8,14 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import mlflow
 import numpy as np
 import pandas as pd
 from mlflow.models import infer_signature
+from mlflow.sklearn import log_model
 from pydantic import BaseModel, ConfigDict
 from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
@@ -134,7 +135,7 @@ def load_split(
 
     with step("PHASE 2: Train / validation split"):
         splitter = _get_splitter(cfg.split)
-        train_idx, val_idx = next(splitter.split(df, df[_TARGET]))
+        train_idx, val_idx = next(splitter.split(df, df[_TARGET].to_numpy()))
 
         X = df.drop(columns=[_TARGET])
         y = df[_TARGET]
@@ -254,7 +255,7 @@ def _sample_eval_set(
         len(y_es),
         len(y_val),
     )
-    return X_es, y_es
+    return cast(pd.DataFrame, X_es), cast(pd.Series, y_es)
 
 
 def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
@@ -461,8 +462,11 @@ def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
 
         try:
             champion_mv = client.get_model_version_by_alias(model_name, "champion")
-            champion_run = client.get_run(champion_mv.run_id)
-            champion_auc = champion_run.data.metrics.get("val/roc_auc", 0.0)
+            champion_run_id = champion_mv.run_id
+            champion_auc = 0.0
+            if champion_run_id is not None:
+                champion_run = client.get_run(champion_run_id)
+                champion_auc = champion_run.data.metrics.get("val/roc_auc", 0.0)
 
             if auc > champion_auc:
                 client.set_registered_model_alias(model_name, "champion", version)
@@ -719,7 +723,7 @@ def main() -> None:
                 LoggingReporter(),
                 DVCLiveReporter(
                     eval_cfg=eval_cfg,
-                    y_true=result.y_val.values,
+                    y_true=result.y_val.to_numpy(),
                     y_proba=y_proba,
                     model_name=cfg.model.name,
                     split_strategy=cfg.split.strategy,
@@ -734,7 +738,7 @@ def main() -> None:
 
             report = evaluate(
                 model_name=cfg.model.name,
-                y_true=result.y_val.values,
+                y_true=result.y_val.to_numpy(),
                 y_proba=y_proba,
                 model=model,
                 pipeline=result.pipeline,
@@ -786,9 +790,7 @@ def main() -> None:
                     )
                     logging.getLogger("mlflow").setLevel(logging.ERROR)
                     signature = infer_signature(sig_input, y_pred.astype("int64"))
-                    mlflow.sklearn.log_model(
-                        full_pipeline, "model", signature=signature
-                    )
+                    log_model(full_pipeline, "model", signature=signature)
                 logger.info("  ✓ Model logged to MLflow")
 
             if mlflow_cfg.registry.enabled:

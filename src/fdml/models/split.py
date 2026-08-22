@@ -1,4 +1,5 @@
-from typing import Iterator, Optional
+from collections.abc import Generator
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -39,7 +40,9 @@ class TemporalSplitter(BaseCrossValidator):
         self.test_size = test_size
         self.embargo_seconds = embargo_seconds
 
-    def get_n_splits(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> int:
+    def get_n_splits(  # type: ignore[reportIncompatibleMethodOverride]
+        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+    ) -> int:
         return 1
 
     def _time_split(self, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
@@ -52,20 +55,20 @@ class TemporalSplitter(BaseCrossValidator):
         val_mask = dt >= boundary
         return df.index[train_mask].to_numpy(), df.index[val_mask].to_numpy()
 
-    def split(
+    def split(  # type: ignore[reportIncompatibleMethodOverride]
         self,
         X: pd.DataFrame,
         y: Optional[np.ndarray] = None,
         groups: Optional[np.ndarray] = None,
-    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         if self.time_col not in X.columns:
             msg = f"Column '{self.time_col}' not found in X"
             raise ValueError(msg)
         yield self._time_split(X)
 
-    def _iter_test_indices(
+    def _iter_test_indices(  # type: ignore[reportIncompatibleMethodOverride]
         self, X: pd.DataFrame, y: Optional[np.ndarray] = None
-    ) -> Iterator[np.ndarray]:
+    ) -> Generator[np.ndarray, None, None]:
         yield self._time_split(X)[1]
 
 
@@ -84,33 +87,35 @@ class StratifiedSplitter(BaseCrossValidator):
         self.test_size = test_size
         self.random_state = random_state
 
-    def get_n_splits(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> int:
+    def get_n_splits(  # type: ignore[reportIncompatibleMethodOverride]
+        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+    ) -> int:
         return 1
 
-    def split(
+    def split(  # type: ignore[reportIncompatibleMethodOverride]
         self,
         X: pd.DataFrame,
         y: Optional[np.ndarray] = None,
         groups: Optional[np.ndarray] = None,
-    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         train_idx, val_idx = train_test_split(
             np.arange(len(X)),
             test_size=self.test_size,
             random_state=self.random_state,
             stratify=y,
         )
-        yield train_idx, val_idx
+        yield np.asarray(train_idx), np.asarray(val_idx)
 
-    def _iter_test_indices(
+    def _iter_test_indices(  # type: ignore[reportIncompatibleMethodOverride]
         self, X: pd.DataFrame, y: Optional[np.ndarray] = None
-    ) -> Iterator[np.ndarray]:
+    ) -> Generator[np.ndarray, None, None]:
         _, val_idx = train_test_split(
             np.arange(len(X)),
             test_size=self.test_size,
             random_state=self.random_state,
             stratify=y,
         )
-        yield val_idx
+        yield np.asarray(val_idx)
 
 
 class StratifiedKFoldSplitter(BaseCrossValidator):
@@ -132,18 +137,20 @@ class StratifiedKFoldSplitter(BaseCrossValidator):
             n_splits=n_splits, shuffle=shuffle, random_state=random_state
         )
 
-    def get_n_splits(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> int:
+    def get_n_splits(  # type: ignore[reportIncompatibleMethodOverride]
+        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+    ) -> int:
         return self.n_splits
 
-    def split(
+    def split(  # type: ignore[reportIncompatibleMethodOverride]
         self,
         X: pd.DataFrame,
         y: Optional[np.ndarray] = None,
         groups: Optional[np.ndarray] = None,
-    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         yield from self._kfold.split(X, y)
 
-    def _iter_test_indices(
+    def _iter_test_indices(  # type: ignore[reportIncompatibleMethodOverride]
         self, X: pd.DataFrame, y: Optional[np.ndarray] = None
-    ) -> Iterator[np.ndarray]:
+    ) -> Generator[np.ndarray, None, None]:
         yield from self._kfold._iter_test_indices(X, y)

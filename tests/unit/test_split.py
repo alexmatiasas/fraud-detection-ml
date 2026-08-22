@@ -28,7 +28,7 @@ class TestTemporalSplitter:
     def test_split_preserves_time_order(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         splitter = TemporalSplitter(time_col="TransactionDT", test_size=0.2)
 
         # Act
@@ -42,7 +42,7 @@ class TestTemporalSplitter:
     def test_split_raises_on_missing_col(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["TransactionDT"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         splitter = TemporalSplitter(time_col="TransactionDT")
 
         # Act / Assert
@@ -52,7 +52,7 @@ class TestTemporalSplitter:
     def test_split_respects_test_size(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         test_size = 0.2
 
         # Act
@@ -71,7 +71,7 @@ class TestTemporalSplitter:
     def test_split_embargo_zero_keeps_all_rows(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         splitter = TemporalSplitter(test_size=0.2, embargo_seconds=0)
 
         # Act
@@ -83,7 +83,7 @@ class TestTemporalSplitter:
     def test_split_embargo_drops_boundary_rows(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         embargo = 86400  # one day in the fixture
         splitter = TemporalSplitter(test_size=0.2, embargo_seconds=embargo)
 
@@ -101,7 +101,7 @@ class TestStratifiedSplitter:
     def test_split_preserves_class_ratio(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         splitter = StratifiedSplitter(test_size=0.2, random_state=42)
 
         # Act
@@ -115,7 +115,7 @@ class TestStratifiedSplitter:
     def test_split_respects_test_size(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         test_size = 0.2
         splitter = StratifiedSplitter(test_size=test_size)
 
@@ -133,7 +133,7 @@ class TestStratifiedSplitter:
     def test_split_is_deterministic(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
 
         # Act
         splitter_a = StratifiedSplitter(random_state=42)
@@ -149,7 +149,7 @@ class TestStratifiedKFoldSplitter:
     def test_split_returns_correct_number_of_folds(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         n_splits = 5
         splitter = StratifiedKFoldSplitter(n_splits=n_splits)
 
@@ -164,7 +164,7 @@ class TestStratifiedKFoldSplitter:
     def test_preserves_class_ratio_in_each_fold(self, ts_data: pd.DataFrame):
         # Arrange
         X = ts_data.drop(columns=["isFraud"])
-        y = ts_data["isFraud"].values
+        y = ts_data["isFraud"].to_numpy()
         splitter = StratifiedKFoldSplitter(n_splits=5)
         orig_ratio = y.mean()
 
