@@ -67,6 +67,7 @@ jobs:
             --cpu 1 \
             --timeout 300 \
             --set-env-vars "\
+              ENVIRONMENT=production,\
               DAGSHUB_USERNAME=${{ secrets.DAGSHUB_USERNAME }},\
               DAGSHUB_REPO=${{ secrets.DAGSHUB_REPO }},\
               DAGSHUB_TOKEN=${{ secrets.DAGSHUB_TOKEN }},\
@@ -94,4 +95,4 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Image:** \`${{ env.IMAGE }}:${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- **URL:** ${{ steps.url.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Docs:** ${{ steps.url.outputs.url }}/docs" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Environment:** production" >> "$GITHUB_STEP_SUMMARY"
