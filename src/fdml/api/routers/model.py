@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from fdml.api.dependencies import get_loader, get_model_loader, verify_api_key
 from fdml.api.internal.loader import ModelLoader
@@ -17,8 +17,13 @@ model_router = APIRouter(prefix=f"{API_PREFIX}/model", tags=["model"])
 
 @model_router.get("/info", response_model=ModelInfo)
 @limiter.limit("120/minute")
-def info(request: Request, loader: ModelLoader = Depends(get_loader)) -> ModelInfo:
+def info(
+    request: Request,
+    response: Response,
+    loader: ModelLoader = Depends(get_loader),
+) -> ModelInfo:
     """Current model version, source, and evaluation metrics."""
+    response.headers["Cache-Control"] = "public, max-age=120"
     report = loader.report
     return ModelInfo(
         model_name=report.get("model_name"),

@@ -87,4 +87,6 @@ def list_features(
                 )
 
     features.sort(key=lambda f: f.importance, reverse=True)
-    return FeatureList(features=features, total=len(features))
+    result = FeatureList(features=features, total=len(features))
+    response.headers["X-Total-Count"] = str(result.total)
+    return result

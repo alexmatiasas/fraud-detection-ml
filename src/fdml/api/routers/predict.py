@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -40,6 +40,8 @@ def _to_jsonable(value: Any) -> Any:
         return value.item()
     if isinstance(value, pd.Timestamp):
         return value.isoformat()
+    if pd.isna(value):
+        return None
     return value
 
 
@@ -68,9 +70,9 @@ def _audit_log(
 
 
 def _raw_dict(row: pd.DataFrame) -> dict[str, Any]:
-    """Serializable raw row, omitting NaN (missing identity) fields."""
+    """Serializable raw row — NaN fields are included as ``null``."""
     first = row.iloc[0]
-    return {key: _to_jsonable(value) for key, value in first.items() if pd.notna(value)}
+    return {key: _to_jsonable(value) for key, value in first.items()}
 
 
 def _score(
@@ -124,7 +126,7 @@ def _score(
     return response
 
 
-def _risk_level(confidence: float) -> str:
+def _risk_level(confidence: float) -> Literal["critical", "high", "medium", "low"]:
     """Distance-based risk classification."""
     if confidence < 0.15:
         return "critical"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from fdml.api.dependencies import get_loader
 from fdml.api.internal.loader import ModelLoader
@@ -18,7 +18,10 @@ metrics_router = APIRouter(prefix=f"{API_PREFIX}/metrics", tags=["metrics"])
 @metrics_router.get("/", response_model=dict[str, Any])
 @limiter.limit("120/minute")
 def metrics(
-    request: Request, loader: ModelLoader = Depends(get_loader)
+    request: Request,
+    response: Response,
+    loader: ModelLoader = Depends(get_loader),
 ) -> dict[str, Any]:
     """Evaluation metrics from the offline report (models/report.json)."""
+    response.headers["Cache-Control"] = "public, max-age=300"
     return {key: loader.report[key] for key in METRIC_KEYS if key in loader.report}

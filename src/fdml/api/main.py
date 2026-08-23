@@ -34,7 +34,6 @@ from fdml.api.routers.transactions import transactions_router
 load_dotenv()
 sentry_sdk.init(
     dsn=os.environ.get("SENTRY_DSN"),
-    send_default_pii=True,
     enable_logs=True,
     profile_session_sample_rate=1.0,
     profile_lifecycle="trace",
