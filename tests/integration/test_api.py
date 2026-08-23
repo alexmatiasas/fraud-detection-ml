@@ -230,9 +230,7 @@ def test_predict_with_shap(loader, monkeypatch) -> None:
         }
 
     monkeypatch.setattr(loader, "explain", fake_explain)
-    resp = make_client(loader).post(
-        "/v1/predict/", json={"transaction_id": 1, "include_shap": True}
-    )
+    resp = make_client(loader).post("/v1/predict/", json={"transaction_id": 1})
     assert resp.status_code == 200
     body = resp.json()
     assert body["explanation"]["base_value"] == pytest.approx(-1.5)
@@ -240,16 +238,8 @@ def test_predict_with_shap(loader, monkeypatch) -> None:
     assert body["explanation"]["top_features"][0]["shap"] == pytest.approx(0.5)
 
 
-def test_predict_shap_absent_when_not_requested(loader) -> None:
-    resp = make_client(loader).post("/v1/predict/", json={"transaction_id": 1})
-    assert resp.status_code == 200
-    assert resp.json()["explanation"] is None
-
-
 def test_predict_shap_absent_when_unavailable(loader) -> None:
-    resp = make_client(loader).post(
-        "/v1/predict/", json={"transaction_id": 1, "include_shap": True}
-    )
+    resp = make_client(loader).post("/v1/predict/", json={"transaction_id": 1})
     assert resp.status_code == 200
     assert resp.json()["explanation"] is None  # fake pipeline has no tree model
 

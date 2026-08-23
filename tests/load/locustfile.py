@@ -24,27 +24,14 @@ class FraudAPIUser(HttpUser):
     wait_time = between(0.5, 2)
 
     @task(5)
-    def predict_single(self):
+    def predict(self):
         """Score a single transaction (highest-traffic endpoint)."""
         self.client.post(
             "/v1/predict/",
             json={
                 "transaction_id": random.choice(DEMO_TRANSACTION_IDS),
-                "include_shap": False,
             },
             name="/v1/predict/ [single]",
-        )
-
-    @task(3)
-    def predict_with_shap(self):
-        """Score with SHAP explanation (heavier computation)."""
-        self.client.post(
-            "/v1/predict/",
-            json={
-                "transaction_id": random.choice(DEMO_TRANSACTION_IDS),
-                "include_shap": True,
-            },
-            name="/v1/predict/ [with SHAP]",
         )
 
     @task(2)
