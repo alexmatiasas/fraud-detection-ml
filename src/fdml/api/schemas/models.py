@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -100,7 +100,11 @@ class ModelList(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    """Score one transaction across a selection of registered models."""
+    """Score one transaction across a selection of registered models.
+
+    Overrides are not supported in this endpoint; use ``POST /v1/predict/``
+    for what-if exploration with a single model.
+    """
 
     transaction_id: int = Field(
         ..., description="TransactionID present in the demo sample"
@@ -123,7 +127,7 @@ class CompareItem(BaseModel):
     threshold: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Decision threshold"
     )
-    risk_level: str | None = Field(
+    risk_level: Literal["critical", "high", "medium", "low"] | None = Field(
         default=None,
         description="Distance-based risk classification (critical/high/medium/low)",
     )

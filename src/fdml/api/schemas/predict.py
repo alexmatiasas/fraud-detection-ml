@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -63,7 +63,7 @@ class PredictionResponse(BaseModel):
     is_fraud: bool = Field(..., description="True when probability >= best_threshold")
     probability: float = Field(..., ge=0.0, le=1.0, description="P(isFraud=1)")
     threshold: float = Field(..., ge=0.0, le=1.0, description="Decision threshold")
-    risk_level: str = Field(
+    risk_level: Literal["critical", "high", "medium", "low"] = Field(
         ...,
         description=(
             "Distance-based risk classification: 'critical' (confidence < 0.15), "
@@ -99,7 +99,7 @@ class PredictionResponse(BaseModel):
 
 class TransactionSummary(BaseModel):
     transaction_id: int = Field(..., description="TransactionID in the demo sample")
-    amount: float | None = Field(default=None, description="TransactionAmt")
+    amount: float = Field(..., description="TransactionAmt rounded to 2 decimals")
     product_cd: str | None = Field(default=None, description="ProductCD")
     is_fraud: bool | None = Field(
         default=None, description="Ground-truth fraud label from the sample"
