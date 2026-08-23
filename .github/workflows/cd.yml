@@ -62,7 +62,7 @@ jobs:
             --service-account fdml-deployer@${CLOUDSDK_CORE_PROJECT}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances 0 \
-            --max-instances 3 \
+            --max-instances 1 \
             --memory 2Gi \
             --cpu 1 \
             --timeout 300 \
