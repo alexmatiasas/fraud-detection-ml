@@ -23,13 +23,30 @@ class PredictionRequest(BaseModel):
         description=(
             "Optional raw-feature overrides applied before scoring, e.g. "
             '{"TransactionAmt": 500.0, "ProductCD": "W"}. Values are '
-            "cast to the column dtype; unknown features return 422."
+            "cast to the column dtype; unknown features return 400."
         ),
     )
     include_shap: bool = Field(
         default=False,
         description="When true, include a per-prediction SHAP explanation",
     )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "transaction_id": 3538759,
+                    "overrides": None,
+                    "include_shap": False,
+                },
+                {
+                    "transaction_id": 3538759,
+                    "overrides": {"TransactionAmt": 5000.0, "card4": "visa"},
+                    "include_shap": True,
+                },
+            ]
+        }
+    }
 
 
 class ShapContribution(BaseModel):
