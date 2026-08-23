@@ -46,12 +46,15 @@ def list_features(
             importance = top_features.get(col, 0.0)
 
             is_categorical = (
-                hasattr(series, "cat") and series.cat.categories is not None
+                hasattr(series, "cat")
+                and series.cat.categories is not None
+                and len(series.cat.categories) > 0
             )
             is_numeric = pd.api.types.is_numeric_dtype(series)
 
             if is_categorical:
-                values = sorted(str(v) for v in series.cat.categories)
+                cats = series.cat.categories
+                values = sorted(str(v) for v in cats)  # type: ignore[union-attr]
                 features.append(
                     FeatureInfo(
                         name=col,
@@ -60,7 +63,7 @@ def list_features(
                         values=values,
                     )
                 )
-            elif is_numeric and series.notna().any():
+            elif is_numeric and bool(series.notna().any()):
                 min_val = float(series.min())
                 max_val = float(series.max())
                 features.append(
