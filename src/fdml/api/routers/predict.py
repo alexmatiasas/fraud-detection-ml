@@ -1,6 +1,6 @@
 """Fraud prediction by TransactionID lookup against the demo sample.
 
-Supports optional raw-feature overrides (\"what if the amount were 500?\")
+Supports optional raw-feature overrides ("what if the amount were 500?")
 and per-prediction SHAP explanations.
 """
 
@@ -77,7 +77,6 @@ def _score(
     loader: ModelLoader,
     transaction_id: int,
     overrides: dict[str, Any] | None = None,
-    include_shap: bool = False,
     top_k: int = 20,
 ) -> PredictionResponse:
     row = loader.lookup(transaction_id)
@@ -95,7 +94,7 @@ def _score(
     X_raw = to_model_input(row)
     probability = float(loader.predict_proba(X_raw)[0])
     threshold = float(loader.report.get("best_threshold", 0.5))
-    explanation = _explanation(loader.explain(X_raw, top_k=top_k), include_shap)
+    explanation = _explanation(loader.explain(X_raw, top_k=top_k))
 
     response = PredictionResponse(
         transaction_id=transaction_id,
@@ -118,8 +117,8 @@ def _score(
     return response
 
 
-def _explanation(raw: dict[str, Any] | None, include_shap: bool) -> Explanation | None:
-    if not include_shap or raw is None:
+def _explanation(raw: dict[str, Any] | None) -> Explanation | None:
+    if raw is None:
         return None
     return Explanation(**raw)
 
@@ -135,14 +134,13 @@ def predict(
 
     The full raw row is pulled from the demo sample and scored through the
     complete feature pipeline so the model sees its full 341-feature space.
-    Optional ``overrides`` mutate raw features before scoring; ``include_shap``
-    adds a per-prediction SHAP explanation.
+    Optional ``overrides`` mutate raw features before scoring.  A SHAP
+    explanation is always included when the model supports it.
     """
     return _score(
         loader,
         req.transaction_id,
         overrides=req.overrides,
-        include_shap=req.include_shap,
     )
 
 
@@ -155,8 +153,8 @@ def batch_predict(
 ) -> list[PredictionResponse]:
     """Score multiple transactions in one call (max 50).
 
-    Overrides and SHAP explanations are not computed for batch calls; use the
-    single endpoint for interactive \"what if\" exploration.
+    Overrides are not computed for batch calls; use the single endpoint for
+    interactive "what if" exploration.  SHAP is included when available.
     """
     return [_score(loader, req.transaction_id) for req in requests]
 
@@ -177,7 +175,6 @@ def _score_named(
     transaction_id: int,
     row: pd.DataFrame,
     overrides: dict[str, Any] | None = None,
-    include_shap: bool = False,
     top_k: int = 20,
 ) -> PredictionResponse:
     info = multi.get(name)
@@ -194,9 +191,7 @@ def _score_named(
     except (ModelRegistryError, KeyError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     threshold = info.best_threshold
-    explanation = _explanation(
-        multi.explain(name, to_model_input(row), top_k=top_k), include_shap
-    )
+    explanation = _explanation(multi.explain(name, to_model_input(row), top_k=top_k))
     model_version = f"{name}:{info.version}" if info.version else name
     response = PredictionResponse(
         transaction_id=transaction_id,
@@ -267,8 +262,8 @@ def predict_with_model(
 ) -> PredictionResponse:
     """Score a single transaction with a specific registered model.
 
-    Supports the same ``overrides`` and ``include_shap`` options as the
-    default predict endpoint.
+    Supports the same ``overrides`` option as the default predict endpoint.
+    A SHAP explanation is always included when the model supports it.
     """
     row = _row_or_404(loader, req.transaction_id)
     return _score_named(
@@ -277,5 +272,4 @@ def predict_with_model(
         req.transaction_id,
         row,
         overrides=req.overrides,
-        include_shap=req.include_shap,
     )
