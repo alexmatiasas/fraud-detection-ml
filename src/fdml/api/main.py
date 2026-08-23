@@ -43,10 +43,16 @@ sentry_sdk.init(
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ORIGINS = [
-    "https://alexmatias.vercel.app",
-    "http://localhost:4321",
-]
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT == "production"
+
+# In production: only allow the Vercel frontend origin.
+# In development: allow localhost for local testing.
+DEFAULT_ORIGINS = (
+    ["https://alexmatias.vercel.app"]
+    if IS_PRODUCTION
+    else ["https://alexmatias.vercel.app", "http://localhost:4321"]
+)
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.environ.get("CORS_ORIGINS", ",".join(DEFAULT_ORIGINS)).split(",")
@@ -77,7 +83,9 @@ app = FastAPI(
     summary=SUMMARY,
     description=DESCRIPTION,
     version=VERSION,
-    openapi_url="/openapi.json",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
     openapi_tags=tags_metadata,
     lifespan=lifespan,
 )
@@ -137,5 +145,8 @@ async def model_load_error_handler(request: Request, exc: ModelLoadError):
 
 @app.get("/", include_in_schema=False)
 def read_root() -> dict[str, str]:
-    """Service landing page pointing at the interactive docs."""
-    return {"service": TITLE, "docs": "/docs"}
+    """Service landing page."""
+    result: dict[str, str] = {"service": TITLE}
+    if not IS_PRODUCTION:
+        result["docs"] = "/docs"
+    return result
