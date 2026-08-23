@@ -23,13 +23,23 @@ class PredictionRequest(BaseModel):
         description=(
             "Optional raw-feature overrides applied before scoring, e.g. "
             '{"TransactionAmt": 500.0, "ProductCD": "W"}. Values are '
-            "cast to the column dtype; unknown features return 422."
+            "cast to the column dtype; unknown features return 400."
         ),
     )
-    include_shap: bool = Field(
-        default=False,
-        description="When true, include a per-prediction SHAP explanation",
-    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "transaction_id": 3538759,
+                },
+                {
+                    "transaction_id": 3538759,
+                    "overrides": {"TransactionAmt": 5000.0, "card4": "visa"},
+                },
+            ]
+        }
+    }
 
 
 class ShapContribution(BaseModel):
@@ -53,6 +63,21 @@ class PredictionResponse(BaseModel):
     is_fraud: bool = Field(..., description="True when probability >= best_threshold")
     probability: float = Field(..., ge=0.0, le=1.0, description="P(isFraud=1)")
     threshold: float = Field(..., ge=0.0, le=1.0, description="Decision threshold")
+    risk_level: str = Field(
+        ...,
+        description=(
+            "Distance-based risk classification: 'critical' (confidence < 0.15), "
+            "'high' (< 0.30), 'medium' (< 0.45), 'low' (>= 0.45)"
+        ),
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        description="|probability - threshold|, how far from the decision boundary",
+    )
+    is_above_threshold: bool = Field(
+        ..., description="Alias for is_fraud: probability >= threshold"
+    )
     model_version: str | None = Field(
         default=None, description="MLflow run/version that produced the prediction"
     )

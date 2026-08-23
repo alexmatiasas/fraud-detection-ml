@@ -22,6 +22,7 @@ from fdml.api.internal.loader import ModelLoadError
 from fdml.api.internal.registry import ModelRegistryError
 from fdml.api.limiter import limiter, rate_limit_exceeded_handler
 from fdml.api.metadata import DESCRIPTION, SUMMARY, TITLE, VERSION, tags_metadata
+from fdml.api.routers.features import features_router
 from fdml.api.routers.health import health_router
 from fdml.api.routers.metrics import metrics_router
 from fdml.api.routers.model import model_router
@@ -42,9 +43,14 @@ sentry_sdk.init(
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_ORIGINS = [
+DEFAULT_ORIGINS = [
     "https://alexmatias.vercel.app",
     "http://localhost:4321",
+]
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", ",".join(DEFAULT_ORIGINS)).split(",")
+    if o.strip()
 ]
 
 
@@ -120,6 +126,7 @@ app.include_router(model_router)
 app.include_router(models_router)
 app.include_router(metrics_router)
 app.include_router(transactions_router)
+app.include_router(features_router)
 
 
 @app.exception_handler(ModelLoadError)
