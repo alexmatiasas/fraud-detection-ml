@@ -5,7 +5,7 @@ End-to-end MLOps pipeline for [IEEE-CIS Fraud Detection](https://www.kaggle.com/
 [![CI](https://github.com/alexmatiasas/fraud-detection-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/alexmatiasas/fraud-detection-ml/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
 
-> **Deployment status**: the serving API is containerized and ready. A public URL will be published here once deployed to Cloud Run.
+> **Deployment status**: the serving API is live on [Cloud Run](https://fdml-api-bxpgqqidaq-uc.a.run.app). The frontend demo is at [alexmatias.vercel.app](https://alexmatias.vercel.app).
 
 ---
 
@@ -17,10 +17,10 @@ Fraud detection on transactional data is a classic imbalanced-classification pro
 - **EDA-driven feature engineering** — a 341-feature space built from 17 purpose-built transformers, each documented and tested.
 - **Production-ready serving** — a versioned FastAPI service with rate limiting, API-key auth for model management, structured JSON logs, and a multi-stage Docker image running as a non-root user.
 
-The project is written to portfolio standards: every decision is documented (`configs/*.yaml`, notebooks, model card), and the suite of **344 tests** covers transformers, training, evaluation, and API behavior.
+The project is written to portfolio standards: every decision is documented (`configs/*.yaml`, notebooks, model card), and the suite of **499 tests** covers transformers, training, evaluation, and API behavior.
 
 ## Current model
-<!-- TODO: Check current model used at the very end, it may be various models deployed for comparison -->
+
 The served model is an **XGBoost** classifier evaluated on a temporal hold-out (test set is the last 20% of the transaction timeline, no shuffle).
 
 | Metric | Value |
@@ -61,7 +61,7 @@ flowchart LR
         H --> J[Docker image]
         J --> K[FastAPI · /v1]
         L[(Demo sample)] --> K
-        K --> M[Swagger /docs]
+        K --> M[Cloud Run]
     end
 ```
 
@@ -87,7 +87,10 @@ All feature decisions come from the [EDA in R](notebooks/01_eda_r/01_EDA_in_R.Rm
 | HPO | Optuna |
 | Serving API | FastAPI + uvicorn + slowapi |
 | Container | Docker (multi-stage, non-root) |
-| CI | GitHub Actions (ruff, basedpyright, pytest) |
+| Deploy | Cloud Run (scale-to-zero) |
+| Frontend | Astro + Tailwind CSS (Vercel) |
+| Monitoring | Sentry |
+| CI/CD | GitHub Actions (ruff, basedpyright, pytest) |
 | EDA | R 4.4 · tidyverse · arrow |
 | Testing | pytest + hypothesis |
 
@@ -102,7 +105,7 @@ scripts/                  # download_data, prepare_data, generate_sample
 src/fdml/features/        # 17 feature transformers + pipeline factory
 src/fdml/models/          # train (LGBM/XGB/RF), evaluate (metrics/plots/...)
 src/fdml/api/             # FastAPI app: routers, schemas, model loader, limiter
-tests/                    # 344 unit + integration tests
+tests/                    # 499 unit + integration tests
 ```
 
 ## Getting started
@@ -140,7 +143,7 @@ dvc repro
 make serve-dev                        # uvicorn with reload on :8000
 ```
 
-Interactive docs at http://localhost:8000/docs.
+Interactive docs at http://localhost:8000/docs (disabled in production).
 
 ## API
 
@@ -150,28 +153,44 @@ All routes are under `/v1`. Predictions are scored by `TransactionID` against a 
 |---|---|---|---|
 | `GET` | `/v1/health` | Liveness probe | — |
 | `GET` | `/v1/ready` | Readiness probe (model loaded) | — |
+| `GET` | `/v1/metrics` | Offline evaluation metrics | — |
+| `GET` | `/v1/transactions` | List demo-sample transactions | — |
+| `GET` | `/v1/features` | Feature metadata for overrides | — |
+| `GET` | `/v1/models` | All registered models (leaderboard) | — |
+| `GET` | `/v1/models/{name}` | Single model detail | — |
+| `GET` | `/v1/model/info` | Current served model + metrics | — |
 | `POST` | `/v1/predict` | Score one transaction | — |
 | `POST` | `/v1/predict/batch` | Score up to 50 transactions | — |
-| `GET` | `/v1/model/info` | Served model + metrics | — |
+| `POST` | `/v1/predict/compare` | Score across all models | — |
+| `POST` | `/v1/predict/{name}` | Score with a specific model | — |
 | `PUT` | `/v1/model/reload` | Reload from source | `X-API-Key` |
 | `PUT` | `/v1/model/switch` | Hot-swap registry version | `X-API-Key` |
-| `GET` | `/v1/models` | List registry versions | — |
-| `GET` | `/v1/metrics` | Offline evaluation metrics | — |
 
 ```bash
-curl -X POST http://localhost:8000/v1/predict \
+curl -X POST https://fdml-api-bxpgqqidaq-uc.a.run.app/v1/predict/ \
   -H "Content-Type: application/json" \
-  -d '{"transaction_id": 123456}'
+  -d '{"transaction_id": 3538759}'
 ```
 
 ```json
 {
-  "transaction_id": 123456,
+  "transaction_id": 3538759,
   "is_fraud": false,
-  "probability": 0.0123,
+  "probability": 0.2874,
   "threshold": 0.6534,
-  "model_version": null,
-  "raw": { "TransactionAmt": 5000.0, "...": "..." }
+  "risk_level": "low",
+  "confidence": 0.3660,
+  "is_above_threshold": false,
+  "model_version": "fraud-detection-lgbm:49",
+  "raw": { "TransactionAmt": 24.90, "...": "432 fields" },
+  "overrides_applied": null,
+  "explanation": {
+    "base_value": -2.13,
+    "n_features": 341,
+    "top_features": [
+      { "feature": "TransactionAmt", "value": 24.90, "shap": 0.85 }
+    ]
+  }
 }
 ```
 
@@ -190,6 +209,9 @@ The image ships only the serving API: training-only packages (xgboost, dvc, optu
 |---|---|
 | `DAGSHUB_USERNAME` / `DAGSHUB_TOKEN` / `DAGSHUB_REPO` | MLflow remote tracking/registry (or `.env`) |
 | `FDML_API_KEY` | Guards `/v1/model/*` mutating endpoints |
+| `SENTRY_DSN` | Error tracking (optional) |
+| `CORS_ORIGINS` | Override allowed origins (default: Vercel only in prod) |
+| `ENVIRONMENT` | `production` or `development` (default: development) |
 
 ## Notebooks
 
@@ -199,9 +221,11 @@ The image ships only the serving API: training-only packages (xgboost, dvc, optu
 
 ## Roadmap
 
+- [x] Model registry — register all trained models with `champion`/`challenger` aliases.
+- [x] Deployment — build and push the image from CI to Cloud Run.
+- [x] API hardening — rate limiting, API-key auth, CORS, Swagger disabled in production.
+- [x] Frontend demo — interactive predict UI with what-if explorer and SHAP explanations.
 - **Ensemble models** — weighted-average and stacking of LightGBM + XGBoost + RandomForest, with blend weights logged to MLflow.
-- **Model registry** — register all trained models (LightGBM/XGBoost/RF) with `champion`/`challenger` aliases based on Average Precision.
-- **Deployment** — build and push the image from CI (GitHub Actions) to Cloud Run.
 - **Fairness analysis** — segment-level metrics across card brand, email domain, and device type.
 
 ## Contact
