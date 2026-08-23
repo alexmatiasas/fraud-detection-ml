@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 from fastapi import APIRouter, Depends, Request
 
 from fdml.api.dependencies import get_model_loader
@@ -44,7 +45,12 @@ def list_features(
 
             importance = top_features.get(col, 0.0)
 
-            if hasattr(series, "cat") and series.cat.categories is not None:
+            is_categorical = (
+                hasattr(series, "cat") and series.cat.categories is not None
+            )
+            is_numeric = pd.api.types.is_numeric_dtype(series)
+
+            if is_categorical:
                 values = sorted(str(v) for v in series.cat.categories)
                 features.append(
                     FeatureInfo(
@@ -54,9 +60,9 @@ def list_features(
                         values=values,
                     )
                 )
-            else:
-                min_val = float(series.min()) if series.notna().any() else None
-                max_val = float(series.max()) if series.notna().any() else None
+            elif is_numeric and series.notna().any():
+                min_val = float(series.min())
+                max_val = float(series.max())
                 features.append(
                     FeatureInfo(
                         name=col,
@@ -64,6 +70,14 @@ def list_features(
                         importance=round(importance, 6),
                         min_value=min_val,
                         max_value=max_val,
+                    )
+                )
+            else:
+                features.append(
+                    FeatureInfo(
+                        name=col,
+                        dtype=dtype_str,
+                        importance=round(importance, 6),
                     )
                 )
 

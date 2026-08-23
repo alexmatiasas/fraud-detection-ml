@@ -96,11 +96,18 @@ def _score(
     threshold = float(loader.report.get("best_threshold", 0.5))
     explanation = _explanation(loader.explain(X_raw, top_k=top_k))
 
+    is_fraud = probability >= threshold
+    confidence = abs(probability - threshold)
+    risk_level = _risk_level(confidence)
+
     response = PredictionResponse(
         transaction_id=transaction_id,
-        is_fraud=probability >= threshold,
+        is_fraud=is_fraud,
         probability=probability,
         threshold=threshold,
+        risk_level=risk_level,
+        confidence=confidence,
+        is_above_threshold=is_fraud,
         model_version=loader.model_version,
         raw=_raw_dict(row),
         overrides_applied=overrides_applied or None,
@@ -115,6 +122,17 @@ def _score(
         shap_computed=explanation is not None,
     )
     return response
+
+
+def _risk_level(confidence: float) -> str:
+    """Distance-based risk classification."""
+    if confidence < 0.15:
+        return "critical"
+    if confidence < 0.30:
+        return "high"
+    if confidence < 0.45:
+        return "medium"
+    return "low"
 
 
 def _explanation(raw: dict[str, Any] | None) -> Explanation | None:
@@ -193,11 +211,19 @@ def _score_named(
     threshold = info.best_threshold
     explanation = _explanation(multi.explain(name, to_model_input(row), top_k=top_k))
     model_version = f"{name}:{info.version}" if info.version else name
+
+    is_fraud = probability >= threshold
+    confidence = abs(probability - threshold)
+    risk_level = _risk_level(confidence)
+
     response = PredictionResponse(
         transaction_id=transaction_id,
-        is_fraud=probability >= threshold,
+        is_fraud=is_fraud,
         probability=probability,
         threshold=threshold,
+        risk_level=risk_level,
+        confidence=confidence,
+        is_above_threshold=is_fraud,
         model_version=model_version,
         raw=_raw_dict(row),
         overrides_applied=overrides_applied or None,
