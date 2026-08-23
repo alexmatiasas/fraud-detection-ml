@@ -123,6 +123,15 @@ class CompareItem(BaseModel):
     threshold: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Decision threshold"
     )
+    risk_level: str | None = Field(
+        default=None,
+        description="Distance-based risk classification (critical/high/medium/low)",
+    )
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="|probability - threshold|, null on error",
+    )
     version: int | None = Field(
         default=None, description="Registry version used for the prediction"
     )

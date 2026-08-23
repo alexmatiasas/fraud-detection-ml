@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from fdml.api.dependencies import get_multi_loader
 from fdml.api.internal.registry import MultiModelLoader, RegisteredModel
@@ -43,9 +43,12 @@ def _to_info(multi: MultiModelLoader, info: RegisteredModel) -> RegisteredModelI
 @models_router.get("/", response_model=ModelList)
 @limiter.limit("120/minute")
 def list_models(
-    request: Request, multi: MultiModelLoader = Depends(get_multi_loader)
+    request: Request,
+    response: Response,
+    multi: MultiModelLoader = Depends(get_multi_loader),
 ) -> ModelList:
     """All registered models with their evaluation metrics (leaderboard)."""
+    response.headers["Cache-Control"] = "public, max-age=120"
     return ModelList(
         default=multi.default_model,
         models=[_to_info(multi, info) for info in multi.iter_models()],
@@ -56,10 +59,12 @@ def list_models(
 @limiter.limit("120/minute")
 def model_detail(
     request: Request,
+    response: Response,
     name: str,
     multi: MultiModelLoader = Depends(get_multi_loader),
 ) -> RegisteredModelInfo:
     """Detail for a single registered model."""
+    response.headers["Cache-Control"] = "public, max-age=120"
     info = multi.get(name)
     if info is None:
         raise HTTPException(status_code=404, detail=f"Model '{name}' not registered")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 
 from fastapi import Depends, Header, HTTPException
@@ -43,6 +44,6 @@ def verify_api_key(x_api_key: str = Header(...)) -> str:
         raise HTTPException(
             status_code=503, detail="FDML_API_KEY not configured on the server"
         )
-    if x_api_key != expected:
+    if not hmac.compare_digest(x_api_key, expected):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return x_api_key

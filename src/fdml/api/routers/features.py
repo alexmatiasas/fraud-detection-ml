@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from fdml.api.dependencies import get_model_loader
 from fdml.api.internal.loader import ModelLoader
@@ -18,14 +18,16 @@ features_router = APIRouter(prefix=f"{API_PREFIX}/features", tags=["model"])
 @limiter.limit("30/minute")
 def list_features(
     request: Request,
+    response: Response,
     loader: ModelLoader = Depends(get_model_loader),
 ) -> FeatureList:
     """List all raw features available for overrides.
 
     Returns feature metadata (name, dtype, importance, range/values) needed
-    by the frontend to build the \"what-if\" exploration UI.  Features are
+    by the frontend to build the "what-if" exploration UI.  Features are
     ordered by importance descending.
     """
+    response.headers["Cache-Control"] = "public, max-age=300"
     if not loader.is_loaded:
         return FeatureList(features=[], total=0)
 
