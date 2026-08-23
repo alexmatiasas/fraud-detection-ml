@@ -330,7 +330,7 @@ class ModelLoader:
             if "TransactionID" in cols:
                 record["transaction_id"] = int(row["TransactionID"])
             if "TransactionAmt" in cols:
-                record["amount"] = float(row["TransactionAmt"])
+                record["amount"] = round(float(row["TransactionAmt"]), 2)
             if "ProductCD" in cols:
                 record["product_cd"] = str(row["ProductCD"])
             if "isFraud" in cols:

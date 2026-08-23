@@ -171,9 +171,15 @@ def batch_predict(
 ) -> list[PredictionResponse]:
     """Score multiple transactions in one call (max 50).
 
-    Overrides are not computed for batch calls; use the single endpoint for
-    interactive "what if" exploration.  SHAP is included when available.
+    Overrides and SHAP are not computed for batch calls; use the single
+    endpoint for interactive "what if" exploration.
     """
+    for req in requests:
+        if req.overrides:
+            raise HTTPException(
+                status_code=422,
+                detail="Overrides are not supported in batch; use POST /v1/predict/ for what-if",
+            )
     return [_score(loader, req.transaction_id) for req in requests]
 
 
@@ -249,11 +255,15 @@ def _compare_item(multi: MultiModelLoader, name: str, row: pd.DataFrame) -> Comp
     except (ModelRegistryError, KeyError) as exc:
         return CompareItem(model=name, error=str(exc))
     threshold = info.best_threshold
+    is_fraud = probability >= threshold
+    confidence = abs(probability - threshold)
     return CompareItem(
         model=name,
         probability=probability,
-        is_fraud=probability >= threshold,
+        is_fraud=is_fraud,
         threshold=threshold,
+        risk_level=_risk_level(confidence),
+        confidence=confidence,
         version=info.version,
         run_id=info.run_id,
     )
