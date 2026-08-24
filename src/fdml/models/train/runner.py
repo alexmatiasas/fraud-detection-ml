@@ -448,6 +448,15 @@ def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
     client = MlflowClient()
     model_name = mlflow_cfg.registry.model_name
 
+    # A registry version pointing at a run with no 'model' artifact loads as
+    # an empty schema (0 inputs/outputs) and breaks serving — verify first.
+    if not client.list_artifacts(run_id, "model"):
+        logger.warning(
+            "  Registry: run %s has no 'model' artifact — skipping registration",
+            run_id,
+        )
+        return
+
     try:
         client.create_registered_model(model_name)
         logger.info("  Registry: created model '%s'", model_name)
@@ -458,6 +467,8 @@ def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
     try:
         mv = client.create_model_version(model_name, model_uri, run_id)
         version = mv.version
+        mlflow.log_param("registered_model_version", version)
+        mlflow.set_tag("registered_model_version", version)
         logger.info("  Registry: created version %s (AUC=%.4f)", version, auc)
 
         try:
@@ -695,6 +706,7 @@ def main() -> None:
             ):
                 mlflow.log_params(
                     {
+                        "split_embargo_seconds": cfg.split.embargo_seconds,
                         "train_dt_min": int(result.X_train[cfg.split.time_col].min()),
                         "train_dt_max": int(result.X_train[cfg.split.time_col].max()),
                         "val_dt_min": int(result.X_val[cfg.split.time_col].min()),
