@@ -22,6 +22,7 @@ from fdml.api.internal.loader import ModelLoadError
 from fdml.api.internal.registry import ModelRegistryError
 from fdml.api.limiter import limiter, rate_limit_exceeded_handler
 from fdml.api.metadata import DESCRIPTION, SUMMARY, TITLE, VERSION, tags_metadata
+from fdml.utils.logging import ensure_logging
 from fdml.api.routers.features import features_router
 from fdml.api.routers.health import health_router
 from fdml.api.routers.metrics import metrics_router
@@ -62,6 +63,9 @@ ALLOWED_ORIGINS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the model(s) and demo sample once at startup."""
+    ensure_logging()
+    logger.info("API starting (environment=%s)", ENVIRONMENT)
+
     loader = get_model_loader()
     try:
         loader.load()
