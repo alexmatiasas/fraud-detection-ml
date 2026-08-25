@@ -65,6 +65,10 @@ class TrainResult(BaseModel):
     pipeline: Pipeline
     X_train: pd.DataFrame
     X_val: pd.DataFrame
+    # Raw (pre-feature-engineering) validation fold — the contract the full
+    # pipeline (features + model) is served with, so signature and
+    # input_example must be inferred from it, not from the featurized frame.
+    X_val_raw: pd.DataFrame
     y_train: pd.Series
     y_val: pd.Series
     cfg: Any
@@ -272,6 +276,7 @@ def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
     return (
         X_train_fe,
         X_val_fe,
+        X_val,
         y_train,
         y_val,
         X_val_es,
@@ -390,6 +395,7 @@ def train(
     (
         X_train_fe,
         X_val_fe,
+        X_val_raw,
         y_train,
         y_val,
         X_val_es,
@@ -434,6 +440,7 @@ def train(
         pipeline=pipeline,
         X_train=X_train_fe,
         X_val=X_val_fe,
+        X_val_raw=X_val_raw,
         y_train=y_train,
         y_val=y_val,
         cfg=cfg,
@@ -800,18 +807,23 @@ def main() -> None:
 
             model_info = None
             if mlflow_cfg.log_model:
-                sig_input = result.X_val.astype(
-                    {c: "float64" for c in result.X_val.select_dtypes("int").columns}
-                )
+                # The full pipeline (features + model) is served with RAW
+                # transactions (see api loader.predict_proba), so signature and
+                # input_example must describe the pre-FE frame, not X_val_fe.
+                sig_input = result.X_val_raw.head(50)
+                sig_output = y_pred[: len(sig_input)].astype("int64")
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore",
                         message="Hint: Inferred schema contains integer column",
                     )
                     logging.getLogger("mlflow").setLevel(logging.ERROR)
-                    signature = infer_signature(sig_input, y_pred.astype("int64"))
+                    signature = infer_signature(sig_input, sig_output)
                     model_info = log_model(
-                        full_pipeline, name="model", signature=signature
+                        full_pipeline,
+                        name="model",
+                        signature=signature,
+                        input_example=result.X_val_raw.head(5),
                     )
                 logger.info("  ✓ Model logged to MLflow")
 
