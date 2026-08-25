@@ -376,8 +376,15 @@ def run_and_register(seed: int, run_name: str):
             )
             logging.getLogger("mlflow").setLevel(logging.ERROR)
             signature = infer_signature(sig_input, y_pred.astype("int64"))
-            mlflow.sklearn.log_model(full_pipeline, "model", signature=signature)
-        _register_model(mlflow_cfg, auc=report.roc_auc, run_id=run_id)
+            model_info = mlflow.sklearn.log_model(
+                full_pipeline, name="model", signature=signature
+            )
+        _register_model(
+            mlflow_cfg,
+            auc=report.roc_auc,
+            run_id=run_id,
+            model_uri=model_info.model_uri,
+        )
 
     return report, run_id, full_pipeline, model
 
