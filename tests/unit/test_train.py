@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -17,6 +19,7 @@ from fdml.models.train.runner import (
     _cap_train_fold,
     _fit_model,
     _get_splitter,
+    _register_model,
     _sample_eval_set,
     features_fingerprint,
 )
@@ -266,6 +269,66 @@ class TestFitModel:
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
         model = _fit_model(model, X, y, Xv, yv, cfg, callbacks=None)
         assert model.n_estimators_ == cfg.model.params.n_estimators
+
+
+class TestRegisterModel:
+    """_register_model must register the LoggedModel URI, not a legacy
+    runs:/ pointer (v50/v53 registered empty schemas that way)."""
+
+    @staticmethod
+    def _cfg() -> SimpleNamespace:
+        return SimpleNamespace(registry=SimpleNamespace(model_name="test-model"))
+
+    @staticmethod
+    def _fake_client(monkeypatch):
+        calls = {"versions": [], "aliases": [], "params": [], "tags": []}
+
+        class FakeClient:
+            def list_artifacts(self, run_id, path=None):
+                return []
+
+            def create_registered_model(self, name):
+                pass
+
+            def create_model_version(self, name, uri, run_id):
+                calls["versions"].append((name, uri, run_id))
+                return SimpleNamespace(version="7")
+
+            def get_model_version_by_alias(self, name, alias):
+                raise Exception("no champion yet")
+
+            def set_registered_model_alias(self, name, alias, version):
+                calls["aliases"].append(alias)
+
+        monkeypatch.setattr(mlflow, "MlflowClient", FakeClient)
+        monkeypatch.setattr(
+            mlflow, "log_param", lambda k, v: calls["params"].append((k, v))
+        )
+        monkeypatch.setattr(
+            mlflow, "set_tag", lambda k, v: calls["tags"].append((k, v))
+        )
+        return calls
+
+    def test_skips_registration_without_logged_model_uri(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(self._cfg(), auc=0.85, run_id="run123", model_uri=None)
+        assert calls["versions"] == []
+        assert calls["aliases"] == []
+
+    def test_registers_logged_model_uri_and_logs_version(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+        )
+        assert len(calls["versions"]) == 1
+        name, uri, run_id = calls["versions"][0]
+        assert (name, uri, run_id) == ("test-model", "models:/m-abc123", "run123")
+        assert ("registered_model_version", "7") in calls["params"]
+        assert ("registered_model_version", "7") in calls["tags"]
+        assert calls["aliases"] == ["champion"]
 
 
 class TestCategoryEncoder:
