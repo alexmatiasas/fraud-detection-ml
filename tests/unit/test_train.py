@@ -419,9 +419,16 @@ class TestNativeEvaluation:
             calls["targets"] = kwargs.get("targets")
             calls["rows"] = len(data)
             calls["columns"] = list(data.columns)
+            calls["dtypes"] = data.dtypes.apply(lambda d: d.name).to_dict()
 
         monkeypatch.setattr(mlflow.models, "evaluate", fake_evaluate)
-        X, y = self._data()
+        X = pd.DataFrame(
+            {
+                "cat": pd.Categorical(["x", "y", "x"]),
+                "num": [1.0, 2.0, 3.0],
+            }
+        )
+        y = pd.Series([0, 1, 0])
         _run_native_evaluation(
             self._cfg(),
             SimpleNamespace(model_uri="models:/m-abc"),
@@ -432,6 +439,7 @@ class TestNativeEvaluation:
         assert calls["targets"] == "isFraud"
         assert calls["rows"] == 3
         assert calls["columns"][-1] == "isFraud"
+        assert calls["dtypes"]["cat"] == "object"
 
     def test_skips_when_disabled(self, monkeypatch):
         calls = []

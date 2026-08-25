@@ -560,7 +560,14 @@ def _run_native_evaluation(
     if not cfg.enabled or model_info is None:
         return
 
-    df = X_val_raw.assign(isFraud=y_val.to_numpy())
+    df = X_val_raw.copy()
+    # pandas Categorical breaks the default evaluator ("Cannot interpret
+    # CategoricalDtype ... as a data type"); the served pipeline accepts
+    # object columns equally well (CategoryEncoder handles both).
+    cat_cols = df.select_dtypes(include="category").columns
+    if len(cat_cols):
+        df[cat_cols] = df[cat_cols].astype(object)
+    df["isFraud"] = y_val.to_numpy()
     if cfg.max_rows > 0 and len(df) > cfg.max_rows:
         df = df.sample(n=cfg.max_rows, random_state=0)
     logger.info(
