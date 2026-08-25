@@ -47,11 +47,11 @@ model_card:
   filename: model_card.md
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
+# roc_curve y pr_curve los genera mlflow.evaluate() nativo; aqui solo quedan
+# los plots custom que MLflow no produce (calibration, error_analysis).
 plots:
   output_dir: models/
   plots:
-    - roc_curve
-    - pr_curve
     - calibration
   output_format: webp  # png | webp (webp for web embedding)
   dpi: 150

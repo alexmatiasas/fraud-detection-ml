@@ -542,6 +542,49 @@ def _register_model(
         logger.warning("  Registry: failed to register model: %s", exc)
 
 
+def _run_native_evaluation(
+    mlflow_cfg: Any,
+    model_info: Any,
+    X_val_raw: pd.DataFrame,
+    y_val: pd.Series,
+) -> None:
+    """Native ``mlflow.models.evaluate`` on the logged full pipeline.
+
+    Runs over RAW transactions (the pipeline's serving contract), computes the
+    standard classifier metric set, interactive ROC/PR/confusion-matrix
+    artifacts and optionally a SHAP explainer, and links everything to both
+    the run and the LoggedModel. Failures degrade to a warning — the custom
+    evaluate runner has already produced the authoritative metrics.
+    """
+    cfg = mlflow_cfg.native_evaluate
+    if not cfg.enabled or model_info is None:
+        return
+
+    df = X_val_raw.assign(isFraud=y_val.to_numpy())
+    if cfg.max_rows > 0 and len(df) > cfg.max_rows:
+        df = df.sample(n=cfg.max_rows, random_state=0)
+    logger.info(
+        "  Native evaluation: %s rows (explainer=%s)",
+        f"{len(df):,}",
+        cfg.log_explainer,
+    )
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="Hint: Inferred schema contains integer column"
+            )
+            mlflow.models.evaluate(
+                model_info.model_uri,
+                df,
+                targets="isFraud",
+                model_type="classifier",
+                evaluator_config={"log_explainer": cfg.log_explainer},
+            )
+            logger.info("  ✓ Native evaluation logged")
+    except Exception as exc:
+        logger.warning("  Native evaluation failed: %s", exc)
+
+
 def _build_callbacks(cfg: Any) -> list | None:
     if not cfg.training_callbacks.log_per_iteration:
         return None
@@ -850,6 +893,10 @@ def main() -> None:
                         input_example=result.X_val_raw.head(5),
                     )
                 logger.info("  ✓ Model logged to MLflow")
+
+            _run_native_evaluation(
+                mlflow_cfg, model_info, result.X_val_raw, result.y_val
+            )
 
             if mlflow_cfg.registry.enabled:
                 _register_model(

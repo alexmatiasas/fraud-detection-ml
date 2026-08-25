@@ -20,6 +20,7 @@ from fdml.models.train.runner import (
     _fit_model,
     _get_splitter,
     _register_model,
+    _run_native_evaluation,
     _sample_eval_set,
     features_fingerprint,
 )
@@ -388,6 +389,74 @@ class TestRegisterModel:
             average_precision=0.05,
         )
         assert len(calls["versions"]) == 1
+
+
+class TestNativeEvaluation:
+    """_run_native_evaluation must call mlflow.models.evaluate on the raw
+    validation fold with the LoggedModel URI, or skip cleanly."""
+
+    @staticmethod
+    def _cfg(enabled=True, log_explainer=True, max_rows=0) -> SimpleNamespace:
+        return SimpleNamespace(
+            native_evaluate=SimpleNamespace(
+                enabled=enabled,
+                log_explainer=log_explainer,
+                max_rows=max_rows,
+            )
+        )
+
+    @staticmethod
+    def _data() -> tuple[pd.DataFrame, pd.Series]:
+        X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+        y = pd.Series([0, 1, 0])
+        return X, y
+
+    def test_calls_evaluate_with_model_uri_and_targets(self, monkeypatch):
+        calls = {}
+
+        def fake_evaluate(model_uri, data, **kwargs):
+            calls["model_uri"] = model_uri
+            calls["targets"] = kwargs.get("targets")
+            calls["rows"] = len(data)
+            calls["columns"] = list(data.columns)
+
+        monkeypatch.setattr(mlflow.models, "evaluate", fake_evaluate)
+        X, y = self._data()
+        _run_native_evaluation(
+            self._cfg(),
+            SimpleNamespace(model_uri="models:/m-abc"),
+            X,
+            y,
+        )
+        assert calls["model_uri"] == "models:/m-abc"
+        assert calls["targets"] == "isFraud"
+        assert calls["rows"] == 3
+        assert calls["columns"][-1] == "isFraud"
+
+    def test_skips_when_disabled(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(mlflow.models, "evaluate", lambda *a, **k: calls.append(a))
+        X, y = self._data()
+        _run_native_evaluation(
+            self._cfg(enabled=False), SimpleNamespace(model_uri="models:/m-1"), X, y
+        )
+        _run_native_evaluation(self._cfg(), None, X, y)
+        assert calls == []
+
+    def test_respects_max_rows(self, monkeypatch):
+        captured = {}
+
+        def fake_evaluate(model_uri, data, **kwargs):
+            captured["rows"] = len(data)
+
+        monkeypatch.setattr(mlflow.models, "evaluate", fake_evaluate)
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame({"a": rng.normal(size=100)})
+        y = pd.Series((rng.random(100) < 0.5).astype(int))
+        _run_native_evaluation(
+            self._cfg(max_rows=25), SimpleNamespace(model_uri="models:/m-1"), X, y
+        )
+        assert captured["rows"] == 25
 
 
 class TestCategoryEncoder:

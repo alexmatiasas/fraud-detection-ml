@@ -62,6 +62,33 @@ class DatasetCfg(BaseModel):
     )
 
 
+class NativeEvaluateCfg(BaseModel):
+    """Native ``mlflow.models.evaluate`` on the logged pipeline.
+
+    Complements the custom evaluate runner: MLflow computes standard
+    classifier metrics, interactive ROC/PR/confusion-matrix artifacts and an
+    optional SHAP explainer, all linked to the LoggedModel.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Run mlflow.models.evaluate on the logged model",
+    )
+    log_explainer: bool = Field(
+        default=True,
+        description="Log a SHAP explainer as a run artifact (serving-ready)",
+    )
+    max_rows: int = Field(
+        default=20000,
+        ge=0,
+        description=(
+            "Row cap for the native evaluation set (random sample, fixed "
+            "seed) — keeps prediction + explainer cheap on big folds. "
+            "0 = full validation fold"
+        ),
+    )
+
+
 class MlflowFullConfig(BaseModel):
     tracking: TrackingCfg = Field(
         default_factory=TrackingCfg, description="Tracking server configuration"
@@ -71,6 +98,10 @@ class MlflowFullConfig(BaseModel):
     )
     datasets: DatasetCfg = Field(
         default_factory=DatasetCfg, description="Dataset lineage configuration"
+    )
+    native_evaluate: NativeEvaluateCfg = Field(
+        default_factory=NativeEvaluateCfg,
+        description="Native mlflow.models.evaluate configuration",
     )
     log_model: bool = Field(default=True, description="Log model artifact to MLflow")
     log_feature_importance: bool = Field(

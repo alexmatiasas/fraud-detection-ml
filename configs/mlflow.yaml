@@ -26,6 +26,17 @@ datasets:
   enabled: true
   context: training
 
+# ── Native MLflow evaluation (sobre el pipeline logueado) ─────────────────────
+# Metricas estandar de clasificacion + artefactos interactivos (ROC/PR/matriz)
+# + SHAP explainer, vinculados al LoggedModel. Complementa el evaluate custom,
+# que conserva las metricas de fraude (coste, recall@k, segmentos, ...).
+native_evaluate:
+  enabled: true
+  log_explainer: true
+  # Muestra aleatoria (seed fija) del fold de validacion para mantener barata
+  # la evaluacion nativa y el explainer. 0 = fold completo.
+  max_rows: 20000
+
 # ── Artifacts ─────────────────────────────────────────────────────────────────
 log_model: true
 log_feature_importance: true
