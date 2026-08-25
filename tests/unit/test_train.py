@@ -273,11 +273,18 @@ class TestFitModel:
 
 class TestRegisterModel:
     """_register_model must register the LoggedModel URI, not a legacy
-    runs:/ pointer (v50/v53 registered empty schemas that way)."""
+    runs:/ pointer (v50/v53 registered empty schemas that way), and must
+    enforce the min_auc/min_ap quality gate before registering."""
 
     @staticmethod
-    def _cfg() -> SimpleNamespace:
-        return SimpleNamespace(registry=SimpleNamespace(model_name="test-model"))
+    def _cfg(min_auc: float = 0.0, min_ap: float = 0.0) -> SimpleNamespace:
+        return SimpleNamespace(
+            registry=SimpleNamespace(
+                model_name="test-model",
+                min_auc=min_auc,
+                min_average_precision=min_ap,
+            )
+        )
 
     @staticmethod
     def _fake_client(monkeypatch):
@@ -301,6 +308,11 @@ class TestRegisterModel:
                 calls["aliases"].append(alias)
 
         monkeypatch.setattr(mlflow, "MlflowClient", FakeClient)
+        monkeypatch.setattr(
+            mlflow,
+            "active_run",
+            lambda: SimpleNamespace(info=SimpleNamespace(run_id="run123")),
+        )
         monkeypatch.setattr(
             mlflow, "log_param", lambda k, v: calls["params"].append((k, v))
         )
@@ -329,6 +341,53 @@ class TestRegisterModel:
         assert ("registered_model_version", "7") in calls["params"]
         assert ("registered_model_version", "7") in calls["tags"]
         assert calls["aliases"] == ["champion"]
+
+    def test_quality_gate_rejects_below_min_auc(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_auc=0.95),
+            auc=0.85,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.50,
+        )
+        assert calls["versions"] == []
+        assert calls["aliases"] == []
+        assert ("validation_status", "rejected") in calls["tags"]
+
+    def test_quality_gate_rejects_below_min_ap(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_ap=0.40),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.30,
+        )
+        assert calls["versions"] == []
+
+    def test_quality_gate_passes_above_thresholds(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_auc=0.83, min_ap=0.35),
+            auc=0.84,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.36,
+        )
+        assert len(calls["versions"]) == 1
+        assert ("validation_status", "approved") in calls["tags"]
+
+    def test_quality_gate_zero_thresholds_disabled(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_auc=0.0, min_ap=0.0),
+            auc=0.10,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.05,
+        )
+        assert len(calls["versions"]) == 1
 
 
 class TestCategoryEncoder:

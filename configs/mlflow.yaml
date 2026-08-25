@@ -16,6 +16,10 @@ registry:
   enabled: true
   model_name: fraud-detection-lgbm
   alias: champion  # champion | challenger | candidate
+  # Quality gate: versiones por debajo de estos mínimos NO se registran
+  # (tag validation_status=rejected). 0 = umbral desactivado.
+  min_auc: 0.83
+  min_average_precision: 0.35
 
 # ── Dataset lineage ───────────────────────────────────────────────────────────
 datasets:

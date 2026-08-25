@@ -449,13 +449,36 @@ def train(
     )
 
 
+def _passes_quality_gate(mlflow_cfg: Any, auc: float, average_precision: float) -> bool:
+    """True when the run clears the registry's minimum-metric thresholds."""
+    gate = mlflow_cfg.registry
+    failures: list[str] = []
+    if gate.min_auc > 0 and auc < gate.min_auc:
+        failures.append(f"AUC {auc:.4f} < {gate.min_auc}")
+    if (
+        gate.min_average_precision > 0
+        and average_precision < gate.min_average_precision
+    ):
+        failures.append(f"AP {average_precision:.4f} < {gate.min_average_precision}")
+    if failures:
+        logger.warning("  Registry: quality gate REJECTED — %s", "; ".join(failures))
+        if mlflow.active_run() is not None:
+            mlflow.set_tag("validation_status", "rejected")
+        return False
+    return True
+
+
 def _register_model(
     mlflow_cfg: Any,
     auc: float,
     run_id: str,
     model_uri: str | None = None,
+    average_precision: float = 0.0,
 ) -> None:
     from mlflow import MlflowClient
+
+    if not _passes_quality_gate(mlflow_cfg, auc, average_precision):
+        return
 
     client = MlflowClient()
     model_name = mlflow_cfg.registry.model_name
@@ -483,6 +506,7 @@ def _register_model(
         version = mv.version
         mlflow.log_param("registered_model_version", version)
         mlflow.set_tag("registered_model_version", version)
+        mlflow.set_tag("validation_status", "approved")
         logger.info("  Registry: created version %s (AUC=%.4f)", version, auc)
 
         try:
@@ -833,6 +857,7 @@ def main() -> None:
                     auc=report.roc_auc,
                     run_id=run_id,
                     model_uri=model_info.model_uri if model_info else None,
+                    average_precision=report.average_precision,
                 )
 
     logger.info("")

@@ -33,6 +33,22 @@ class RegistryCfg(BaseModel):
         default="champion",
         description="Model alias for registry (champion = production)",
     )
+    min_auc: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Quality gate: minimum val ROC AUC to register a version "
+            "(0 = disabled). Runs below the threshold get tag "
+            "validation_status=rejected and are NOT registered"
+        ),
+    )
+    min_average_precision: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Quality gate: minimum val average precision (0 = disabled)",
+    )
 
 
 class DatasetCfg(BaseModel):
