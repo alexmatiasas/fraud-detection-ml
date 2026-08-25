@@ -442,18 +442,26 @@ def train(
     )
 
 
-def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
+def _register_model(
+    mlflow_cfg: Any,
+    auc: float,
+    run_id: str,
+    model_uri: str | None = None,
+) -> None:
     from mlflow import MlflowClient
 
     client = MlflowClient()
     model_name = mlflow_cfg.registry.model_name
 
-    # A registry version pointing at a run with no 'model' artifact loads as
-    # an empty schema (0 inputs/outputs) and breaks serving — verify first.
-    if not client.list_artifacts(run_id, "model"):
+    # MLflow 3 logs models as LoggedModels outside the run's artifacts; use
+    # the models:/m-<id> URI returned by log_model(). The legacy
+    # runs:/{run_id}/model pointer only works when the server resolves it to
+    # that LoggedModel — unreliable on DagsHub (v50/v53 registered empty
+    # schemas this way).
+    if not model_uri:
         logger.warning(
-            "  Registry: run %s has no 'model' artifact — skipping registration",
-            run_id,
+            "  Registry: no logged-model URI (log_model disabled or failed)"
+            " — skipping registration"
         )
         return
 
@@ -463,7 +471,6 @@ def _register_model(mlflow_cfg: Any, auc: float, run_id: str) -> None:
     except Exception:
         pass
 
-    model_uri = f"runs:/{run_id}/model"
     try:
         mv = client.create_model_version(model_name, model_uri, run_id)
         version = mv.version
@@ -791,6 +798,7 @@ def main() -> None:
                 mlflow.log_param("dataset_hash", lock_hash)
                 mlflow.set_tag("dataset_hash", lock_hash)
 
+            model_info = None
             if mlflow_cfg.log_model:
                 sig_input = result.X_val.astype(
                     {c: "float64" for c in result.X_val.select_dtypes("int").columns}
@@ -802,7 +810,9 @@ def main() -> None:
                     )
                     logging.getLogger("mlflow").setLevel(logging.ERROR)
                     signature = infer_signature(sig_input, y_pred.astype("int64"))
-                    log_model(full_pipeline, "model", signature=signature)
+                    model_info = log_model(
+                        full_pipeline, name="model", signature=signature
+                    )
                 logger.info("  ✓ Model logged to MLflow")
 
             if mlflow_cfg.registry.enabled:
@@ -810,6 +820,7 @@ def main() -> None:
                     mlflow_cfg,
                     auc=report.roc_auc,
                     run_id=run_id,
+                    model_uri=model_info.model_uri if model_info else None,
                 )
 
     logger.info("")
