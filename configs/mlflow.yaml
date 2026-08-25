@@ -5,7 +5,7 @@
 
 # ── Tracking server ───────────────────────────────────────────────────────────
 tracking:
-  experiment_name: fraud-detection
+  experiment_name: fraud-test
   run_name: lgbm_baseline
   # Local: sqlite:///mlruns.db  |  DagsHub: https://dagshub.com/user/repo.mlflow
   tracking_uri: sqlite:///mlruns.db
