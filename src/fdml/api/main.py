@@ -51,7 +51,11 @@ IS_PRODUCTION = ENVIRONMENT == "production"
 DEFAULT_ORIGINS = (
     ["https://alexmatias.vercel.app"]
     if IS_PRODUCTION
-    else ["https://alexmatias.vercel.app", "http://localhost:4321"]
+    else [
+        "https://alexmatias.vercel.app",
+        "http://localhost:4321",
+        "https://my-web-page.seahorse-pythagorean.ts.net",
+    ]
 )
 ALLOWED_ORIGINS = [
     o.strip()

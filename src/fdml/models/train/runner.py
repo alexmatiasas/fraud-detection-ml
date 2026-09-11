@@ -482,6 +482,7 @@ def _register_model(
 
     client = MlflowClient()
     model_name = mlflow_cfg.registry.model_name
+    registry_tags = dict(mlflow_cfg.registry.tags)
 
     # MLflow 3 logs models as LoggedModels outside the run's artifacts; use
     # the models:/m-<id> URI returned by log_model(). The legacy
@@ -496,13 +497,28 @@ def _register_model(
         return
 
     try:
-        client.create_registered_model(model_name)
+        client.create_registered_model(
+            model_name, description=mlflow_cfg.registry.description
+        )
         logger.info("  Registry: created model '%s'", model_name)
     except Exception:
         pass
 
     try:
-        mv = client.create_model_version(model_name, model_uri, run_id)
+        version_desc = f"LightGBM baseline — AUC={auc:.4f}, AP={average_precision:.4f}"
+        version_tags = {
+            **registry_tags,
+            "validation_status": "approved",
+            "validation_auc": f"{auc:.4f}",
+            "validation_ap": f"{average_precision:.4f}",
+        }
+        mv = client.create_model_version(
+            name=model_name,
+            source=model_uri,
+            run_id=run_id,
+            description=version_desc,
+            tags=version_tags,
+        )
         version = mv.version
         mlflow.log_param("registered_model_version", version)
         mlflow.set_tag("registered_model_version", version)
@@ -884,7 +900,14 @@ def main() -> None:
                 # The full pipeline (features + model) is served with RAW
                 # transactions (see api loader.predict_proba), so signature and
                 # input_example must describe the pre-FE frame, not X_val_fe.
-                sig_input = result.X_val_raw.head(50)
+                # pandas CategoricalDtype breaks MLflow schema serialization —
+                # cast to object to match the serving contract (CategoryEncoder
+                # handles both object and category).
+                sig_raw = result.X_val_raw.copy()
+                cat_cols = sig_raw.select_dtypes(include="category").columns
+                if len(cat_cols):
+                    sig_raw[cat_cols] = sig_raw[cat_cols].astype("object")
+                sig_input = sig_raw.head(50)
                 sig_output = y_pred[: len(sig_input)].astype("int64")
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -897,7 +920,7 @@ def main() -> None:
                         full_pipeline,
                         name="model",
                         signature=signature,
-                        input_example=result.X_val_raw.head(5),
+                        input_example=sig_raw.head(5),
                     )
                 logger.info("  ✓ Model logged to MLflow")
 

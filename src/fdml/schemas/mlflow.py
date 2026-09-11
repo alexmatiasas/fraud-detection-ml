@@ -49,6 +49,22 @@ class RegistryCfg(BaseModel):
         le=1.0,
         description="Quality gate: minimum val average precision (0 = disabled)",
     )
+    tags: dict[str, str] = Field(
+        default_factory=lambda: {
+            "framework": "lightgbm",
+            "dataset": "ieee-cis-fraud",
+            "task": "binary_classification",
+        },
+        description="Metadata tags attached to every registered model version",
+    )
+    description: str = Field(
+        default=(
+            "LightGBM binary classifier for IEEE-CIS fraud detection. "
+            "Full pipeline (feature engineering + model) serves raw "
+            "transactions."
+        ),
+        description="Description for the registered model",
+    )
 
 
 class DatasetCfg(BaseModel):
