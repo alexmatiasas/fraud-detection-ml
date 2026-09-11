@@ -1,6 +1,6 @@
-from typing import Literal, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DataPathsCfg(BaseModel):
@@ -95,15 +95,107 @@ class LightGBMParams(BaseModel):
     random_state: int = Field(default=42, description="PRNG seed")
     n_jobs: int = Field(default=-1, description="Parallel threads (-1 = all cores)")
 
+    model_config = ConfigDict(extra="allow")
+
+
+class XGBoostParams(BaseModel):
+    n_estimators: int = Field(
+        default=500, ge=1, description="Number of boosting rounds"
+    )
+    learning_rate: float = Field(
+        default=0.05, gt=0.0, description="Boosting learning rate"
+    )
+    max_depth: int = Field(default=8, ge=0, description="Maximum tree depth")
+    min_child_weight: float = Field(
+        default=5.0, ge=0.0, description="Minimum sum of instance weight"
+    )
+    subsample: float = Field(
+        default=0.8, gt=0.0, le=1.0, description="Row sampling ratio per tree"
+    )
+    colsample_bytree: float = Field(
+        default=0.8, gt=0.0, le=1.0, description="Column sampling ratio per tree"
+    )
+    reg_alpha: float = Field(default=0.1, ge=0.0, description="L1 regularization")
+    reg_lambda: float = Field(default=1.0, ge=0.0, description="L2 regularization")
+    scale_pos_weight: float = Field(
+        default=27.6, gt=0.0, description="Class weight for positive class"
+    )
+    random_state: int = Field(default=42, description="PRNG seed")
+    n_jobs: int = Field(default=-1, description="Parallel threads (-1 = all cores)")
+
+    model_config = ConfigDict(extra="allow")
+
+
+class RandomForestParams(BaseModel):
+    n_estimators: int = Field(
+        default=300, ge=1, description="Number of trees in the forest"
+    )
+    max_depth: int = Field(default=8, ge=0, description="Maximum tree depth")
+    min_child_samples: int = Field(
+        default=50, ge=1, description="Minimum samples per leaf (min_samples_leaf)"
+    )
+    subsample: float = Field(
+        default=0.8,
+        gt=0.0,
+        le=1.0,
+        description="Fraction of samples for each tree (max_samples)",
+    )
+    colsample_bytree: float = Field(
+        default=0.8,
+        gt=0.0,
+        le=1.0,
+        description="Fraction of features per tree (max_features)",
+    )
+    random_state: int = Field(default=42, description="PRNG seed")
+    n_jobs: int = Field(default=-1, description="Parallel threads (-1 = all cores)")
+
+    model_config = ConfigDict(extra="allow")
+
+
+ModelParams = Annotated[
+    Union[LightGBMParams, XGBoostParams, RandomForestParams],
+    Field(discriminator=None),
+]
+
 
 class ModelCfg(BaseModel):
     name: ModelName = Field(default="lightgbm", description="Model algorithm")
     artifact_dir: str = Field(
         default="models/", description="Directory for model artifacts"
     )
-    params: LightGBMParams = Field(
+    params: ModelParams = Field(
         default_factory=LightGBMParams, description="Model hyperparameters"
     )
+
+    @classmethod
+    def _resolve_params(cls, v: Any, info: Any) -> Any:
+        """Select the correct params class based on model.name."""
+        if isinstance(v, dict):
+            name = info.data.get("name", "lightgbm") if info else "lightgbm"
+            params_cls = {
+                "lightgbm": LightGBMParams,
+                "xgboost": XGBoostParams,
+                "random_forest": RandomForestParams,
+            }.get(name, LightGBMParams)
+            return params_cls.model_validate(v)
+        return v
+
+    model_config = {"json_schema_extra": {"examples": []}}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _select_params_class(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "params" in data:
+            name = data.get("name", "lightgbm")
+            params = data["params"]
+            if isinstance(params, dict):
+                params_cls = {
+                    "lightgbm": LightGBMParams,
+                    "xgboost": XGBoostParams,
+                    "random_forest": RandomForestParams,
+                }.get(name, LightGBMParams)
+                data["params"] = params_cls.model_validate(params)
+        return data
 
 
 OptunaMetric = Literal["roc_auc", "average_precision"]

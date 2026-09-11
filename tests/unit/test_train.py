@@ -285,7 +285,7 @@ class TestRegisterModel:
     ) -> SimpleNamespace:
         return SimpleNamespace(
             registry=SimpleNamespace(
-                model_name="test-model",
+                model_name="test-model",  # legacy field, now derived from cfg_model_name
                 min_auc=min_auc,
                 min_average_precision=min_ap,
                 tags=tags
@@ -365,7 +365,7 @@ class TestRegisterModel:
         )
         assert len(calls["versions"]) == 1
         v = calls["versions"][0]
-        assert v["name"] == "test-model"
+        assert v["name"] == "fraud-detection-lgbm"
         assert v["source"] == "models:/m-abc123"
         assert v["run_id"] == "run123"
         assert ("registered_model_version", "7") in calls["params"]

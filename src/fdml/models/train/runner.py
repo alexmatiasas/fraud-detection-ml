@@ -474,6 +474,7 @@ def _register_model(
     run_id: str,
     model_uri: str | None = None,
     average_precision: float = 0.0,
+    cfg_model_name: str = "lightgbm",
 ) -> None:
     from mlflow import MlflowClient
 
@@ -481,7 +482,13 @@ def _register_model(
         return
 
     client = MlflowClient()
-    model_name = mlflow_cfg.registry.model_name
+    # Derive registry model name from algorithm name
+    _REGISTRY_NAMES = {
+        "lightgbm": "fraud-detection-lgbm",
+        "xgboost": "fraud-detection-xgboost",
+        "random_forest": "fraud-detection-rf",
+    }
+    model_name = _REGISTRY_NAMES.get(cfg_model_name, mlflow_cfg.registry.model_name)
     registry_tags = dict(mlflow_cfg.registry.tags)
 
     # MLflow 3 logs models as LoggedModels outside the run's artifacts; use
@@ -505,7 +512,10 @@ def _register_model(
         pass
 
     try:
-        version_desc = f"LightGBM baseline — AUC={auc:.4f}, AP={average_precision:.4f}"
+        _model_label = cfg_model_name.replace("_", " ").title()
+        version_desc = (
+            f"{_model_label} baseline — AUC={auc:.4f}, AP={average_precision:.4f}"
+        )
         version_tags = {
             **registry_tags,
             "validation_status": "approved",
@@ -935,6 +945,7 @@ def main() -> None:
                     run_id=run_id,
                     model_uri=model_info.model_uri if model_info else None,
                     average_precision=report.average_precision,
+                    cfg_model_name=cfg.model.name,
                 )
 
     logger.info("")
