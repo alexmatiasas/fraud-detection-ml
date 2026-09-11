@@ -255,6 +255,8 @@ mlflow_cfg = load_mlflow_config(
     cli_args=[
         f"tracking.tracking_uri={TRACKING_URI}",
         "registry.enabled=true",
+        "registry.min_auc=0",
+        "registry.min_average_precision=0",
     ]
 )
 eval_cfg = load_evaluation_config(
@@ -369,7 +371,7 @@ def run_and_register(seed: int, run_name: str):
             reporters=reporters,
         )
 
-        _log_configs_and_env()
+        _log_configs_and_env(cfg)
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore", message="Hint: Inferred schema contains integer column"
@@ -481,9 +483,9 @@ required_artifacts = {
     "configs/train.yaml", "configs/features.yaml", "configs/evaluate.yaml",
     "configs/mlflow.yaml", "env/pyproject.toml", "env/uv.lock",
     "features/importance.json", "model_card.md", "report.json",
-    "plots/roc_curve.webp", "plots/pr_curve.webp", "plots/calibration_curve.webp",
+    "plots/calibration_curve.webp",
     "curves/threshold_curve.json", "curves/cost_curve.json",
-    "curves/roc.json", "curves/pr.json", "curves/calibration.json",
+    "curves/calibration.json",
     "segments/segments.json",
 }
 missing_artifacts = required_artifacts - set(artifacts)

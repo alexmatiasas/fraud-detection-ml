@@ -20,6 +20,13 @@ registry:
   # (tag validation_status=rejected). 0 = umbral desactivado.
   min_auc: 0.83
   min_average_precision: 0.35
+  tags:
+    framework: lightgbm
+    dataset: ieee-cis-fraud
+    task: binary_classification
+  description: >-
+    LightGBM binary classifier for IEEE-CIS fraud detection.
+    Full pipeline (feature engineering + model) serves raw transactions.
 
 # ── Dataset lineage ───────────────────────────────────────────────────────────
 datasets:
