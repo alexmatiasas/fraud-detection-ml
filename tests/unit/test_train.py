@@ -278,28 +278,55 @@ class TestRegisterModel:
     enforce the min_auc/min_ap quality gate before registering."""
 
     @staticmethod
-    def _cfg(min_auc: float = 0.0, min_ap: float = 0.0) -> SimpleNamespace:
+    def _cfg(
+        min_auc: float = 0.0,
+        min_ap: float = 0.0,
+        tags: dict[str, str] | None = None,
+    ) -> SimpleNamespace:
         return SimpleNamespace(
             registry=SimpleNamespace(
                 model_name="test-model",
                 min_auc=min_auc,
                 min_average_precision=min_ap,
+                tags=tags
+                or {
+                    "framework": "lightgbm",
+                    "dataset": "test",
+                    "task": "binary_classification",
+                },
+                description="Test registered model",
             )
         )
 
     @staticmethod
     def _fake_client(monkeypatch):
-        calls = {"versions": [], "aliases": [], "params": [], "tags": []}
+        calls = {
+            "versions": [],
+            "aliases": [],
+            "params": [],
+            "tags": [],
+            "registered_model_desc": None,
+        }
 
         class FakeClient:
             def list_artifacts(self, run_id, path=None):
                 return []
 
-            def create_registered_model(self, name):
-                pass
+            def create_registered_model(self, name, description=None):
+                calls["registered_model_desc"] = description
 
-            def create_model_version(self, name, uri, run_id):
-                calls["versions"].append((name, uri, run_id))
+            def create_model_version(
+                self, name, source, run_id, description=None, tags=None
+            ):
+                calls["versions"].append(
+                    {
+                        "name": name,
+                        "source": source,
+                        "run_id": run_id,
+                        "description": description,
+                        "tags": tags or [],
+                    }
+                )
                 return SimpleNamespace(version="7")
 
             def get_model_version_by_alias(self, name, alias):
@@ -337,11 +364,50 @@ class TestRegisterModel:
             model_uri="models:/m-abc123",
         )
         assert len(calls["versions"]) == 1
-        name, uri, run_id = calls["versions"][0]
-        assert (name, uri, run_id) == ("test-model", "models:/m-abc123", "run123")
+        v = calls["versions"][0]
+        assert v["name"] == "test-model"
+        assert v["source"] == "models:/m-abc123"
+        assert v["run_id"] == "run123"
         assert ("registered_model_version", "7") in calls["params"]
         assert ("registered_model_version", "7") in calls["tags"]
         assert calls["aliases"] == ["champion"]
+
+    def test_version_has_description_with_metrics(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(),
+            auc=0.8812,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.4123,
+        )
+        v = calls["versions"][0]
+        assert "AUC=0.8812" in v["description"]
+        assert "AP=0.4123" in v["description"]
+
+    def test_version_has_config_tags(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(tags={"framework": "lightgbm", "custom": "yes"}),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+        )
+        tag_dict = calls["versions"][0]["tags"]
+        assert tag_dict["framework"] == "lightgbm"
+        assert tag_dict["custom"] == "yes"
+        assert tag_dict["validation_status"] == "approved"
+        assert tag_dict["validation_auc"] == "0.9000"
+
+    def test_registered_model_gets_description(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+        )
+        assert calls["registered_model_desc"] == "Test registered model"
 
     def test_quality_gate_rejects_below_min_auc(self, monkeypatch):
         calls = self._fake_client(monkeypatch)
