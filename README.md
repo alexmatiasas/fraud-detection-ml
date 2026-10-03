@@ -65,6 +65,25 @@ flowchart LR
     end
 ```
 
+### Model registry flow
+
+Every training run passes a quality gate before touching the registry. A clear win over the current `champion` gets promoted; otherwise it stays a `challenger` — the API always serves the alias, never a stale pointer.
+
+```mermaid
+flowchart TD
+    T[fdml models/train] --> E[FDML run + MLflow tracking]
+    E --> Q{Quality gate?<br/>AUC ≥ min_auc · AP ≥ min_ap}
+    Q -- No --> R[validation_status=rejected<br/>not registered]
+    Q -- Yes --> V[Create model version]
+    V --> C{AUC > champion AUC?}
+    C -- Yes --> PC[alias champion → vN]
+    C -- No --> CP[alias challenger → vN]
+    PC --> REG[(MLflow Registry · DagsHub)]
+    CP --> REG
+    REG --> L[FastAPI ModelLoader]
+    L -->|models:/name@champion| P[/v1/predict]
+```
+
 ## Feature engineering
 
 All feature decisions come from the [EDA in R](notebooks/01_eda_r/01_EDA_in_R.Rmd). Highlights:
@@ -218,6 +237,19 @@ The image ships only the serving API: training-only packages (xgboost, dvc, optu
 - [EDA in R](notebooks/01_eda_r/01_EDA_in_R.Rmd) — full dataset exploration that drives every feature decision.
 - [Feature engineering verification](notebooks/02_feature_engineering/02_feature_engineering.qmd) — proves each transformer output against `configs/features.yaml`.
 - [Training verification](notebooks/03_training/03_training_verification.qmd) — temporal split, MLflow tracking, registry, benchmarks.
+
+## Methodology — CRISP-DM
+
+The project follows **CRISP-DM**, so every phase maps to a concrete artifact you can inspect:
+
+| CRISP-DM phase | Artifact in this repo |
+|---|---|
+| 1. Business understanding | `AGENTS.md`, EDA `01_EDA_in_R`: imbalance baseline (~3.4% fraud), cost framing, why accuracy is a bad metric |
+| 2. Data understanding | EDA R notebook: missingness maps (D6–D9, D12–D14 at 87–94%), M-flag distribution, V-feature variance/correlation audit |
+| 3. Data preparation | `configs/features.yaml` + 17 transformers in `src/fdml/features/` (C3 dropped, D6–D9/D12–D14 removed, `has_identity` engineered) |
+| 4. Modeling | `src/fdml/models/train/` — LightGBM/XGBoost/RF builders, temporal split, Optuna HPO, scale_pos_weight = 27.6 |
+| 5. Evaluation | `src/fdml/models/evaluate/` — ROC AUC, AP, F1@thr, cost/transaction, Recall@k, drift, stability; model card at `models/model_card.md` |
+| 6. Deployment | `src/fdml/api/` (FastAPI), Docker image, Cloud Run, MLflow registry champion/challenger aliases |
 
 ## Roadmap
 
