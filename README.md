@@ -71,17 +71,17 @@ Every training run passes a quality gate before touching the registry. A clear w
 
 ```mermaid
 flowchart TD
-    T[fdml models/train] --> E[FDML run + MLflow tracking]
-    E --> Q{Quality gate?<br/>AUC ≥ min_auc · AP ≥ min_ap}
-    Q -- No --> R[validation_status=rejected<br/>not registered]
+    T["fdml models/train"] --> E["FDML run + MLflow tracking"]
+    E --> Q{"Quality gate?<br/>AUC ≥ min_auc · AP ≥ min_ap"}
+    Q -- No --> R["validation_status=rejected<br/>not registered"]
     Q -- Yes --> V[Create model version]
     V --> C{AUC > champion AUC?}
-    C -- Yes --> PC[alias champion → vN]
-    C -- No --> CP[alias challenger → vN]
+    C -- Yes --> PC["alias champion → vN"]
+    C -- No --> CP["alias challenger → vN"]
     PC --> REG[(MLflow Registry · DagsHub)]
     CP --> REG
     REG --> L[FastAPI ModelLoader]
-    L -->|models:/name@champion| P[/v1/predict]
+    L -->|"models:/name@champion"| P["/v1/predict"]
 ```
 
 ## Feature engineering
