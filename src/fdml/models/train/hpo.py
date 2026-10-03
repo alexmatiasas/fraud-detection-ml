@@ -5,12 +5,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-import lightgbm as lgb
 import mlflow
 import numpy as np
 import optuna
 import pandas as pd
-import xgboost as xgb
 
 from fdml.models.train.model_builder import ModelBuilder
 
@@ -163,21 +161,16 @@ def _objective(
 
     eval_set = [(X_val, y_val)]
 
-    if isinstance(model, lgb.LGBMClassifier):
-        model.fit(
+    if builder.supports_early_stopping():
+        model = builder.fit(
+            model,
             X_train,
             y_train,
             eval_set=eval_set,
             eval_names=["validation"],
             eval_metric=es_metric,
-            callbacks=[lgb.early_stopping(es_rounds, first_metric_only=True)],
-        )
-    elif isinstance(model, xgb.XGBClassifier):
-        model.fit(
-            X_train,
-            y_train,
-            eval_set=eval_set,
-            verbose=False,
+            callbacks=[],
+            es_rounds=es_rounds,
         )
     else:
         model.fit(X_train, y_train)

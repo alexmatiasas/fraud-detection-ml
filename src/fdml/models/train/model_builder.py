@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 import lightgbm as lgb
 import optuna
+import pandas as pd
 import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier
 
 _RANDOM_STATE = 42
+logger = logging.getLogger(__name__)
 
 
 class ModelBuilder(ABC):
@@ -23,6 +26,33 @@ class ModelBuilder(ABC):
 
     def cleanup_params(self, params: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in params.items() if k not in ("n_jobs", "random_state")}
+
+    def supports_early_stopping(self) -> bool:
+        """Whether this model type supports early stopping via eval_set."""
+        return False
+
+    def fit(
+        self,
+        model: Any,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
+        eval_names: list[str] | None = None,
+        eval_metric: str = "auc",
+        callbacks: list | None = None,
+        es_rounds: int = 100,
+    ) -> Any:
+        """Framework-agnostic fit with early stopping support.
+
+        Subclasses that support early stopping should override this method.
+        The default implementation falls back to a plain fit().
+        """
+        model.fit(X_train, y_train)
+        return model
+
+    def get_best_iteration(self, model: Any) -> int | None:
+        """Return the best iteration from early stopping, or None."""
+        return None
 
     def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
         """Return an Optuna search space dict for this model type.
@@ -54,6 +84,38 @@ class LGBMBuilder(ModelBuilder):
 
     def cleanup_params(self, params: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in params.items() if k not in ("n_jobs", "random_state")}
+
+    def supports_early_stopping(self) -> bool:
+        return True
+
+    def fit(
+        self,
+        model: lgb.LGBMClassifier,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
+        eval_names: list[str] | None = None,
+        eval_metric: str = "auc",
+        callbacks: list | None = None,
+        es_rounds: int = 100,
+    ) -> lgb.LGBMClassifier:
+        import lightgbm as _lgb
+
+        model.fit(
+            X_train,
+            y_train,
+            eval_set=eval_set,
+            eval_names=eval_names or ["validation"],
+            eval_metric=eval_metric,
+            callbacks=[
+                _lgb.early_stopping(es_rounds, first_metric_only=True),
+                *(callbacks or []),
+            ],
+        )
+        return model
+
+    def get_best_iteration(self, model: lgb.LGBMClassifier) -> int | None:
+        return getattr(model, "best_iteration_", None)
 
     def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
         return {
@@ -93,6 +155,37 @@ class XGBoostBuilder(ModelBuilder):
             if k not in ("n_jobs", "random_state", "verbosity")
         }
 
+    def supports_early_stopping(self) -> bool:
+        return True
+
+    def fit(
+        self,
+        model: xgb.XGBClassifier,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
+        eval_names: list[str] | None = None,
+        eval_metric: str = "auc",
+        callbacks: list | None = None,
+        es_rounds: int = 100,
+    ) -> xgb.XGBClassifier:
+        # XGBoost >= 3.x: early stopping, eval_metric, and callbacks are
+        # constructor params (set via set_params), not fit() kwargs.
+        xgb_kwargs: dict[str, Any] = {
+            "eval_metric": eval_metric,
+            "early_stopping_rounds": es_rounds,
+        }
+        if callbacks:
+            xgb_kwargs["callbacks"] = [
+                cb.as_xgboost() for cb in callbacks if hasattr(cb, "as_xgboost")
+            ]
+        model.set_params(**xgb_kwargs)
+        model.fit(X_train, y_train, eval_set=eval_set or [], verbose=False)
+        return model
+
+    def get_best_iteration(self, model: xgb.XGBClassifier) -> int | None:
+        return getattr(model, "best_iteration", None)
+
     def get_search_space(self, trial: optuna.Trial) -> dict[str, Any]:
         return {
             "max_depth": trial.suggest_int("max_depth", 3, 12),
@@ -122,6 +215,23 @@ class RFBuilder(ModelBuilder):
             n_jobs=-1,
             verbose=0,
         )
+
+    def fit(
+        self,
+        model: RandomForestClassifier,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        eval_set: list[tuple[pd.DataFrame, pd.Series]] | None = None,
+        eval_names: list[str] | None = None,
+        eval_metric: str = "auc",
+        callbacks: list | None = None,
+        es_rounds: int = 100,
+    ) -> RandomForestClassifier:
+        logger.info(
+            "  Random Forest does not support early stopping — training all trees"
+        )
+        model.fit(X_train, y_train)
+        return model
 
     def format_params(self, params: dict[str, Any]) -> str:
         return (

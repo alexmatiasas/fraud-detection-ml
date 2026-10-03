@@ -9,13 +9,13 @@ tracking:
   run_name: lgbm_baseline
   # Local: sqlite:///mlruns.db  |  DagsHub: https://dagshub.com/user/repo.mlflow
   tracking_uri: sqlite:///mlruns.db
-  backend: local  # auto-detected if .env has dagshub credentials
+  backend: local # auto-detected if .env has dagshub credentials
 
 # ── Model Registry ────────────────────────────────────────────────────────────
 registry:
   enabled: true
   model_name: fraud-detection-lgbm
-  alias: champion  # champion | challenger | candidate
+  alias: champion # champion | challenger | candidate
   # Quality gate: versiones por debajo de estos mínimos NO se registran
   # (tag validation_status=rejected). 0 = umbral desactivado.
   min_auc: 0.83
@@ -30,7 +30,7 @@ registry:
 
 # ── Dataset lineage ───────────────────────────────────────────────────────────
 datasets:
-  enabled: true
+  enabled: false
   context: training
 
 # ── Native MLflow evaluation (sobre el pipeline logueado) ─────────────────────

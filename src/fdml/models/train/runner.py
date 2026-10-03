@@ -309,9 +309,6 @@ def _fit_model(
             cfg.early_stopping.eval_metric,
         )
 
-    import lightgbm as lgb  # noqa: PLC0415
-    import xgboost as xgb  # noqa: PLC0415
-
     eval_set = [(X_val, y_val)] if use_es else None
     if eval_set is None:
         model.fit(X_train, y_train)
@@ -337,6 +334,9 @@ def _fit_model(
             "  Train eval: %s rows sampled for the per-iteration train curve",
             f"{len(idx):,}",
         )
+
+    import lightgbm as lgb  # noqa: PLC0415
+    import xgboost as xgb  # noqa: PLC0415
 
     if isinstance(model, lgb.LGBMClassifier):
         eval_names = ["validation"]
@@ -376,6 +376,10 @@ def _fit_model(
         model.set_params(**xgb_kwargs)
         model.fit(X_train, y_train, eval_set=eval_set, verbose=False)
     else:
+        logger.warning(
+            "  %s does not support early stopping — training without it",
+            type(model).__name__,
+        )
         model.fit(X_train, y_train)
     return model
 

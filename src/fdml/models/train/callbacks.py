@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import mlflow
@@ -42,16 +43,14 @@ def _metric_key(dataset_name: str, metric_name: str) -> str:
 
 def _normalize_dataset_name(data_name: str) -> str:
     """Map xgboost's auto-generated ``validation_0`` to ``validation``."""
-    if len(data_name) >= 2 and data_name[-2] == "_" and data_name[-1].isdigit():
-        return data_name[:-2]
-    return data_name
+    return re.sub(r"_\d+$", "", data_name)
 
 
 class _MetricLogger:
     """Shared per-iteration logging for LightGBM and XGBoost callbacks.
 
     Args:
-        log_mlflow: Log metrics to the active MLflow run.
+        `log_mlflow`: Log metrics to the active MLflow run.
         log_dvclive: Log metrics to DVCLive.
         log_console: Print a progress line every ``console_every`` iterations
             plus a line each time a metric reaches a new best value.
@@ -223,7 +222,8 @@ class XGBoostIterationCallback(_MetricLogger, TrainingCallback):
                 if not values:
                     continue
                 value = float(values[epoch])
-                parsed.append((dataset_name, metric_name, value, True))
+                higher = _higher_is_better(metric_name)
+                parsed.append((dataset_name, metric_name, value, higher))
                 self._log_metric(dataset_name, metric_name, value, epoch + 1)
 
         if self._log_console:
