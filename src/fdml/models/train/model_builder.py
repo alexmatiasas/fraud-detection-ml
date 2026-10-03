@@ -41,11 +41,16 @@ class ModelBuilder(ABC):
         eval_metric: str = "auc",
         callbacks: list | None = None,
         es_rounds: int = 100,
+        xgb_name_map: dict[str, str] | None = None,
     ) -> Any:
         """Framework-agnostic fit with early stopping support.
 
         Subclasses that support early stopping should override this method.
         The default implementation falls back to a plain fit().
+
+        ``xgb_name_map`` lets the caller rename XGBoost's auto-generated
+        ``validation_0``/``validation_1`` datasets; natively passed through to
+        the callback adapter only (``XGBoostBuilder.fit`` forwards it).
         """
         model.fit(X_train, y_train)
         return model
@@ -98,6 +103,7 @@ class LGBMBuilder(ModelBuilder):
         eval_metric: str = "auc",
         callbacks: list | None = None,
         es_rounds: int = 100,
+        xgb_name_map: dict[str, str] | None = None,
     ) -> lgb.LGBMClassifier:
         import lightgbm as _lgb
 
@@ -149,11 +155,7 @@ class XGBoostBuilder(ModelBuilder):
         )
 
     def cleanup_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {
-            k: v
-            for k, v in params.items()
-            if k not in ("n_jobs", "random_state", "verbosity")
-        }
+        return {k: v for k, v in params.items() if k not in ("n_jobs", "random_state", "verbosity")}
 
     def supports_early_stopping(self) -> bool:
         return True
@@ -168,6 +170,7 @@ class XGBoostBuilder(ModelBuilder):
         eval_metric: str = "auc",
         callbacks: list | None = None,
         es_rounds: int = 100,
+        xgb_name_map: dict[str, str] | None = None,
     ) -> xgb.XGBClassifier:
         # XGBoost >= 3.x: early stopping, eval_metric, and callbacks are
         # constructor params (set via set_params), not fit() kwargs.
@@ -177,7 +180,7 @@ class XGBoostBuilder(ModelBuilder):
         }
         if callbacks:
             xgb_kwargs["callbacks"] = [
-                cb.as_xgboost() for cb in callbacks if hasattr(cb, "as_xgboost")
+                cb.as_xgboost(xgb_name_map) for cb in callbacks if hasattr(cb, "as_xgboost")
             ]
         model.set_params(**xgb_kwargs)
         model.fit(X_train, y_train, eval_set=eval_set or [], verbose=False)
@@ -226,10 +229,9 @@ class RFBuilder(ModelBuilder):
         eval_metric: str = "auc",
         callbacks: list | None = None,
         es_rounds: int = 100,
+        xgb_name_map: dict[str, str] | None = None,
     ) -> RandomForestClassifier:
-        logger.info(
-            "  Random Forest does not support early stopping — training all trees"
-        )
+        logger.info("  Random Forest does not support early stopping — training all trees")
         model.fit(X_train, y_train)
         return model
 

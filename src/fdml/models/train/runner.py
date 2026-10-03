@@ -54,6 +54,9 @@ from fdml.models.train.tracking import (
     _register_abort_handler,
     features_fingerprint,
 )
+from fdml.schemas.evaluate import EvaluateConfig
+from fdml.schemas.mlflow import MlflowFullConfig
+from fdml.schemas.train import TrainConfig
 from fdml.utils.logging import (
     ensure_logging,
     get_phase_timings,
@@ -79,17 +82,17 @@ class TrainResult(BaseModel):
     X_val_raw: pd.DataFrame
     y_train: pd.Series
     y_val: pd.Series
-    cfg: Any
+    cfg: TrainConfig
     params: dict[str, Any]
     feature_names: list[str]
 
 
 def train(
-    cfg: Any = None,
+    cfg: TrainConfig | None = None,
     cli_args: list[str] | None = None,
     callbacks: list | None = None,
-    hpo_strategy: Any = None,
-    mlflow_cfg: Any = None,
+    hpo_strategy: Any | None = None,
+    mlflow_cfg: MlflowFullConfig | None = None,
 ) -> TrainResult:
     ensure_logging()
 
@@ -152,9 +155,9 @@ def train(
 
 
 def _evaluate_and_track(
-    cfg: Any,
-    eval_cfg: Any,
-    mlflow_cfg: Any,
+    cfg: TrainConfig,
+    eval_cfg: EvaluateConfig,
+    mlflow_cfg: MlflowFullConfig,
     result: TrainResult,
     train_elapsed_s: float,
 ) -> tuple:
@@ -180,9 +183,8 @@ def _evaluate_and_track(
                 }
             )
 
-        best_iter = getattr(result.model, "best_iteration_", None)
-        if best_iter is None:
-            best_iter = getattr(result.model, "best_iteration", None)
+        builder = model_builder_registry.get(cfg.model.name)
+        best_iter = builder.get_best_iteration(result.model)
         if best_iter is not None:
             mlflow.log_metric("val/best_iteration", int(best_iter))
         model = result.model
@@ -233,15 +235,15 @@ def _evaluate_and_track(
 
 
 def _log_and_save_artifacts(
-    cfg: Any,
-    mlflow_cfg: Any,
+    cfg: TrainConfig,
+    mlflow_cfg: MlflowFullConfig,
     result: TrainResult,
     run_id: str,
     model: Any,
     y_proba: np.ndarray,
     y_pred: np.ndarray,
     report: Any,
-    log_path: Any,
+    log_path: Path,
 ) -> None:
     """PHASE 6: persist pipeline, log model, native eval, registry."""
     with step("PHASE 6: Save artifacts + log model"):

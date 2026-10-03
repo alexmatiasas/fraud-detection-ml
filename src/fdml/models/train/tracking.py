@@ -6,14 +6,16 @@ import logging
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import mlflow
+
+from fdml.schemas.features import FeaturesConfig
+from fdml.schemas.train import TrainConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _log_configs_and_env(cfg: Any) -> None:
+def _log_configs_and_env(cfg: TrainConfig) -> None:
     for config_path in [
         "configs/train.yaml",
         "configs/features.yaml",
@@ -72,7 +74,7 @@ def _log_git_tags() -> None:
         logger.debug("  git dirty check failed: %s", exc)
 
 
-def features_fingerprint(features_cfg: Any) -> str:
+def features_fingerprint(features_cfg: FeaturesConfig) -> str:
     """Canonical sha1 of the resolved feature configuration.
 
     Distinguishes runs that used different feature sets even though the

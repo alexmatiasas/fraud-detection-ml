@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, cast
+from typing import cast
 
 import pandas as pd
 from sklearn.pipeline import Pipeline
@@ -18,6 +18,9 @@ from fdml.features.factory import (
 )
 from fdml.models.evaluate.reporter import log_dataset_lineage
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
+from fdml.schemas.features import FeaturesConfig
+from fdml.schemas.mlflow import MlflowFullConfig
+from fdml.schemas.train import SplitCfg, TrainConfig
 from fdml.utils.logging import step
 
 logger = logging.getLogger(__name__)
@@ -25,7 +28,7 @@ logger = logging.getLogger(__name__)
 _TARGET = "isFraud"
 
 
-def _get_splitter(split_cfg: Any) -> TemporalSplitter | StratifiedSplitter:
+def _get_splitter(split_cfg: SplitCfg) -> TemporalSplitter | StratifiedSplitter:
     if split_cfg.strategy == "temporal":
         return TemporalSplitter(
             time_col=split_cfg.time_col,
@@ -68,7 +71,7 @@ def transform_steps(pipeline: Pipeline, X: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_split(
-    cfg: Any, mlflow_cfg: Any = None
+    cfg: TrainConfig, mlflow_cfg: MlflowFullConfig | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     """PHASES 1-2: load the merged data and produce the train/val split."""
 
@@ -124,7 +127,7 @@ def load_split(
 
 
 def _cap_train_fold(
-    cfg: Any,
+    cfg: TrainConfig,
     X_train: pd.DataFrame,
     y_train: pd.Series,
     cap: int,
@@ -146,7 +149,7 @@ def featurize(
     X_train: pd.DataFrame,
     X_val: pd.DataFrame,
     y_train: pd.Series,
-    features_cfg: Any,
+    features_cfg: FeaturesConfig,
 ) -> tuple[pd.DataFrame, pd.DataFrame, Pipeline, list[str]]:
     """PHASE 3: run the feature pipeline over an already-split dataset."""
 
@@ -204,7 +207,7 @@ def _sample_eval_set(
     return cast(pd.DataFrame, X_es), cast(pd.Series, y_es)
 
 
-def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
+def _prepare_data(cfg: TrainConfig, mlflow_cfg: MlflowFullConfig | None = None) -> tuple:
     """PHASES 1-3: load, split, feature engineering."""
 
     X_train, X_val, y_train, y_val = load_split(cfg, mlflow_cfg)

@@ -3,10 +3,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+
+from fdml.models.train.model_builder import model_builder_registry
+from fdml.schemas.train import TrainConfig
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ def _fit_model(
     y_train: pd.Series,
     X_val: pd.DataFrame,
     y_val: pd.Series,
-    cfg: Any,
+    cfg: TrainConfig,
     callbacks: list | None = None,
 ) -> Any:
     """Fit ``model`` with an evaluation set and native early stopping.
@@ -25,6 +27,10 @@ def _fit_model(
     LightGBM 4.x removed the ``early_stopping_rounds`` estimator attribute, so
     early stopping is applied through the native ``lgb.early_stopping`` /
     ``xgb.callback.EarlyStopping`` callbacks instead of estimator parameters.
+
+    Delegates to ``ModelBuilder.fit`` — the per-framework early-stopping
+    wiring lives there, keeping this function a thin orchestrator of the
+    eval-set / train-curve policy.
     """
     use_es = cfg.early_stopping.enabled
     if use_es:
@@ -34,8 +40,7 @@ def _fit_model(
             cfg.early_stopping.eval_metric,
         )
 
-    eval_set = [(X_val, y_val)] if use_es else None
-    if eval_set is None:
+    if not use_es:
         model.fit(X_train, y_train)
         return model
 
@@ -58,53 +63,39 @@ def _fit_model(
             f"{len(idx):,}",
         )
 
-    if isinstance(model, lgb.LGBMClassifier):
-        eval_names = ["validation"]
-        if train_eval:
+    builder = model_builder_registry.get(cfg.model.name)
+    is_xgb = isinstance(model, xgb.XGBClassifier)
+
+    eval_set: list[tuple[pd.DataFrame, pd.Series]] = [(X_val, y_val)]
+    eval_names = ["validation"]
+    xgb_name_map: dict[str, str] | None = None
+    if train_eval:
+        if is_xgb:
+            # XGBoost early-stops on the LAST eval dataset, so validation goes
+            # last; the name_map keeps train/validation distinguishable.
+            eval_set = [train_eval, (X_val, y_val)]
+            xgb_name_map = {"validation_0": "train", "validation_1": "validation"}
+        else:
             eval_set = [*eval_set, train_eval]
             eval_names.append("train")
-        model.fit(
-            X_train,
-            y_train,
-            eval_set=eval_set,
-            eval_names=eval_names,
-            eval_metric=cfg.early_stopping.eval_metric,
-            callbacks=[
-                lgb.early_stopping(cfg.early_stopping.rounds, first_metric_only=True),
-                *(callbacks or []),
-            ],
-        )
-    elif isinstance(model, xgb.XGBClassifier):
-        # XGBoost >= 3.x sklearn API: early stopping, eval_metric and callbacks
-        # are estimator constructor params, not fit() kwargs. Callbacks must be
-        # TrainingCallback instances, so convert the LightGBM-style ones.
-        # XGBoost early-stops on the LAST eval dataset, so validation goes last;
-        # the callback name_map keeps train/validation distinguishable.
-        if train_eval:
-            eval_set = [train_eval, (X_val, y_val)]
-            name_map = {"validation_0": "train", "validation_1": "validation"}
-        else:
-            name_map = {"validation_0": "validation"}
-        xgb_kwargs: dict[str, Any] = {
-            "eval_metric": cfg.early_stopping.eval_metric,
-            "early_stopping_rounds": cfg.early_stopping.rounds,
-        }
-        if callbacks:
-            xgb_kwargs["callbacks"] = [
-                cb.as_xgboost(name_map) for cb in callbacks if hasattr(cb, "as_xgboost")
-            ]
-        model.set_params(**xgb_kwargs)
-        model.fit(X_train, y_train, eval_set=eval_set, verbose=False)
     else:
-        logger.warning(
-            "  %s does not support early stopping — training without it",
-            type(model).__name__,
-        )
-        model.fit(X_train, y_train)
+        xgb_name_map = {"validation_0": "validation"} if is_xgb else None
+
+    builder.fit(
+        model,
+        X_train,
+        y_train,
+        eval_set=eval_set,
+        eval_names=eval_names,
+        eval_metric=cfg.early_stopping.eval_metric,
+        callbacks=callbacks,
+        es_rounds=cfg.early_stopping.rounds,
+        **({"xgb_name_map": xgb_name_map} if is_xgb else {}),
+    )
     return model
 
 
-def _build_callbacks(cfg: Any) -> list | None:
+def _build_callbacks(cfg: TrainConfig) -> list | None:
     if not cfg.training_callbacks.log_per_iteration:
         return None
     from fdml.models.train.callbacks import IterationCallback

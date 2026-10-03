@@ -6,11 +6,13 @@ from typing import Any
 
 import pandas as pd
 
+from fdml.schemas.mlflow import MlflowFullConfig
+
 logger = logging.getLogger(__name__)
 
 
 def _run_native_evaluation(
-    mlflow_cfg: Any,
+    mlflow_cfg: MlflowFullConfig,
     model_info: Any,
     X_val_raw: pd.DataFrame,
     y_val: pd.Series,

@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import mlflow
+
+from fdml.schemas.mlflow import MlflowFullConfig
+
+_REGISTRY_NAMES = {
+    "lightgbm": "fraud-detection-lgbm",
+    "xgboost": "fraud-detection-xgboost",
+    "random_forest": "fraud-detection-rf",
+}
 
 logger = logging.getLogger(__name__)
 
 
-def _passes_quality_gate(mlflow_cfg: Any, auc: float, average_precision: float) -> bool:
+def _passes_quality_gate(
+    mlflow_cfg: MlflowFullConfig, auc: float, average_precision: float
+) -> bool:
     """True when the run clears the registry's minimum-metric thresholds."""
     gate = mlflow_cfg.registry
     failures: list[str] = []
@@ -25,7 +34,7 @@ def _passes_quality_gate(mlflow_cfg: Any, auc: float, average_precision: float) 
 
 
 def _register_model(
-    mlflow_cfg: Any,
+    mlflow_cfg: MlflowFullConfig,
     auc: float,
     run_id: str,
     model_uri: str | None = None,
@@ -38,12 +47,6 @@ def _register_model(
         return
 
     client = MlflowClient()
-    # Derive registry model name from algorithm name
-    _REGISTRY_NAMES = {
-        "lightgbm": "fraud-detection-lgbm",
-        "xgboost": "fraud-detection-xgboost",
-        "random_forest": "fraud-detection-rf",
-    }
     model_name: str = _REGISTRY_NAMES.get(
         cfg_model_name, mlflow_cfg.registry.model_name or "fraud-detection-lgbm"
     )
