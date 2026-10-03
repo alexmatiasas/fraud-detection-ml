@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from fdml.api.internal.explain import OverrideError, apply_overrides
 import fdml.api.internal.explain as explain_mod
+from fdml.api.internal.explain import OverrideError, apply_overrides
 
 
 def make_row() -> pd.DataFrame:

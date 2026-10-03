@@ -10,8 +10,8 @@ import pandas as pd
 from fdml.models.config import load_evaluation_config, load_train_config
 from fdml.models.evaluate.drift import adversarial_validation
 from fdml.models.evaluate.metrics import (
-    brier_score,
     bootstrap_ci,
+    brier_score,
     compute_metrics,
     expected_cost,
     f_beta_score,
@@ -80,9 +80,7 @@ def evaluate(
 
     f_beta_val: float | None = None
     if eval_cfg.f_beta.enabled:
-        f_beta_val = f_beta_score(
-            y_true, y_proba, beta=eval_cfg.f_beta.beta, threshold=default_thr
-        )
+        f_beta_val = f_beta_score(y_true, y_proba, beta=eval_cfg.f_beta.beta, threshold=default_thr)
 
     cost_thr: float | None = None
     cost_val: float | None = None
@@ -99,9 +97,7 @@ def evaluate(
     recall_at_k: dict[str, float] = {}
     if eval_cfg.recall_at_k.enabled:
         for fraction in eval_cfg.recall_at_k.fractions:
-            recall_at_k[f"{fraction:.4f}"] = recall_at_top_k(
-                y_true, y_proba, k_fraction=fraction
-            )
+            recall_at_k[f"{fraction:.4f}"] = recall_at_top_k(y_true, y_proba, k_fraction=fraction)
 
     ci: tuple[float, float] | None = None
     if eval_cfg.threshold.bootstrap:
@@ -134,9 +130,7 @@ def evaluate(
         imp_sorted = sorted(
             zip(feature_names, feature_importance), key=lambda x: x[1], reverse=True
         )
-        top_features = [
-            {"feature": col, "importance": float(val)} for col, val in imp_sorted
-        ]
+        top_features = [{"feature": col, "importance": float(val)} for col, val in imp_sorted]
 
     plot_paths: list[str] = []
     output_dir = eval_cfg.plots.output_dir
@@ -161,9 +155,7 @@ def evaluate(
         calibration_data = calibration_curve_table(y_true, y_proba)
 
     if _has_plot(eval_cfg, "error_analysis") and X_val is not None:
-        error_features = (
-            eval_cfg.plots.error_features or eval_cfg.error_analysis.features
-        )
+        error_features = eval_cfg.plots.error_features or eval_cfg.error_analysis.features
         paths = ErrorAnalysisPlotter(features_to_plot=error_features).plot(
             y_true, y_proba, X_val, output_dir, fmt=fmt, dpi=dpi
         )
@@ -186,7 +178,7 @@ def evaluate(
                 output_dir=output_dir,
             )
             plot_paths.append(str(path))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Learning curves failed: %s", exc)
 
     if eval_cfg.stability.feature_importance and X_val is not None:
@@ -204,18 +196,18 @@ def evaluate(
                 output_dir=output_dir,
             )
             plot_paths.append(str(path))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Feature importance stability failed: %s", exc)
 
     auc_adv = None
     if eval_cfg.adversarial_validation.enabled and X_val is not None:
         try:
             auc_adv, _ = adversarial_validation(X_train, X_val, output_dir)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Adversarial validation failed: %s", exc)
 
     n_train = len(X_train)
-    n_val = len(y_true) if X_val is None else len(y_true)
+    n_val = len(y_true)
     fraud_rate = float(y_true.mean())
 
     segments_list: list[SegmentResult] = []
@@ -292,9 +284,7 @@ def evaluate(
             n_val=n_val,
             fraud_rate=fraud_rate,
             split_strategy=split_strategy,
-            feature_importance=[
-                (ft["feature"], ft["importance"]) for ft in top_features
-            ],
+            feature_importance=[(ft["feature"], ft["importance"]) for ft in top_features],
             auc_adv=auc_adv,
             brier=brier_val,
             f_beta=f_beta_val,
@@ -358,9 +348,7 @@ def main() -> None:
         df.drop(columns=["isFraud"]).iloc[val_idx],
     )
     y_train, y_val = df["isFraud"].iloc[train_idx], df["isFraud"].iloc[val_idx]
-    logger.info(
-        "  Train: %s rows / Val: %s rows", f"{len(X_train):,}", f"{len(X_val):,}"
-    )
+    logger.info("  Train: %s rows / Val: %s rows", f"{len(X_train):,}", f"{len(X_val):,}")
 
     X_train_fe = fe_pipeline.fit_transform(X_train, y_train)
     X_val_fe = fe_pipeline.transform(X_val)

@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pandas as pd
 
 from fdml.features.base import BaseFeatureTransformer
@@ -26,12 +24,10 @@ class CategoryEncoder(BaseFeatureTransformer):
         self.enabled = enabled
         self.categories_: dict[str, list[str]] = {}
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "CategoryEncoder":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "CategoryEncoder":
         self._fitted_ = True
         cat_cols = X.select_dtypes(include=["object", "category"]).columns
-        self.categories_ = {
-            col: sorted(X[col].astype(str).unique()) for col in cat_cols
-        }
+        self.categories_ = {col: sorted(X[col].astype(str).unique()) for col in cat_cols}
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:

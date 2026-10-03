@@ -25,14 +25,18 @@ from fdml.utils.paths import data_config, features_config
 
 
 def load_fe_config(config: Mapping[str, Any] = features_config) -> FeaturesConfig:
-    """This takes the configuration file [configs/features.yaml](configs/features.yaml) parsed as a only read dictionary
-    (:class:`~collections.abc.Mapping` class) loaded and solved with :mod:`~OmegaConfig` and validates against the :class:`~fdml.schemas.features.FeaturesConfig` pydantic model
+    """This takes the configuration file [configs/features.yaml](configs/features.yaml) parsed as a
+    only read dictionary
+    (:class:`~collections.abc.Mapping` class) loaded and solved with :mod:`~OmegaConfig` and
+      validates against the :class:`~fdml.schemas.features.FeaturesConfig` pydantic model
 
     Args:
-        config (Mapping[str, Any], optional): A configuration dictionary (loaded and solved with :mod:`~OmegaConfig`, check :mod:`~fdml.utils.paths` module). Defaults to features_config.
+        config (Mapping[str, Any], optional): A configuration dictionary (loaded and solved with
+        :mod:`~OmegaConfig`, check :mod:`~fdml.utils.paths` module). Defaults to features_config.
 
     Returns:
-        FeaturesConfig: Pydantic model validated against the :class:`~fraud_detection.schemas.features.FeaturesConfig` pydantic model.
+        FeaturesConfig: Pydantic model validated against the
+        :class:`~fraud_detection.schemas.features.FeaturesConfig` pydantic model.
     """
     return FeaturesConfig.model_validate(config)
 

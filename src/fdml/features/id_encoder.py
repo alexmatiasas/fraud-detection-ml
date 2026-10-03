@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pandas as pd
 
 from fdml.features.base import BaseFeatureTransformer
@@ -24,7 +22,7 @@ class IdCodeEncoder(BaseFeatureTransformer):
         columns: ``id_#`` columns to recast to ``category`` dtype.
     """
 
-    def __init__(self, enabled: bool = True, columns: Optional[list[str]] = None):
+    def __init__(self, enabled: bool = True, columns: list[str] | None = None):
         self.enabled = enabled
         self.columns = columns or []
 

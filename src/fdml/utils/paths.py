@@ -1,6 +1,7 @@
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any, cast
 
 from omegaconf import OmegaConf
 
@@ -52,9 +53,7 @@ PROCESSED_DIR = PROJECT_ROOT / data_config["processed_dir"]
 FEATURES_DIR = PROJECT_ROOT / data_config["features_dir"]
 
 
-DATA_FILES = {
-    name: RAW_DIR / filename for name, filename in data_config.get("files", {}).items()
-}
+DATA_FILES = {name: RAW_DIR / filename for name, filename in data_config.get("files", {}).items()}
 
 if __name__ == "__main__":
     print(features_config)

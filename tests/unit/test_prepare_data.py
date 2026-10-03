@@ -6,8 +6,8 @@ from scripts.prepare_data import (
     DTYPE_MAP,
     _downcast,
     build_dtype_map,
-    build_transaction_schema,
     build_identity_schema,
+    build_transaction_schema,
 )
 
 

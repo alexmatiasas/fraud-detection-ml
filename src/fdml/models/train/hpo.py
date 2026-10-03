@@ -121,7 +121,7 @@ class OptunaHPO(HPOStrategy):
                 timeout=self._timeout,
                 callbacks=[mlflow_cb],
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("  Optuna: study failed with %s", exc)
             return base_params
 
@@ -191,9 +191,7 @@ def _save_best_params(model_name: str, params: dict[str, Any], value: float) -> 
     payload = {
         "model": model_name,
         "best_value": value,
-        "params": {
-            k: float(v) if isinstance(v, (int, float)) else v for k, v in params.items()
-        },
+        "params": {k: float(v) if isinstance(v, (int, float)) else v for k, v in params.items()},
     }
     with open(path, "w") as f:
         json.dump(payload, f, indent=2)

@@ -29,8 +29,9 @@ import logging
 import tempfile
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import mlflow
 import numpy as np
@@ -110,7 +111,7 @@ def _on_id_codes_encoding(d: dict) -> None:
     d["engineered"]["id_codes_encoding"] = True
 
 
-FEATURE_GROUPS: "OrderedDict[str, Callable[[dict], None]]" = OrderedDict(
+FEATURE_GROUPS: OrderedDict[str, Callable[[dict], None]] = OrderedDict(
     vesta_features=_off_vesta_features,
     count_corr_filter=_off_count_corr_filter,
     cyclical=_off_cyclical,
@@ -165,9 +166,7 @@ def _setup_mlflow() -> None:
 def _log_variant_features(features: FeaturesConfig) -> None:
     """Snapshot the variant's resolved feature config as an artifact."""
     payload = json.dumps(features.model_dump(mode="json"), indent=2, default=str)
-    with tempfile.NamedTemporaryFile(
-        "w", suffix=".json", encoding="utf-8", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as f:
         f.write(payload)
         tmp_path = f.name
     mlflow.log_artifact(tmp_path, "configs")
@@ -251,9 +250,7 @@ def run_ablation(cfg: Any, max_train_rows: int = 0) -> pd.DataFrame:
         features = variant_features(mutate, base=base_features)
         X_tr, X_va, _, feature_names = featurize(X_train, X_val, y_train, features)
 
-        removed = (
-            sorted(set(baseline_cols) - set(feature_names)) if baseline_cols else []
-        )
+        removed = sorted(set(baseline_cols) - set(feature_names)) if baseline_cols else []
         fhash = features_fingerprint(features)
         logger.info(
             "─ Variant: %s (%d features, %s removed, hash %s)",
@@ -276,9 +273,7 @@ def run_ablation(cfg: Any, max_train_rows: int = 0) -> pd.DataFrame:
                 mlflow.set_tag("features_hash", fhash)
                 mlflow.log_param("features_hash", fhash)
                 mlflow.log_params({"seed": seed})
-                mlflow.log_params(
-                    {"n_features": len(feature_names), "n_removed": len(removed)}
-                )
+                mlflow.log_params({"n_features": len(feature_names), "n_removed": len(removed)})
                 mlflow.log_params(params)
                 _log_configs_and_env(cfg)
                 _log_variant_features(features)

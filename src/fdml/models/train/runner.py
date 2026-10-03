@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import Any, cast
 
 import joblib
+import lightgbm as lgb
 import mlflow
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from mlflow.models import infer_signature
 from mlflow.sklearn import log_model
 from pydantic import BaseModel, ConfigDict
@@ -89,9 +91,7 @@ def _get_splitter(split_cfg: Any) -> TemporalSplitter | StratifiedSplitter:
     raise ValueError(msg)
 
 
-def fit_transform_steps(
-    pipeline: Pipeline, X: pd.DataFrame, y: pd.Series
-) -> pd.DataFrame:
+def fit_transform_steps(pipeline: Pipeline, X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:
     """Run ``fit_transform`` step by step so each step's cost is visible."""
     Xt = X.copy()
     for name, transformer in pipeline.steps:
@@ -146,12 +146,8 @@ def load_split(
 
         X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
-        logger.info(
-            "  Train: %s rows (fraud %.2f%%)", f"{len(X_train):,}", y_train.mean() * 100
-        )
-        logger.info(
-            "  Val:   %s rows (fraud %.2f%%)", f"{len(X_val):,}", y_val.mean() * 100
-        )
+        logger.info("  Train: %s rows (fraud %.2f%%)", f"{len(X_train):,}", y_train.mean() * 100)
+        logger.info("  Val:   %s rows (fraud %.2f%%)", f"{len(X_val):,}", y_val.mean() * 100)
 
         if cfg.split.strategy == "temporal" and cfg.split.time_col in X.columns:
             train_tr = (
@@ -228,8 +224,7 @@ def featurize(
 
         def _fmt_dtypes(df: pd.DataFrame) -> str:
             return ", ".join(
-                f"{k}: {v}"
-                for k, v in df.dtypes.apply(lambda x: x.name).value_counts().items()
+                f"{k}: {v}" for k, v in df.dtypes.apply(lambda x: x.name).value_counts().items()
             )
 
         logger.info("  dtypes: %s", _fmt_dtypes(X_train_fe))
@@ -269,9 +264,7 @@ def _prepare_data(cfg: Any, mlflow_cfg: Any = None) -> tuple:
     X_train_fe, X_val_fe, pipeline, feature_names = featurize(
         X_train, X_val, y_train, load_features_config()
     )
-    X_val_es, y_val_es = _sample_eval_set(
-        X_val_fe, y_val, cfg.early_stopping.eval_max_rows
-    )
+    X_val_es, y_val_es = _sample_eval_set(X_val_fe, y_val, cfg.early_stopping.eval_max_rows)
 
     return (
         X_train_fe,
@@ -323,9 +316,7 @@ def _fit_model(
         n_train = len(X_train)
         if n_train > train_rows:
             idx = np.sort(
-                np.random.default_rng(cfg.seed).choice(
-                    n_train, train_rows, replace=False
-                )
+                np.random.default_rng(cfg.seed).choice(n_train, train_rows, replace=False)
             )
         else:
             idx = np.arange(n_train)
@@ -335,13 +326,10 @@ def _fit_model(
             f"{len(idx):,}",
         )
 
-    import lightgbm as lgb  # noqa: PLC0415
-    import xgboost as xgb  # noqa: PLC0415
-
     if isinstance(model, lgb.LGBMClassifier):
         eval_names = ["validation"]
         if train_eval:
-            eval_set = eval_set + [train_eval]
+            eval_set = [*eval_set, train_eval]
             eval_names.append("train")
         model.fit(
             X_train,
@@ -433,9 +421,7 @@ def train(
         logger.info("  params: %s", builder.format_params(params))
 
         model = builder.build(params)
-        model = _fit_model(
-            model, X_train_fe, y_train, X_val_es, y_val_es, cfg, callbacks
-        )
+        model = _fit_model(model, X_train_fe, y_train, X_val_es, y_val_es, cfg, callbacks)
 
         logger.info("  ✓ Training complete")
 
@@ -459,10 +445,7 @@ def _passes_quality_gate(mlflow_cfg: Any, auc: float, average_precision: float) 
     failures: list[str] = []
     if gate.min_auc > 0 and auc < gate.min_auc:
         failures.append(f"AUC {auc:.4f} < {gate.min_auc}")
-    if (
-        gate.min_average_precision > 0
-        and average_precision < gate.min_average_precision
-    ):
+    if gate.min_average_precision > 0 and average_precision < gate.min_average_precision:
         failures.append(f"AP {average_precision:.4f} < {gate.min_average_precision}")
     if failures:
         logger.warning("  Registry: quality gate REJECTED — %s", "; ".join(failures))
@@ -492,7 +475,9 @@ def _register_model(
         "xgboost": "fraud-detection-xgboost",
         "random_forest": "fraud-detection-rf",
     }
-    model_name = _REGISTRY_NAMES.get(cfg_model_name, mlflow_cfg.registry.model_name)
+    model_name: str = _REGISTRY_NAMES.get(
+        cfg_model_name, mlflow_cfg.registry.model_name or "fraud-detection-lgbm"
+    )
     registry_tags = dict(mlflow_cfg.registry.tags)
 
     # MLflow 3 logs models as LoggedModels outside the run's artifacts; use
@@ -502,24 +487,19 @@ def _register_model(
     # schemas this way).
     if not model_uri:
         logger.warning(
-            "  Registry: no logged-model URI (log_model disabled or failed)"
-            " — skipping registration"
+            "  Registry: no logged-model URI (log_model disabled or failed) — skipping registration"
         )
         return
 
     try:
-        client.create_registered_model(
-            model_name, description=mlflow_cfg.registry.description
-        )
+        client.create_registered_model(model_name, description=mlflow_cfg.registry.description)
         logger.info("  Registry: created model '%s'", model_name)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("  Registry: model '%s' exists, reusing (%s)", model_name, exc)
 
     try:
         _model_label = cfg_model_name.replace("_", " ").title()
-        version_desc = (
-            f"{_model_label} baseline — AUC={auc:.4f}, AP={average_precision:.4f}"
-        )
+        version_desc = f"{_model_label} baseline — AUC={auc:.4f}, AP={average_precision:.4f}"
         version_tags = {
             **registry_tags,
             "validation_status": "approved",
@@ -563,12 +543,10 @@ def _register_model(
                     auc,
                     champion_auc,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             client.set_registered_model_alias(model_name, "champion", version)
-            logger.info(
-                "  Registry: alias 'champion' → version %s (first model)", version
-            )
-    except Exception as exc:
+            logger.info("  Registry: alias 'champion' → version %s (first model)", version)
+    except Exception as exc:  # noqa: BLE001
         logger.warning("  Registry: failed to register model: %s", exc)
 
 
@@ -610,7 +588,9 @@ def _run_native_evaluation(
             warnings.filterwarnings(
                 "ignore", message="Hint: Inferred schema contains integer column"
             )
-            mlflow.models.evaluate(
+            from mlflow.models import evaluate
+
+            evaluate(
                 model_info.model_uri,
                 df,
                 targets="isFraud",
@@ -618,7 +598,7 @@ def _run_native_evaluation(
                 evaluator_config={"log_explainer": cfg.log_explainer},
             )
             logger.info("  ✓ Native evaluation logged")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("  Native evaluation failed: %s", exc)
 
 
@@ -654,9 +634,7 @@ def _log_configs_and_env(cfg: Any) -> None:
 
     try:
         resolved = json.dumps(cfg.model_dump(mode="json"), indent=2, default=str)
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".json", encoding="utf-8", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False) as f:
             f.write(resolved)
             tmp_path = f.name
         mlflow.log_artifact(tmp_path, "configs")
@@ -682,8 +660,8 @@ def _log_git_tags() -> None:
                 timeout=5,
             )
             mlflow.set_tag(tag_name, result.stdout.strip())
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("  git tag %s unavailable: %s", tag_name, exc)
     try:
         dirty = (
             subprocess.run(
@@ -696,8 +674,8 @@ def _log_git_tags() -> None:
             != ""
         )
         mlflow.set_tag("git_dirty", "yes" if dirty else "no")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("  git dirty check failed: %s", exc)
 
 
 def features_fingerprint(features_cfg: Any) -> str:
@@ -709,9 +687,7 @@ def features_fingerprint(features_cfg: Any) -> str:
     """
     import json
 
-    payload = json.dumps(
-        features_cfg.model_dump(mode="json"), sort_keys=True, default=str
-    )
+    payload = json.dumps(features_cfg.model_dump(mode="json"), sort_keys=True, default=str)
     return hashlib.sha1(payload.encode()).hexdigest()
 
 
@@ -724,13 +700,13 @@ def _register_abort_handler() -> None:
     """
     import signal
 
-    def _mark_aborted(signum, frame):  # noqa: ARG001
+    def _mark_aborted(signum, frame):
         try:
             if mlflow.active_run() is not None:
                 mlflow.set_tag("status", "aborted")
                 logger.warning("  Interrupted — run tagged status=aborted")
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("  failed to mark run aborted: %s", exc)
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGINT, _mark_aborted)
@@ -760,10 +736,8 @@ def main() -> None:
     mlflow.set_tracking_uri(mlflow_cfg.tracking.tracking_uri)
     try:
         mlflow.set_experiment(mlflow_cfg.tracking.experiment_name)
-    except Exception as exc:
-        logger.warning(
-            "  MLflow: experiment setup failed (%s), falling back to local SQLite", exc
-        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("  MLflow: experiment setup failed (%s), falling back to local SQLite", exc)
         mlflow_cfg.tracking.tracking_uri = "sqlite:///mlruns.db"
         mlflow.set_tracking_uri("sqlite:///mlruns.db")
         mlflow.set_experiment(mlflow_cfg.tracking.experiment_name)
@@ -811,17 +785,10 @@ def main() -> None:
 
             for phase_name, elapsed in get_phase_timings().items():
                 match = re.search(r"PHASE (\d+)", phase_name)
-                key = (
-                    f"phase_{match.group(1)}_seconds"
-                    if match
-                    else f"phase_{phase_name}_seconds"
-                )
+                key = f"phase_{match.group(1)}_seconds" if match else f"phase_{phase_name}_seconds"
                 mlflow.log_metric(key, round(elapsed, 1))
 
-            if (
-                cfg.split.strategy == "temporal"
-                and cfg.split.time_col in result.X_train.columns
-            ):
+            if cfg.split.strategy == "temporal" and cfg.split.time_col in result.X_train.columns:
                 mlflow.log_params(
                     {
                         "split_embargo_seconds": cfg.split.embargo_seconds,
@@ -896,9 +863,7 @@ def main() -> None:
             np.save(yval_path, result.y_val.values.astype("int32"))
             mlflow.log_artifact(str(proba_path))
             mlflow.log_artifact(str(yval_path))
-            logger.info(
-                "  Saved val predictions for cross-run comparison (seed bagging)"
-            )
+            logger.info("  Saved val predictions for cross-run comparison (seed bagging)")
 
             _log_configs_and_env(cfg)
 
@@ -938,9 +903,7 @@ def main() -> None:
                     )
                 logger.info("  ✓ Model logged to MLflow")
 
-            _run_native_evaluation(
-                mlflow_cfg, model_info, result.X_val_raw, result.y_val
-            )
+            _run_native_evaluation(mlflow_cfg, model_info, result.X_val_raw, result.y_val)
 
             if mlflow_cfg.registry.enabled:
                 _register_model(

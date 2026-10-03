@@ -34,38 +34,34 @@ def _eval_cfg() -> EvaluateConfig:
 
 
 def _report(**overrides) -> EvaluationReport:
-    defaults: dict[str, Any] = dict(
-        model_name="lightgbm",
-        split_strategy="temporal",
-        n_features=100,
-        n_train=50_000,
-        n_val=10_000,
-        fraud_rate=0.035,
-        roc_auc=0.91,
-        average_precision=0.5,
-        f1=0.6,
-        precision=0.7,
-        recall=0.5,
-        best_threshold=0.3,
-        best_f1=0.75,
-        brier=0.05,
-        f_beta=0.65,
-        cost_best_threshold=0.25,
-        expected_cost=0.08,
-        recall_at_k={"0.0100": 0.4, "0.0500": 0.6},
-        ci_lower=0.48,
-        ci_upper=0.52,
-        auc_adv=0.8,
-        threshold_curve=[
-            ThresholdPoint(threshold=0.1, f1=0.5, precision=0.6, recall=0.4)
-        ],
-        cost_curve=[
-            CostPoint(threshold=0.2, expected_cost=0.1, precision=0.6, recall=0.4)
-        ],
-        roc_curve=[{"fpr": 0.0, "tpr": 0.0, "threshold": 1.0}],
-        pr_curve=[{"precision": 1.0, "recall": 0.0}],
-        calibration_curve=[{"prob_pred": 0.1, "prob_true": 0.05}],
-        segments=[
+    defaults: dict[str, Any] = {
+        "model_name": "lightgbm",
+        "split_strategy": "temporal",
+        "n_features": 100,
+        "n_train": 50_000,
+        "n_val": 10_000,
+        "fraud_rate": 0.035,
+        "roc_auc": 0.91,
+        "average_precision": 0.5,
+        "f1": 0.6,
+        "precision": 0.7,
+        "recall": 0.5,
+        "best_threshold": 0.3,
+        "best_f1": 0.75,
+        "brier": 0.05,
+        "f_beta": 0.65,
+        "cost_best_threshold": 0.25,
+        "expected_cost": 0.08,
+        "recall_at_k": {"0.0100": 0.4, "0.0500": 0.6},
+        "ci_lower": 0.48,
+        "ci_upper": 0.52,
+        "auc_adv": 0.8,
+        "threshold_curve": [ThresholdPoint(threshold=0.1, f1=0.5, precision=0.6, recall=0.4)],
+        "cost_curve": [CostPoint(threshold=0.2, expected_cost=0.1, precision=0.6, recall=0.4)],
+        "roc_curve": [{"fpr": 0.0, "tpr": 0.0, "threshold": 1.0}],
+        "pr_curve": [{"precision": 1.0, "recall": 0.0}],
+        "calibration_curve": [{"prob_pred": 0.1, "prob_true": 0.05}],
+        "segments": [
             SegmentResult(
                 segment_col="ProductCD",
                 segment_value="W",
@@ -75,8 +71,8 @@ def _report(**overrides) -> EvaluationReport:
                 average_precision=0.3,
             )
         ],
-        top_features=[{"feature": "V1", "importance": 0.5}],
-    )
+        "top_features": [{"feature": "V1", "importance": 0.5}],
+    }
     defaults.update(overrides)
     return EvaluationReport(**defaults)
 
@@ -100,9 +96,7 @@ class TestMLflowReporter:
         ):
             reporter.report(report, _eval_cfg())
 
-        logged = {
-            k: v for d in mock_metrics.call_args_list for k, v in d.args[0].items()
-        }
+        logged = {k: v for d in mock_metrics.call_args_list for k, v in d.args[0].items()}
         assert logged["val/roc_auc"] == 0.91
         assert logged["val/average_precision"] == 0.5
         assert logged["val/f1_best"] == 0.75

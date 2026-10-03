@@ -22,7 +22,6 @@ from fdml.api.internal.loader import ModelLoadError
 from fdml.api.internal.registry import ModelRegistryError
 from fdml.api.limiter import limiter, rate_limit_exceeded_handler
 from fdml.api.metadata import DESCRIPTION, SUMMARY, TITLE, VERSION, tags_metadata
-from fdml.utils.logging import ensure_logging
 from fdml.api.routers.features import features_router
 from fdml.api.routers.health import health_router
 from fdml.api.routers.metrics import metrics_router
@@ -31,6 +30,7 @@ from fdml.api.routers.models import models_router
 from fdml.api.routers.predict import predict_router
 from fdml.api.routers.ready import ready_router
 from fdml.api.routers.transactions import transactions_router
+from fdml.utils.logging import ensure_logging
 
 load_dotenv()
 sentry_sdk.init(

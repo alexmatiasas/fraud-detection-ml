@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import mlflow
 import numpy as np
 import pandas as pd
 import pytest
 from mlflow import MlflowClient
 from sklearn.datasets import make_classification
 
-import mlflow
 from fdml.features.category_encoder import CategoryEncoder
-from fdml.models.config import load_train_config
+from fdml.models.config import load_evaluation_config, load_train_config, save_model_card
 from fdml.models.evaluate.metrics import compute_metrics
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
 from fdml.models.train.callbacks import IterationCallback
@@ -24,7 +24,6 @@ from fdml.models.train.runner import (
     _sample_eval_set,
     features_fingerprint,
 )
-from fdml.models.config import load_evaluation_config, save_model_card
 
 
 class TestCapTrainFold:
@@ -129,12 +128,12 @@ class TestSampleEvalSet:
 
     def test_subsample_respects_max_rows(self):
         X, y = self._val()
-        X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
         assert len(y_es) == 2000
 
     def test_stratified_keeps_class_ratio(self):
         X, y = self._val()
-        X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
         assert y.mean() > 0
         assert np.isclose(y_es.mean(), y.mean(), atol=0.01)
 
@@ -147,9 +146,9 @@ class TestSampleEvalSet:
 
     def test_returns_full_when_smaller_or_zero(self):
         X, y = self._val()
-        X_es, y_es = _sample_eval_set(X, y, max_rows=0)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=0)
         assert len(y_es) == 5000
-        X_es, y_es = _sample_eval_set(X, y, max_rows=99999)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=99999)
         assert len(y_es) == 5000
 
 
@@ -170,9 +169,7 @@ class TestFitModel:
         )
 
     def test_lgbm_early_stopping_sets_best_iteration(self):
-        cfg = load_train_config(
-            cli_args=["model.n_estimators=200", "early_stopping.rounds=20"]
-        )
+        cfg = load_train_config(cli_args=["model.n_estimators=200", "early_stopping.rounds=20"])
         X, y, Xv, yv = self._synth()
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
         model = _fit_model(model, X, y, Xv, yv, cfg, callbacks=None)
@@ -180,9 +177,7 @@ class TestFitModel:
         assert model.n_estimators_ < 200
 
     def test_lgbm_logs_iteration_metrics_to_mlflow(self, tmp_path):
-        cfg = load_train_config(
-            cli_args=["model.n_estimators=50", "early_stopping.rounds=10"]
-        )
+        cfg = load_train_config(cli_args=["model.n_estimators=50", "early_stopping.rounds=10"])
         X, y, Xv, yv = self._synth()
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
 
@@ -206,9 +201,7 @@ class TestFitModel:
             assert len(hist) > 0
 
     def test_lgbm_logs_train_curve_when_enabled(self, tmp_path):
-        cfg = load_train_config(
-            cli_args=["model.n_estimators=50", "early_stopping.rounds=10"]
-        )
+        cfg = load_train_config(cli_args=["model.n_estimators=50", "early_stopping.rounds=10"])
         X, y, Xv, yv = self._synth()
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
 
@@ -315,9 +308,7 @@ class TestRegisterModel:
             def create_registered_model(self, name, description=None):
                 calls["registered_model_desc"] = description
 
-            def create_model_version(
-                self, name, source, run_id, description=None, tags=None
-            ):
+            def create_model_version(self, name, source, run_id, description=None, tags=None):
                 calls["versions"].append(
                     {
                         "name": name,
@@ -341,12 +332,8 @@ class TestRegisterModel:
             "active_run",
             lambda: SimpleNamespace(info=SimpleNamespace(run_id="run123")),
         )
-        monkeypatch.setattr(
-            mlflow, "log_param", lambda k, v: calls["params"].append((k, v))
-        )
-        monkeypatch.setattr(
-            mlflow, "set_tag", lambda k, v: calls["tags"].append((k, v))
-        )
+        monkeypatch.setattr(mlflow, "log_param", lambda k, v: calls["params"].append((k, v)))
+        monkeypatch.setattr(mlflow, "set_tag", lambda k, v: calls["tags"].append((k, v)))
         return calls
 
     def test_skips_registration_without_logged_model_uri(self, monkeypatch):

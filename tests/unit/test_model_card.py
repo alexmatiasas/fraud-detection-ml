@@ -6,23 +6,23 @@ from fdml.models.evaluate.model_card import generate_model_card
 class TestGenerateModelCard:
     @staticmethod
     def _base(**overrides):
-        defaults = dict(
-            model_name="lightgbm",
-            metrics={
+        defaults = {
+            "model_name": "lightgbm",
+            "metrics": {
                 "roc_auc": 0.91,
                 "average_precision": 0.5,
                 "precision": 0.7,
                 "recall": 0.5,
             },
-            ci=None,
-            best_threshold=0.3,
-            best_f1=0.75,
-            n_features=100,
-            n_train=50_000,
-            n_val=10_000,
-            fraud_rate=0.035,
-            split_strategy="temporal",
-        )
+            "ci": None,
+            "best_threshold": 0.3,
+            "best_f1": 0.75,
+            "n_features": 100,
+            "n_train": 50_000,
+            "n_val": 10_000,
+            "fraud_rate": 0.035,
+            "split_strategy": "temporal",
+        }
         defaults.update(overrides)
         return defaults
 
@@ -47,15 +47,11 @@ class TestGenerateModelCard:
         assert "F2" in card
 
     def test_with_expected_cost(self):
-        card = generate_model_card(
-            **self._base(expected_cost=0.08, cost_best_threshold=0.25)
-        )
+        card = generate_model_card(**self._base(expected_cost=0.08, cost_best_threshold=0.25))
         assert "Expected cost" in card
 
     def test_with_recall_at_k(self):
-        card = generate_model_card(
-            **self._base(recall_at_k={"0.0100": 0.4, "0.0500": 0.6})
-        )
+        card = generate_model_card(**self._base(recall_at_k={"0.0100": 0.4, "0.0500": 0.6}))
         assert "Recall@top" in card
 
     def test_with_auc_adv_drift(self):
@@ -67,9 +63,7 @@ class TestGenerateModelCard:
         assert "no significant drift" in card
 
     def test_with_feature_importance(self):
-        card = generate_model_card(
-            **self._base(feature_importance=[("V1", 0.5), ("V2", 0.3)])
-        )
+        card = generate_model_card(**self._base(feature_importance=[("V1", 0.5), ("V2", 0.3)]))
         assert "Top-10 features" in card
         assert "V1" in card
 

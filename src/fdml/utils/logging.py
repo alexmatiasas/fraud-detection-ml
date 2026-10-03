@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from fdml.utils.paths import LOGS_DIR
 
@@ -16,9 +16,7 @@ _primary_log_path: Path = LOGS_DIR / "fdml.log"
 _phase_timings: dict[str, float] = {}
 
 
-def setup_logging(
-    level: int = logging.INFO, log_path: Path | str | None = None
-) -> Path:
+def setup_logging(level: int = logging.INFO, log_path: Path | str | None = None) -> Path:
     """Configure the root logger for stdout plus a file handler.
 
     Idempotent: the stdout handler is attached at most once, and a file

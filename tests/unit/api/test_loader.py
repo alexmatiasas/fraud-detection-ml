@@ -11,8 +11,8 @@ import pytest
 
 import fdml.api.internal.loader as loader_mod
 from fdml.api.internal.loader import (
-    ModelLoadError,
     ModelLoader,
+    ModelLoadError,
     to_model_input,
 )
 
@@ -91,9 +91,7 @@ def test_lookup_returns_none_outside_sample() -> None:
 
 def test_lookup_preserves_frame_shape() -> None:
     loader = ModelLoader()
-    loader._sample = pd.DataFrame(
-        {"TransactionID": [1], "x": [0.1], "TransactionDT": [18403224]}
-    )
+    loader._sample = pd.DataFrame({"TransactionID": [1], "x": [0.1], "TransactionDT": [18403224]})
     match = loader.lookup(1)
     assert isinstance(match, pd.DataFrame)
     assert match.shape == (1, 3)
@@ -112,9 +110,7 @@ def test_report_loaded_from_json(tmp_path: Path) -> None:
     pipeline_path = tmp_path / "pipeline.joblib"
     joblib.dump(FakePipeline(), pipeline_path)
 
-    loader = ModelLoader(
-        local_pipeline=str(pipeline_path), report_path=str(report_path)
-    )
+    loader = ModelLoader(local_pipeline=str(pipeline_path), report_path=str(report_path))
     loader.load(source="local")
     assert loader.source == "local"
     assert loader.report["model_name"] == "lightgbm"

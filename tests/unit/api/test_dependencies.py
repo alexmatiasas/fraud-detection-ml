@@ -65,8 +65,8 @@ class TestVerifyApiKey:
 
 class TestLifespan:
     def test_startup_loads_model(self):
-        from fdml.api.main import lifespan
         from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
 
         mock_loader = MagicMock()
         mock_loader.is_loaded = True
@@ -84,9 +84,9 @@ class TestLifespan:
             mock_multi.load.assert_called_once()
 
     def test_startup_handles_load_error(self):
-        from fdml.api.main import lifespan
-        from fdml.api.main import app as _app
         from fdml.api.internal.loader import ModelLoadError
+        from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
 
         mock_loader = MagicMock()
         mock_loader.load.side_effect = ModelLoadError("no model")
@@ -102,9 +102,9 @@ class TestLifespan:
             mock_loader.load_sample.assert_called_once()
 
     def test_startup_handles_multi_error(self):
-        from fdml.api.main import lifespan
-        from fdml.api.main import app as _app
         from fdml.api.internal.registry import ModelRegistryError
+        from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
 
         mock_loader = MagicMock()
         mock_loader.is_loaded = True

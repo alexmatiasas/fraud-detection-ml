@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import pytest
 from omegaconf import OmegaConf
-from pathlib import Path
 
 from fdml.models.config import (
     load_mlflow_config,
@@ -100,8 +101,6 @@ class TestLoadTrainConfig:
 
     def test_invalid_model_name_raises(self, tmp_path: Path):
         bad = tmp_path / "bad_model.yaml"
-        bad.write_text(
-            OmegaConf.to_yaml({"model": {"name": "invalid_model", "params": {}}})
-        )
+        bad.write_text(OmegaConf.to_yaml({"model": {"name": "invalid_model", "params": {}}}))
         with pytest.raises(Exception):
             load_train_config(str(bad))

@@ -4,14 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 BackendType = Literal["local", "dagshub"]
 
 
 class TrackingCfg(BaseModel):
-    experiment_name: str = Field(
-        default="fraud-detection", description="MLflow experiment name"
-    )
+    experiment_name: str = Field(default="fraud-detection", description="MLflow experiment name")
     run_name: str = Field(default="lgbm_baseline", description="MLflow run name")
     tracking_uri: str = Field(
         default="sqlite:///mlruns.db",
@@ -120,6 +117,4 @@ class MlflowFullConfig(BaseModel):
         description="Native mlflow.models.evaluate configuration",
     )
     log_model: bool = Field(default=True, description="Log model artifact to MLflow")
-    log_feature_importance: bool = Field(
-        default=True, description="Log feature importance plot"
-    )
+    log_feature_importance: bool = Field(default=True, description="Log feature importance plot")

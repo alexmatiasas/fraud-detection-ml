@@ -14,7 +14,7 @@ VERSION = "1.0.0"
 
 #: URL prefix for every API route. Derives from the major version so a bump to
 #: ``2.x.y`` moves the API to ``/v2`` — all routers read this single constant.
-API_VERSION = VERSION.split(".")[0]
+API_VERSION = VERSION.split(".", maxsplit=1)[0]
 API_PREFIX = f"/v{API_VERSION}"
 
 tags_metadata = [

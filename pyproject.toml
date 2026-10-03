@@ -83,6 +83,35 @@ include = ["src"]
 reportMissingTypeStubs = false
 pythonVersion = "3.11"
 
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "C",
+  "S",
+  "BLE",
+  "RUF",
+  "PLC",
+  "UP",
+]
+ignore = [
+  "PLC0415",   # function-level imports are an intentional pattern in src/
+  "S101",      # asserts are fine in tests
+  "S311",      # np.random is ok for sampling not crypto
+  "S324",      # md5/sha1 used for non-security hashing (dvc)
+  "S603", "S607", # subprocess git calls are trusted
+  "S108",        # /tmp usage in tests is fine
+  "RUF012",    # mutable class defaults handled by pydantic
+  "RUF001", "RUF002", # × and – are intentional in reports/strings
+  "C901",      # complexity tracked separately (refactor later)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "BLE001"]
+"scripts/**" = ["S101"]
+
 [tool.coverage.run]
 source = ["fdml"]
 omit = ["tests/*", "notebooks/*", "scripts/*"]

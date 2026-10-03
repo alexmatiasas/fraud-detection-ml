@@ -1,5 +1,3 @@
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 
@@ -73,7 +71,7 @@ class VFeatureFilter(BaseFeatureTransformer):
     def _matching(self, X: pd.DataFrame) -> list[str]:
         return [c for c in X.columns if c.startswith(tuple(self.prefixes))]
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "VFeatureFilter":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "VFeatureFilter":
         if not self.enabled:
             self._fitted_ = True
             return self
@@ -93,11 +91,7 @@ class VFeatureFilter(BaseFeatureTransformer):
             upper = np.abs(corr)
             upper[np.tril_indices_from(upper)] = np.nan
             to_drop = [
-                c
-                for c, m in zip(
-                    keep, np.any(upper > self.correlation_threshold, axis=0)
-                )
-                if m
+                c for c, m in zip(keep, np.any(upper > self.correlation_threshold, axis=0)) if m
             ]
             keep = [c for c in keep if c not in to_drop]
 
