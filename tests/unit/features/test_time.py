@@ -31,12 +31,8 @@ class TestCyclicEncoding:
     def test_wrap_continuity(self):
         df = pd.DataFrame({"TransactionDT": [23 * 3600, 1 * 3600]})
         result = TimeFeatureExtractor(use_dow=False, use_dom=False).transform(df)
-        assert np.isclose(
-            result["hour_of_day_cos"].iloc[0], result["hour_of_day_cos"].iloc[1]
-        )
-        assert np.isclose(
-            result["hour_of_day_sin"].iloc[0], -result["hour_of_day_sin"].iloc[1]
-        )
+        assert np.isclose(result["hour_of_day_cos"].iloc[0], result["hour_of_day_cos"].iloc[1])
+        assert np.isclose(result["hour_of_day_sin"].iloc[0], -result["hour_of_day_sin"].iloc[1])
 
     def test_sin_cos_disabled_omits_columns(self, sample_df: pd.DataFrame):
         result = TimeFeatureExtractor(use_sin_cos=False).transform(sample_df)
@@ -47,9 +43,9 @@ class TestCyclicEncoding:
 
 class TestPartialUsage:
     def test_use_hour_only(self, sample_df: pd.DataFrame):
-        result = TimeFeatureExtractor(
-            use_hour=True, use_dow=False, use_dom=False
-        ).transform(sample_df)
+        result = TimeFeatureExtractor(use_hour=True, use_dow=False, use_dom=False).transform(
+            sample_df
+        )
         assert "hour_of_day" in result.columns
         assert "day_of_week" not in result.columns
         assert "day_of_month" not in result.columns
@@ -69,11 +65,7 @@ class TestEdgeCases:
 class TestHypothesisContracts:
     @given(
         data_frames(
-            [
-                column(
-                    "TransactionDT", elements=integers(min_value=0, max_value=20000000)
-                )
-            ],
+            [column("TransactionDT", elements=integers(min_value=0, max_value=20000000))],
             index=range_indexes(min_size=0, max_size=10),
         )
     )

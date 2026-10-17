@@ -125,9 +125,7 @@ class TestXGBoostIterationCallback:
         assert result is False
 
     def test_with_name_map(self):
-        cb = XGBoostIterationCallback(
-            log_mlflow=False, name_map={"validation_0": "validation"}
-        )
+        cb = XGBoostIterationCallback(log_mlflow=False, name_map={"validation_0": "validation"})
         evals_log = {"validation_0": {"auc": [0.9]}}
         result = cb.after_iteration(None, 0, evals_log)
         assert result is False

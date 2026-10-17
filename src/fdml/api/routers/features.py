@@ -33,9 +33,7 @@ def list_features(
 
     sample = loader.sample
     report = loader.report
-    top_features = {
-        f["feature"]: f["importance"] for f in report.get("top_features", [])
-    }
+    top_features = {f["feature"]: f["importance"] for f in report.get("top_features", [])}
 
     features: list[FeatureInfo] = []
     if sample is not None:

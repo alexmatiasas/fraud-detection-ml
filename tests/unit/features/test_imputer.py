@@ -63,9 +63,7 @@ class TestHypothesisContracts:
             [
                 column(
                     "num",
-                    elements=one_of(
-                        floats(allow_nan=False, allow_infinity=False), none()
-                    ),
+                    elements=one_of(floats(allow_nan=False, allow_infinity=False), none()),
                     dtype=float,
                 ),
                 column("cat", elements=one_of(text(max_size=5), none()), dtype=object),

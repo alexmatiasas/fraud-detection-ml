@@ -83,9 +83,7 @@ class TestErrorAnalysisPlotter:
         y_true, y_proba = synthetic_labels
         import pandas as pd
 
-        X_val = pd.DataFrame(
-            {"TransactionAmt": np.random.uniform(10, 500, size=len(y_true))}
-        )
+        X_val = pd.DataFrame({"TransactionAmt": np.random.uniform(10, 500, size=len(y_true))})
         plotter = ErrorAnalysisPlotter(features_to_plot=["TransactionAmt"])
         paths = plotter.plot(y_true, y_proba, X_val, output_dir=str(tmp_path))
         assert len(paths) == 1

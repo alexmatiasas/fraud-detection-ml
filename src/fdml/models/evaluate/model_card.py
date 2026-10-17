@@ -60,9 +60,7 @@ def generate_model_card(
             lines.append(f"| Recall@top {float(k):.0%} | {v:.4f} |")
 
     if auc_adv is not None:
-        drift_text = (
-            "possible drift detected" if auc_adv > 0.8 else "no significant drift"
-        )
+        drift_text = "possible drift detected" if auc_adv > 0.8 else "no significant drift"
         lines += [
             "",
             "## Adversarial validation",

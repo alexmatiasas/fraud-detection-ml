@@ -36,9 +36,7 @@ def raw_df() -> pd.DataFrame:
             "card4": _RNG.choice(["visa", "mastercard", "amex"], n),
             "card6": _RNG.choice(["credit", "debit"], n),
             "P_emaildomain": _RNG.choice(
-                np.asarray(
-                    ["gmail.com", "yahoo.com", "outlook.com", None], dtype=object
-                ),
+                np.asarray(["gmail.com", "yahoo.com", "outlook.com", None], dtype=object),
                 n,
                 p=[0.4, 0.3, 0.2, 0.1],
             ),
@@ -129,22 +127,16 @@ def raw_df() -> pd.DataFrame:
 class TestPipelineFixtures:
     """Test the pipeline itself with semi-realistic data."""
 
-    def test_pipeline_fit_transform_succeeds(
-        self, pipeline: Pipeline, raw_df: pd.DataFrame
-    ):
+    def test_pipeline_fit_transform_succeeds(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
         assert isinstance(X, pd.DataFrame)
 
-    def test_output_has_reasonable_shape(
-        self, pipeline: Pipeline, raw_df: pd.DataFrame
-    ):
+    def test_output_has_reasonable_shape(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
         assert X.shape[0] == _NROWS
         assert X.shape[1] > 20
 
-    def test_no_missing_values_after_pipeline(
-        self, pipeline: Pipeline, raw_df: pd.DataFrame
-    ):
+    def test_no_missing_values_after_pipeline(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
         assert X.isna().sum().sum() == 0
 
@@ -191,9 +183,7 @@ class TestEngineeredFeatures:
         freq_cols = [c for c in X.columns if c.endswith("_freq")]
         assert len(freq_cols) >= 3
 
-    def test_numeric_code_freq_not_created(
-        self, pipeline: Pipeline, raw_df: pd.DataFrame
-    ):
+    def test_numeric_code_freq_not_created(self, pipeline: Pipeline, raw_df: pd.DataFrame):
         X = pipeline.fit_transform(raw_df)
         assert "card3_freq" not in X.columns
         assert "addr2_freq" not in X.columns
