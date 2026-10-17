@@ -14,8 +14,8 @@ help:  ## Shows this message
 ## ── Setup ────────────────────────────────────────────────────────────────────
 setup: install hooks  ## Full installation: environment and hooks
 
-install:  ## Install dependences with uv (dev + train + api extras)
-	uv sync --extra dev --extra train --extra api
+install:  ## Install dependences with uv (dev group + train extra)
+	uv sync --extra train
 
 hooks:  ## Installs pre-commit hooks
 	uv run prek install --hook-type commit-msg --hook-type pre-commit
