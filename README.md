@@ -132,34 +132,34 @@ tests/                    # 499 unit + integration tests
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.11.
 
 ```bash
-make install              # creates the environment (dev + train + api extras)
+just install              # creates the environment (dev group + train extra)
 ```
 
 ### Data
 
 ```bash
-make data-download        # needs a Kaggle API key (~1.1M transactions)
-make data-convert         # CSV -> optimized Parquet
+just data-download        # needs a Kaggle API key (~1.1M transactions)
+just data-convert         # CSV -> optimized Parquet
 ```
 
 ### Train and evaluate
 
 ```bash
-make train ARGS="model.name=xgboost"   # or lightgbm / random_forest
-make evaluate                          # metrics, plots, report.json, model card
-make sample                            # builds data/samples for the API demo
+just train model.name=xgboost   # or lightgbm / random_forest
+just evaluate                   # metrics, plots, report.json, model card
+just sample --size 5000         # builds data/samples for the API demo
 ```
 
 Run the full DVC pipeline instead:
 
 ```bash
-dvc repro
+just dvc-repro
 ```
 
 ### Run the API locally
 
 ```bash
-make serve-dev                        # uvicorn with reload on :8000
+just serve-dev                        # uvicorn with reload on :8000
 ```
 
 Interactive docs at http://localhost:8000/docs (disabled in production).
@@ -216,8 +216,8 @@ curl -X POST https://fdml-api-bxpgqqidaq-uc.a.run.app/v1/predict/ \
 ### Docker
 
 ```bash
-make docker-build         # multi-stage image, API-only dependency set
-make docker-run           # needs DAGSHUB_* / FDML_API_KEY via .env
+just docker-build         # multi-stage image, API-only dependency set
+just docker-run           # needs DAGSHUB_* / FDML_API_KEY via .env
 ```
 
 The image ships only the serving API: training-only packages (xgboost, dvc, optuna, ...) are excluded from the build. The `uv` layer uses cache mounts so dependency downloads persist across rebuilds.
