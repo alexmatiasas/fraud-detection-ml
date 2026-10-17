@@ -14,14 +14,21 @@ End-to-end MLOps pipeline for [IEEE-CIS Fraud Detection](https://www.kaggle.com/
 Fraud detection on transactional data is a classic imbalanced-classification problem: only **3.4%** of transactions are fraudulent, so accuracy is meaningless. The project focuses on:
 
 - **Reproducible data science** — DVC for data/artifact versioning, MLflow + DagsHub for experiment tracking and model registry.
-- **EDA-driven feature engineering** — a 341-feature space built from 17 purpose-built transformers, each documented and tested.
+- **EDA-driven feature engineering** — a **341-feature** space built by a **14-step scikit-learn pipeline**, every transform documented (`configs/features.yaml`) and tested.
 - **Production-ready serving** — a versioned FastAPI service with rate limiting, API-key auth for model management, structured JSON logs, and a multi-stage Docker image running as a non-root user.
 
-The project is written to portfolio standards: every decision is documented (`configs/*.yaml`, notebooks, model card), and the suite of **499 tests** covers transformers, training, evaluation, and API behavior.
+The project is written to portfolio standards: every decision is documented (`configs/*.yaml`, notebooks, model card), and the suite of **511 tests** covers transformers, training, evaluation, and API behavior.
+
+**Docs:** [architecture](docs/architecture.md) · [pipeline](docs/pipeline.md)
 
 ## Current model
 
-The served model is an **XGBoost** classifier evaluated on a temporal hold-out (test set is the last 20% of the transaction timeline, no shuffle).
+The served model is resolved at runtime from the MLflow registry alias **`champion`**
+(fallback: newest `READY` version, then a local `models/pipeline.joblib`). The
+registry stores every algorithm under one name (`fraud-detection-lgbm`), so the
+version number — not the name — identifies the run.
+
+The metrics below are the champion's, as reported by `GET /v1/model/info`:
 
 | Metric | Value |
 |---|---|
@@ -33,7 +40,11 @@ The served model is an **XGBoost** classifier evaluated on a temporal hold-out (
 | Expected cost / transaction | 0.1619 @ thr 0.32 |
 | Recall@top 1% / 5% | 0.2571 / 0.6021 |
 
-The full model card with top features and evaluation settings is at `models/model_card.md`.
+Trained on a temporal hold-out (validation is the last 20% of the transaction
+timeline, no shuffle, with a 2-day embargo). `just evaluate` regenerates
+`models/report.json` and `models/model_card.md` from whatever model is currently
+loadable, so those two files always describe the **last local evaluation**, not
+necessarily the deployed champion.
 
 ## Architecture
 
@@ -46,7 +57,7 @@ flowchart LR
     end
 
     subgraph Training
-        D --> E[Feature pipeline · 17 transformers]
+        D --> E[Feature pipeline · 14 steps]
         E --> F[LightGBM / XGBoost / RF]
         F --> G[Optuna HPO]
         G --> H[models/pipeline.joblib]
@@ -118,13 +129,15 @@ All feature decisions come from the [EDA in R](notebooks/01_eda_r/01_EDA_in_R.Rm
 ```
 configs/                  # data/features/train/evaluate/mlflow YAML + schemas
 data/                     # raw + processed parquet (DVC, not in git)
+docs/                     # architecture + pipeline deep dives
 models/                   # pipeline.joblib, report.json, model card, plots
 notebooks/                # R EDA + Quarto FE/training verification
 scripts/                  # download_data, prepare_data, generate_sample
-src/fdml/features/        # 17 feature transformers + pipeline factory
+src/fdml/features/        # 14-step sklearn feature pipeline + factory
 src/fdml/models/          # train (LGBM/XGB/RF), evaluate (metrics/plots/...)
 src/fdml/api/             # FastAPI app: routers, schemas, model loader, limiter
-tests/                    # 499 unit + integration tests
+tests/                    # 511 unit + integration tests
+justfile                  # task runner (`just --list`)
 ```
 
 ## Getting started
@@ -246,10 +259,29 @@ The project follows **CRISP-DM**, so every phase maps to a concrete artifact you
 |---|---|
 | 1. Business understanding | `AGENTS.md`, EDA `01_EDA_in_R`: imbalance baseline (~3.4% fraud), cost framing, why accuracy is a bad metric |
 | 2. Data understanding | EDA R notebook: missingness maps (D6–D9, D12–D14 at 87–94%), M-flag distribution, V-feature variance/correlation audit |
-| 3. Data preparation | `configs/features.yaml` + 17 transformers in `src/fdml/features/` (C3 dropped, D6–D9/D12–D14 removed, `has_identity` engineered) |
+| 3. Data preparation | `configs/features.yaml` + a 14-step pipeline in `src/fdml/features/` (C3 dropped, D6–D9/D12–D14 removed, `has_identity` engineered) |
 | 4. Modeling | `src/fdml/models/train/` — LightGBM/XGBoost/RF builders, temporal split, Optuna HPO, scale_pos_weight = 27.6 |
 | 5. Evaluation | `src/fdml/models/evaluate/` — ROC AUC, AP, F1@thr, cost/transaction, Recall@k, drift, stability; model card at `models/model_card.md` |
 | 6. Deployment | `src/fdml/api/` (FastAPI), Docker image, Cloud Run, MLflow registry champion/challenger aliases |
+
+## Development
+
+The task runner is [just](https://github.com/casey/just) — `just` lists every
+recipe by group.
+
+```bash
+just check        # lint + format check + basedpyright
+just test         # fast tests (pytest --no-cov)
+just test-cov     # coverage gate (fails under 80%, CI parity)
+```
+
+CI (`.github/workflows/ci.yml`) is stricter than `just check`: on every push and
+PR to `main` it also runs `uvx pip-audit --strict`, a coverage gate at 80% and an
+OmegaConf config-load check. Lint and format scope is `src/ tests/` only.
+
+Branching is `main` → `develop` → feature branches, with Conventional Commits
+enforced by commitizen through a `commit-msg` hook (`just hooks` installs hooks
+via prek).
 
 ## Roadmap
 
@@ -257,8 +289,10 @@ The project follows **CRISP-DM**, so every phase maps to a concrete artifact you
 - [x] Deployment — build and push the image from CI to Cloud Run.
 - [x] API hardening — rate limiting, API-key auth, CORS, Swagger disabled in production.
 - [x] Frontend demo — interactive predict UI with what-if explorer and SHAP explanations.
-- **Ensemble models** — weighted-average and stacking of LightGBM + XGBoost + RandomForest, with blend weights logged to MLflow.
-- **Fairness analysis** — segment-level metrics across card brand, email domain, and device type.
+- [ ] **Kaggle submission** — `fdml.models.predict` writing `data/submission.csv` for the held-out `test_*` transactions.
+- [ ] **Ensemble models** — weighted-average and stacking of LightGBM + XGBoost + RandomForest, with blend weights logged to MLflow.
+- [ ] **Fairness analysis** — segment-level metrics across card brand, email domain, and device type.
+- [ ] **`evaluate` as a DVC stage** — so `just dvc-repro` reproduces training *and* evaluation.
 
 ## Contact
 
