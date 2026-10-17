@@ -111,6 +111,11 @@ ignore = [
 "tests/**" = ["S101", "BLE001"]
 "scripts/**" = ["S101"]
 
+# Untracked local scratch dirs (notes/, etc.) would otherwise be collected when
+# pytest runs without an explicit path, and their conftest imports extra deps.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.coverage.run]
 source = ["fdml"]
 omit = ["tests/*", "notebooks/*", "scripts/*"]
