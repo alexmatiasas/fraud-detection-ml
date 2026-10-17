@@ -13,7 +13,7 @@ curve, ``val_proba.npy`` + ``y_val.npy`` artifacts for ``compare_runs`` /
 ``analyze_runs``), so variants can be compared with the paired-by-seed
 statistics in ``scripts/analyze_runs.py``.
 
-Run via ``make train ablation.enabled=true`` (uses the ``ablation`` section
+Run via ``just train ablation.enabled=true`` (uses the ``ablation`` section
 of ``configs/train.yaml``) or ``python -m fdml.models.train.ablation``.
 
 The ablation runs *before* Optuna HPO so the feature set is fixed first;

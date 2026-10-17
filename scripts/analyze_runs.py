@@ -12,7 +12,7 @@ Usage:
         --plot reports/learning_curves_B1_vs_baseline.png
 
 The candidate variant defaults to the most common one in the tag (the
-``baseline`` mode of compare_runs). Tracking is resolved like `make train`
+``baseline`` mode of compare_runs). Tracking is resolved like `just train`
 (DagsHub via .env when present, otherwise local).
 """
 
