@@ -19,14 +19,15 @@ Fraud detection on transactional data is a classic imbalanced-classification pro
 
 The project is written to portfolio standards: every decision is documented (`configs/*.yaml`, notebooks, model card), and the suite of **511 tests** covers transformers, training, evaluation, and API behavior.
 
-**Docs:** [architecture](docs/architecture.md) · [pipeline](docs/pipeline.md)
+**Docs:** [index](docs/index.md) · [architecture](docs/architecture.md) · [pipeline](docs/pipeline.md) · [decisions](docs/decisions.md) · [results](docs/results.md) · [implementation](docs/index.md#implementation)
 
 ## Current model
 
 The served model is resolved at runtime from the MLflow registry alias **`champion`**
-(fallback: newest `READY` version, then a local `models/pipeline.joblib`). The
-registry stores every algorithm under one name (`fraud-detection-lgbm`), so the
-version number — not the name — identifies the run.
+(fallback: newest `READY` version, then a local `models/pipeline.joblib`). Each
+algorithm is registered under its own name (`fraud-detection-lgbm`,
+`fraud-detection-xgboost`, `fraud-detection-rf`); the default loader serves the
+`champion` alias of `fraud-detection-lgbm`.
 
 The metrics below are the champion's, as reported by `GET /v1/model/info`:
 
@@ -44,7 +45,9 @@ Trained on a temporal hold-out (validation is the last 20% of the transaction
 timeline, no shuffle, with a 2-day embargo). `just evaluate` regenerates
 `models/report.json` and `models/model_card.md` from whatever model is currently
 loadable, so those two files always describe the **last local evaluation**, not
-necessarily the deployed champion.
+necessarily the deployed champion. See [results](docs/results.md) for the
+committed snapshot, provenance and the local RandomForest artifact currently on
+disk.
 
 ## Architecture
 
