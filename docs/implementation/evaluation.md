@@ -48,7 +48,7 @@ Additional metrics (`metrics.py`):
   `ValueError` (single-class) are skipped.
 
 Accuracy is deliberately absent. See
-[decisions](decisions.md#d-003--average-precision-is-the-primary-metric-accuracy-is-banned).
+[decisions](../decisions.md#d-003--average-precision-is-the-primary-metric-accuracy-is-banned).
 
 ## Threshold policy
 

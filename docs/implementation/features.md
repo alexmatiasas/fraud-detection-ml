@@ -92,7 +92,7 @@ count in `report.json` is the observable check.
 No step may be fitted on validation data. Aggregate features (card statistics,
 frequency counts, V/C filters) are learned from the training window; this is
 why the temporal split has an embargo (see
-[decisions](decisions.md#d-001--temporal-split-with-an-embargo-never-a-random-split)).
+[decisions](../decisions.md#d-001--temporal-split-with-an-embargo-never-a-random-split)).
 
 ## Missing values
 
