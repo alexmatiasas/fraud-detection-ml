@@ -1,5 +1,5 @@
 import pandas as pd
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.strategies import none, one_of, text
 
@@ -95,8 +95,6 @@ class TestHypothesisContracts:
         )
     )
     def test_never_crashes(self, df):
-        assume("DeviceInfo" in df.columns)
-        assume(df["DeviceInfo"].dtype == "object" or df["DeviceInfo"].dtype == "O")
         result = DeviceFeatureExtractor().transform(df)
         assert isinstance(result, pd.DataFrame)
 
