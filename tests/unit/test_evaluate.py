@@ -64,9 +64,7 @@ class TestComputeMetrics:
 
 class TestBootstrapCI:
     def test_ci_for_average_precision(self, y_true, y_proba):
-        lower, upper = bootstrap_ci(
-            y_true, y_proba, metric="average_precision", n_iterations=50
-        )
+        lower, upper = bootstrap_ci(y_true, y_proba, metric="average_precision", n_iterations=50)
         assert 0.0 <= lower <= upper <= 1.0
 
     def test_ci_for_roc_auc(self, y_true, y_proba):
@@ -77,9 +75,7 @@ class TestBootstrapCI:
         from sklearn.metrics import average_precision_score
 
         point = average_precision_score(y_true, y_proba)
-        lower, upper = bootstrap_ci(
-            y_true, y_proba, metric="average_precision", n_iterations=100
-        )
+        lower, upper = bootstrap_ci(y_true, y_proba, metric="average_precision", n_iterations=100)
         assert lower <= point <= upper
 
     def test_fewer_iterations(self):
@@ -91,7 +87,7 @@ class TestBootstrapCI:
 
 class TestThresholdTuning:
     def test_best_threshold_in_range(self, y_true, y_proba):
-        best_thr, best_f1, curve = threshold_tuning(y_true, y_proba, n_thresholds=20)
+        best_thr, best_f1, _curve = threshold_tuning(y_true, y_proba, n_thresholds=20)
         assert 0.01 <= best_thr <= 0.99
         assert 0.0 <= best_f1 <= 1.0
 
@@ -107,7 +103,7 @@ class TestThresholdTuning:
     def test_f1_improves_over_default(self):
         y_true = np.array([0, 0, 0, 1, 1, 1, 0, 0, 0, 1])
         y_proba = np.array([0.05, 0.1, 0.15, 0.6, 0.7, 0.8, 0.2, 0.25, 0.3, 0.9])
-        best_thr, best_f1, _ = threshold_tuning(y_true, y_proba, n_thresholds=50)
+        _best_thr, best_f1, _ = threshold_tuning(y_true, y_proba, n_thresholds=50)
 
         default_f1 = 0.0
         from sklearn.metrics import f1_score
@@ -172,16 +168,12 @@ class TestExpectedCost:
             }
 
     def test_best_cost_is_minimal(self, y_true, y_proba):
-        best_thr, best_cost, curve = expected_cost(y_true, y_proba, n_thresholds=100)
+        _best_thr, best_cost, curve = expected_cost(y_true, y_proba, n_thresholds=100)
         assert best_cost <= min(c["expected_cost"] for c in curve)
 
     def test_expensive_false_negatives_lower_threshold(self, y_true, y_proba):
-        thr_fp, _, _ = expected_cost(
-            y_true, y_proba, fp_cost=100.0, fn_cost=1.0, n_thresholds=50
-        )
-        thr_fn, _, _ = expected_cost(
-            y_true, y_proba, fp_cost=1.0, fn_cost=100.0, n_thresholds=50
-        )
+        thr_fp, _, _ = expected_cost(y_true, y_proba, fp_cost=100.0, fn_cost=1.0, n_thresholds=50)
+        thr_fn, _, _ = expected_cost(y_true, y_proba, fp_cost=1.0, fn_cost=100.0, n_thresholds=50)
         assert thr_fn <= thr_fp
 
     def test_perfect_separation_zero_cost(self):
@@ -236,9 +228,7 @@ class TestEvaluationReport:
             cost_best_threshold=0.08,
             expected_cost=0.03,
             recall_at_k={"0.0100": 0.6},
-            cost_curve=[
-                CostPoint(threshold=0.5, expected_cost=0.5, precision=0.4, recall=0.3)
-            ],
+            cost_curve=[CostPoint(threshold=0.5, expected_cost=0.5, precision=0.4, recall=0.3)],
         )
         dumped = report.model_dump(mode="json")
         assert dumped["brier"] == 0.1

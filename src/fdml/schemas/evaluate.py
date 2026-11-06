@@ -4,7 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 PlotName = Literal[
     "roc_curve",
     "pr_curve",
@@ -50,9 +49,7 @@ class CostsCfg(BaseModel):
 
 
 class FBetaCfg(BaseModel):
-    enabled: bool = Field(
-        default=True, description="Compute F-beta at the default threshold"
-    )
+    enabled: bool = Field(default=True, description="Compute F-beta at the default threshold")
     beta: float = Field(
         default=2.0,
         ge=0.0,
@@ -72,24 +69,18 @@ class RecallAtKCfg(BaseModel):
 
 
 class ThresholdCfg(BaseModel):
-    threshold: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Default decision threshold"
-    )
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Default decision threshold")
     n_thresholds: int = Field(
         default=100, ge=10, le=1000, description="Number of thresholds for tuning"
     )
-    bootstrap: bool = Field(
-        default=True, description="Compute bootstrap confidence intervals"
-    )
+    bootstrap: bool = Field(default=True, description="Compute bootstrap confidence intervals")
     bootstrap_metric: BootstrapMetric = Field(
         default="average_precision", description="Metric for bootstrap CI"
     )
     bootstrap_iterations: int = Field(
         default=1000, ge=50, le=10000, description="Bootstrap iterations"
     )
-    bootstrap_seed: int = Field(
-        default=42, description="Random seed for bootstrap resampling"
-    )
+    bootstrap_seed: int = Field(default=42, description="Random seed for bootstrap resampling")
 
 
 class SegmentsCfg(BaseModel):
@@ -98,15 +89,11 @@ class SegmentsCfg(BaseModel):
         default_factory=lambda: ["ProductCD", "card4"],
         description="Columns for per-segment analysis",
     )
-    min_samples: int = Field(
-        default=50, ge=10, description="Minimum samples per segment"
-    )
+    min_samples: int = Field(default=50, ge=10, description="Minimum samples per segment")
 
 
 class LearningCurvesCfg(BaseModel):
-    enabled: bool = Field(
-        default=False, description="Enable learning curves (re-trains model)"
-    )
+    enabled: bool = Field(default=False, description="Enable learning curves (re-trains model)")
     train_sizes: list[float] = Field(
         default_factory=lambda: [0.1, 0.2, 0.3, 0.5, 0.7, 1.0],
         description="Training set size fractions",
@@ -125,9 +112,7 @@ class StabilityCfg(BaseModel):
 
 
 class ErrorAnalysisCfg(BaseModel):
-    enabled: bool = Field(
-        default=True, description="Enable error distribution analysis"
-    )
+    enabled: bool = Field(default=True, description="Enable error distribution analysis")
     features: list[str] = Field(
         default_factory=lambda: ["TransactionAmt"],
         description="Features to analyse for error distribution",
@@ -139,9 +124,7 @@ class AdversarialValCfg(BaseModel):
         default=False,
         description="Enable adversarial validation (trains RF to detect train/val drift)",
     )
-    seed: int = Field(
-        default=42, description="Random seed for adversarial validation RF"
-    )
+    seed: int = Field(default=42, description="Random seed for adversarial validation RF")
 
 
 class ModelCardCfg(BaseModel):
@@ -162,9 +145,7 @@ class PlotCfg(BaseModel):
         default="webp",
         description="Image format for saved plots (webp for web embedding)",
     )
-    dpi: int = Field(
-        default=150, ge=72, le=600, description="DPI for saved plot images"
-    )
+    dpi: int = Field(default=150, ge=72, le=600, description="DPI for saved plot images")
     error_features: list[str] | None = Field(
         default=None,
         description="Features for error analysis histograms (None = auto)",
@@ -172,9 +153,7 @@ class PlotCfg(BaseModel):
 
 
 class DVCLiveCfg(BaseModel):
-    enabled: bool = Field(
-        default=True, description="Enable DVCLive logging for DVC metrics/plots"
-    )
+    enabled: bool = Field(default=True, description="Enable DVCLive logging for DVC metrics/plots")
     dir: str = Field(default="dvclive", description="DVCLive output directory")
     report: Literal["md", "notebook", "html"] | None = Field(
         default=None,
@@ -221,19 +200,13 @@ class EvaluateConfig(BaseModel):
         default_factory=DVCLiveCfg, description="DVCLive logging configuration"
     )
     plots: PlotCfg = Field(default_factory=PlotCfg, description="Plot configuration")
-    report: ReportCfg = Field(
-        default_factory=ReportCfg, description="Report output configuration"
-    )
+    report: ReportCfg = Field(default_factory=ReportCfg, description="Report output configuration")
     costs: CostsCfg = Field(
         default_factory=CostsCfg, description="Expected-cost threshold optimization"
     )
-    f_beta: FBetaCfg = Field(
-        default_factory=FBetaCfg, description="F-beta (fraud-friendly) metric"
-    )
+    f_beta: FBetaCfg = Field(default_factory=FBetaCfg, description="F-beta (fraud-friendly) metric")
     recall_at_k: RecallAtKCfg = Field(
         default_factory=RecallAtKCfg,
         description="Recall captured in the top-k% of highest scores",
     )
-    brier: bool = Field(
-        default=True, description="Compute Brier score (probability calibration)"
-    )
+    brier: bool = Field(default=True, description="Compute Brier score (probability calibration)")

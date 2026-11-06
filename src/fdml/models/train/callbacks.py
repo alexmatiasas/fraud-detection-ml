@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import mlflow
@@ -42,16 +43,14 @@ def _metric_key(dataset_name: str, metric_name: str) -> str:
 
 def _normalize_dataset_name(data_name: str) -> str:
     """Map xgboost's auto-generated ``validation_0`` to ``validation``."""
-    if len(data_name) >= 2 and data_name[-2] == "_" and data_name[-1].isdigit():
-        return data_name[:-2]
-    return data_name
+    return re.sub(r"_\d+$", "", data_name)
 
 
 class _MetricLogger:
     """Shared per-iteration logging for LightGBM and XGBoost callbacks.
 
     Args:
-        log_mlflow: Log metrics to the active MLflow run.
+        `log_mlflow`: Log metrics to the active MLflow run.
         log_dvclive: Log metrics to DVCLive.
         log_console: Print a progress line every ``console_every`` iterations
             plus a line each time a metric reaches a new best value.
@@ -80,55 +79,43 @@ class _MetricLogger:
 
             self._live = Live(dvcyaml=False, report="notebook")
 
-    def _log_metric(
-        self, dataset_name: str, metric_name: str, value: float, step: int
-    ) -> None:
+    def _log_metric(self, dataset_name: str, metric_name: str, value: float, step: int) -> None:
         key = _metric_key(dataset_name, metric_name)
 
-        if (
-            self._log_mlflow
-            and step % self._mlflow_every == 0
-            and mlflow.active_run() is not None
-        ):
+        if self._log_mlflow and step % self._mlflow_every == 0 and mlflow.active_run() is not None:
             try:
                 mlflow.log_metric(key, value, step=step)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("  MLflow log_metric failed: %s", exc)
 
         if self._live is not None:
             try:
                 self._live.log_metric(key, value)
                 self._live.next_step()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("  DVCLive log_metric failed: %s", exc)
 
     def close(self) -> None:
         if self._live is not None:
             try:
                 self._live.make_summary()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("  DVCLive make_summary failed: %s", exc)
 
-    def _log_console_line(
-        self, iteration: int, parsed: list[tuple[str, str, float, bool]]
-    ) -> None:
+    def _log_console_line(self, iteration: int, parsed: list[tuple[str, str, float, bool]]) -> None:
         multiple = len(parsed) > 1
         parts: list[str] = []
         for dataset_name, metric_name, value, higher in parsed:
             key = _metric_key(dataset_name, metric_name)
             best_value, best_iter = self._best.get(key, (None, None))
-            is_best = best_value is None or (
-                value > best_value if higher else value < best_value
-            )
+            is_best = best_value is None or (value > best_value if higher else value < best_value)
             if is_best:
                 self._best[key] = (value, iteration)
                 best_value, best_iter = value, iteration
 
             if iteration % self._console_every == 0 or is_best:
                 label = f"{dataset_name}:{metric_name}" if multiple else metric_name
-                parts.append(
-                    f"{label}={value:.4f} (best {best_value:.4f} @ {best_iter})"
-                )
+                parts.append(f"{label}={value:.4f} (best {best_value:.4f} @ {best_iter})")
 
         if parts:
             logger.info("  iter %5d | %s", iteration, " | ".join(parts))
@@ -163,9 +150,7 @@ class IterationCallback(_MetricLogger):
         if self._log_console:
             self._log_console_line(iteration, parsed)
 
-    def as_xgboost(
-        self, name_map: dict[str, str] | None = None
-    ) -> XGBoostIterationCallback:
+    def as_xgboost(self, name_map: dict[str, str] | None = None) -> XGBoostIterationCallback:
         """Return an equivalent callback for the XGBoost >= 3.x protocol.
 
         ``name_map`` maps XGBoost's auto-generated eval names (``validation_0``,
@@ -223,7 +208,8 @@ class XGBoostIterationCallback(_MetricLogger, TrainingCallback):
                 if not values:
                     continue
                 value = float(values[epoch])
-                parsed.append((dataset_name, metric_name, value, True))
+                higher = _higher_is_better(metric_name)
+                parsed.append((dataset_name, metric_name, value, higher))
                 self._log_metric(dataset_name, metric_name, value, epoch + 1)
 
         if self._log_console:

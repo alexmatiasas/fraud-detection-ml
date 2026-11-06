@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import cast
 
 import pandas as pd
 
@@ -25,8 +25,8 @@ class FeatureSelector(BaseFeatureTransformer):
     def __init__(
         self,
         enabled: bool = True,
-        feature_columns: Optional[list[str]] = None,
-        target: Optional[str] = None,
+        feature_columns: list[str] | None = None,
+        target: str | None = None,
         vesta_include: bool = True,
     ):
         self.enabled = enabled

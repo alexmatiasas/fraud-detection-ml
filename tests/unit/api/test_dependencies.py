@@ -65,8 +65,8 @@ class TestVerifyApiKey:
 
 class TestLifespan:
     def test_startup_loads_model(self):
-        from fdml.api.main import lifespan
         from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
 
         mock_loader = MagicMock()
         mock_loader.is_loaded = True
@@ -84,9 +84,9 @@ class TestLifespan:
             mock_multi.load.assert_called_once()
 
     def test_startup_handles_load_error(self):
-        from fdml.api.main import lifespan
-        from fdml.api.main import app as _app
         from fdml.api.internal.loader import ModelLoadError
+        from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
 
         mock_loader = MagicMock()
         mock_loader.load.side_effect = ModelLoadError("no model")
@@ -102,9 +102,9 @@ class TestLifespan:
             mock_loader.load_sample.assert_called_once()
 
     def test_startup_handles_multi_error(self):
-        from fdml.api.main import lifespan
-        from fdml.api.main import app as _app
         from fdml.api.internal.registry import ModelRegistryError
+        from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
 
         mock_loader = MagicMock()
         mock_loader.is_loaded = True
@@ -119,3 +119,34 @@ class TestLifespan:
             ctx = lifespan(_app)
             asyncio.get_event_loop().run_until_complete(ctx.__aenter__())
             mock_multi.load.assert_called_once()
+
+    def test_startup_is_bounded_when_model_load_hangs(self, monkeypatch):
+        """Cloud Run must get a listening port even if DagsHub never responds."""
+        import asyncio
+        import threading
+        import time
+
+        from fdml.api.main import app as _app
+        from fdml.api.main import lifespan
+
+        gate = threading.Event()
+        mock_loader = MagicMock()
+        mock_loader.load.side_effect = lambda: gate.wait(5)
+        mock_multi = MagicMock()
+        monkeypatch.setattr("fdml.api.main.STARTUP_MODEL_TIMEOUT", 0.05)
+        monkeypatch.setattr("fdml.api.main.STARTUP_REGISTRY_TIMEOUT", 0.05)
+        with (
+            patch("fdml.api.main.get_model_loader", return_value=mock_loader),
+            patch("fdml.api.main.get_multi_loader", return_value=mock_multi),
+        ):
+            loop = asyncio.new_event_loop()
+            try:
+                start = time.monotonic()
+                loop.run_until_complete(lifespan(_app).__aenter__())
+                elapsed = time.monotonic() - start
+            finally:
+                gate.set()
+                loop.close()
+
+        assert elapsed < 2
+        mock_loader.load_sample.assert_called_once()

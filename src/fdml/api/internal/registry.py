@@ -17,7 +17,7 @@ import json
 import logging
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -190,9 +190,7 @@ class MultiModelLoader:
         pipeline = self._get_pipeline(name)
         return pipeline.predict_proba(X_raw)[:, 1]
 
-    def explain(
-        self, name: str, X_raw: pd.DataFrame, top_k: int = 20
-    ) -> dict[str, Any] | None:
+    def explain(self, name: str, X_raw: pd.DataFrame, top_k: int = 20) -> dict[str, Any] | None:
         """Tree SHAP explanation for ``name``, or ``None`` when unavailable."""
         try:
             pipeline = self._get_pipeline(name)
@@ -215,9 +213,9 @@ class MultiModelLoader:
         try:
             model_uri = f"models:/{name}/{info.version}"
             pipeline = load_model(model_uri)
-        except Exception as exc:  # noqa: BLE001 - surface every load failure
+        except Exception as exc:
             info.error = f"Could not load {name} v{info.version} from MLflow: {exc}"
             raise ModelRegistryError(info.error) from exc
-        info.loaded_at = datetime.now(timezone.utc)
+        info.loaded_at = datetime.now(UTC)
         self._pipelines[name] = pipeline
         return pipeline

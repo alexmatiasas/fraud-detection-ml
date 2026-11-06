@@ -2,7 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 AggFunc = Literal["mean", "std", "max", "count", "min", "sum"]
 DateTimeFeature = Literal["hour_of_day", "day_of_week", "day_of_month"]
 

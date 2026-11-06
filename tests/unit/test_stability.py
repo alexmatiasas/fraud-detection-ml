@@ -23,9 +23,7 @@ def small_dataset():
 
 def _make_pipe():
     def model_fn():
-        return LGBMClassifier(
-            n_estimators=10, max_depth=3, random_state=42, verbose=-1, n_jobs=1
-        )
+        return LGBMClassifier(n_estimators=10, max_depth=3, random_state=42, verbose=-1, n_jobs=1)
 
     pipe = Pipeline([("model", model_fn())])
     return pipe, model_fn
@@ -71,9 +69,7 @@ class TestFeatureImportanceStability:
     def test_creates_plot(self, small_dataset, tmp_path):
         X, y = small_dataset
         features = Pipeline([("passthrough", "passthrough")])
-        model = LGBMClassifier(
-            n_estimators=10, max_depth=3, random_state=42, verbose=-1, n_jobs=1
-        )
+        model = LGBMClassifier(n_estimators=10, max_depth=3, random_state=42, verbose=-1, n_jobs=1)
         pipe = Pipeline([("features", features), ("model", model)])
         pipe.fit(X, y)
 
@@ -96,9 +92,7 @@ class TestFeatureImportanceStability:
 
         X, y = small_dataset
         features = Pipeline([("passthrough", "passthrough")])
-        model = XGBClassifier(
-            n_estimators=10, max_depth=3, random_state=42, verbosity=0
-        )
+        model = XGBClassifier(n_estimators=10, max_depth=3, random_state=42, verbosity=0)
         pipe = Pipeline([("features", features), ("model", model)])
         pipe.fit(X, y)
 

@@ -89,9 +89,7 @@ class Reporter(ABC):
 class ConsoleReporter(Reporter):
     def report(self, report: EvaluationReport, eval_cfg: EvaluateConfig) -> None:
         ci_str = (
-            f"[{report.ci_lower:.4f}, {report.ci_upper:.4f}]"
-            if report.ci_lower is not None
-            else ""
+            f"[{report.ci_lower:.4f}, {report.ci_upper:.4f}]" if report.ci_lower is not None else ""
         )
 
         table = Table(title=f"  {report.model_name}", box=None)
@@ -267,9 +265,7 @@ class MLflowReporter(Reporter):
         if report.pr_curve:
             mlflow.log_table(pd.DataFrame(report.pr_curve), "curves/pr.json")
         if report.calibration_curve:
-            mlflow.log_table(
-                pd.DataFrame(report.calibration_curve), "curves/calibration.json"
-            )
+            mlflow.log_table(pd.DataFrame(report.calibration_curve), "curves/calibration.json")
         if report.segments:
             mlflow.log_table(
                 pd.DataFrame([s.model_dump() for s in report.segments]),
@@ -293,9 +289,7 @@ class MLflowReporter(Reporter):
                 mlflow.log_artifact(str(p))
 
         if report.top_features and self._mlflow_cfg.log_feature_importance:
-            mlflow.log_table(
-                pd.DataFrame(report.top_features), "features/importance.json"
-            )
+            mlflow.log_table(pd.DataFrame(report.top_features), "features/importance.json")
 
         logger.info(
             "  MLflow: run %s — AP=%.4f, AUC=%.4f",
@@ -332,7 +326,7 @@ def log_dataset_lineage(
                 dataset = from_pandas(df, targets="isFraud", name="transactions")
             mlflow.log_input(dataset, context=context)
             logger.info("  MLflow: dataset lineage logged (context=%s)", context)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("  MLflow: log_input failed (%s): %s", context, exc)
 
 
@@ -403,22 +397,18 @@ class DVCLiveReporter(Reporter):
 
                 try:
                     live.log_sklearn_plot("roc", self._y_true, self._y_proba)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("  DVCLive: log_sklearn_plot failed: %s", exc)
 
                 try:
-                    live.log_sklearn_plot(
-                        "precision_recall", self._y_true, self._y_proba
-                    )
-                except Exception:
-                    pass
+                    live.log_sklearn_plot("precision_recall", self._y_true, self._y_proba)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("  DVCLive: log_sklearn_plot failed: %s", exc)
 
                 try:
-                    live.log_sklearn_plot(
-                        "calibration_curve", self._y_true, self._y_proba
-                    )
-                except Exception:
-                    pass
+                    live.log_sklearn_plot("calibration_curve", self._y_true, self._y_proba)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("  DVCLive: log_sklearn_plot failed: %s", exc)
 
                 for path_str in report.plot_paths:
                     p = Path(path_str)
@@ -427,8 +417,8 @@ class DVCLiveReporter(Reporter):
                             img = _read_image(p)
                             if img is not None:
                                 live.log_image(p.name, img)
-                        except Exception:
-                            pass
+                        except Exception as exc:  # noqa: BLE001
+                            logger.debug("  DVCLive: log_image failed: %s", exc)
 
                 if report.top_features:
                     imp_path = Path("reports") / "feature_importance.json"
@@ -440,7 +430,7 @@ class DVCLiveReporter(Reporter):
                 live.make_summary()
 
             logger.info("  DVCLive: metrics/plots logged to %s/", dvclive_dir)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("  DVCLive: failed with %s", exc)
 
 
@@ -452,7 +442,8 @@ def _read_image(path: Path) -> np.ndarray | None:
         if img.dtype == "float32" or img.dtype == "float64":
             img = (img * 255).astype("uint8")
         return img
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("  DVCLive unavailable: %s", exc)
         return None
 
 
@@ -464,5 +455,5 @@ class CompositeReporter(Reporter):
         for r in self._reporters:
             try:
                 r.report(report, eval_cfg)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Reporter %s failed: %s", r.__class__.__name__, exc)

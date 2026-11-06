@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -137,7 +137,7 @@ class ModelLoader:
                 continue
             if ok:
                 self._report = self._load_report()
-                self._loaded_at = datetime.now(timezone.utc)
+                self._loaded_at = datetime.now(UTC)
                 logger.info(
                     "  Model loaded from %s (%d features)",
                     self._source,
@@ -179,7 +179,7 @@ class ModelLoader:
         self._version = mv.version
         self._run_id = mv.run_id
         self._report = self._load_report()
-        self._loaded_at = datetime.now(timezone.utc)
+        self._loaded_at = datetime.now(UTC)
         logger.info("  Model switched to %s version %d", self._mlflow_model, version)
 
     def list_versions(self) -> list[dict[str, Any]]:
@@ -234,9 +234,7 @@ class ModelLoader:
         from mlflow.exceptions import MlflowException
 
         try:
-            return client.get_model_version_by_alias(
-                self._mlflow_model, self._mlflow_alias
-            )
+            return client.get_model_version_by_alias(self._mlflow_model, self._mlflow_alias)
         except MlflowException:
             pass
 

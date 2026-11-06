@@ -41,9 +41,7 @@ def verify_api_key(x_api_key: str = Header(...)) -> str:
     """Guard for mutating endpoints — compares against ``FDML_API_KEY``."""
     expected = os.getenv("FDML_API_KEY")
     if not expected:
-        raise HTTPException(
-            status_code=503, detail="FDML_API_KEY not configured on the server"
-        )
+        raise HTTPException(status_code=503, detail="FDML_API_KEY not configured on the server")
     if not hmac.compare_digest(x_api_key, expected):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return x_api_key

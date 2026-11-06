@@ -1,5 +1,4 @@
 from collections.abc import Mapping, Sequence
-from typing import Optional
 
 import pandas as pd
 
@@ -23,16 +22,14 @@ class CardAggregator(BaseFeatureTransformer):
     def __init__(
         self,
         enabled: bool = True,
-        group_by: Optional[list[str]] = None,
-        aggregations: Optional[Mapping[str, Sequence[str]]] = None,
+        group_by: list[str] | None = None,
+        aggregations: Mapping[str, Sequence[str]] | None = None,
     ):
         self.enabled = enabled
         self.group_by = group_by or ["card1", "card2", "card3", "card5"]
-        self.aggregations = aggregations or {
-            "TransactionAmt": ["mean", "std", "max", "count"]
-        }
+        self.aggregations = aggregations or {"TransactionAmt": ["mean", "std", "max", "count"]}
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "CardAggregator":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "CardAggregator":
         if not self.enabled:
             self._fitted_ = True
             return self
@@ -70,7 +67,7 @@ class CardAggregator(BaseFeatureTransformer):
                 # a previous pass would add a `_x`/`_y` suffix and break the
                 # selector contract. Drop the existing column first.
                 X = X.drop(columns=[name], errors="ignore").merge(
-                    agg_df.rename(columns={stat: name})[valid_groups + [name]],
+                    agg_df.rename(columns={stat: name})[[*valid_groups, name]],
                     on=valid_groups,
                     how="left",
                 )

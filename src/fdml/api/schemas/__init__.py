@@ -11,11 +11,11 @@ from fdml.api.schemas.predict import PredictionRequest, PredictionResponse
 
 __all__ = [
     "HealthStatus",
-    "ReadyStatus",
     "ModelInfo",
     "ModelSwitchRequest",
     "ModelSwitchResponse",
     "ModelVersionInfo",
     "PredictionRequest",
     "PredictionResponse",
+    "ReadyStatus",
 ]

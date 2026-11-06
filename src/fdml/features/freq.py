@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pandas as pd
 
 from fdml.features.base import BaseFeatureTransformer
@@ -18,11 +16,11 @@ class FrequencyEncoder(BaseFeatureTransformer):
             silently skipped.
     """
 
-    def __init__(self, enabled: bool = True, columns: Optional[list[str]] = None):
+    def __init__(self, enabled: bool = True, columns: list[str] | None = None):
         self.enabled = enabled
         self.columns = columns or []
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "FrequencyEncoder":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "FrequencyEncoder":
         if not self.enabled:
             self._fitted_ = True
             return self

@@ -47,8 +47,8 @@ __all__ = [
     "expected_cost",
     "f_beta_score",
     "generate_model_card",
-    "per_segment_analysis",
     "main",
+    "per_segment_analysis",
     "recall_at_top_k",
     "threshold_tuning",
 ]

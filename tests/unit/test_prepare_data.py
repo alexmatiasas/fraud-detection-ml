@@ -6,8 +6,8 @@ from scripts.prepare_data import (
     DTYPE_MAP,
     _downcast,
     build_dtype_map,
-    build_transaction_schema,
     build_identity_schema,
+    build_transaction_schema,
 )
 
 
@@ -171,7 +171,7 @@ class TestDowncast:
         assert df["Amt"].dtype == "float32"
 
     def test_object_to_category(self):
-        df = pd.DataFrame({"Col": ["a", "b", "c"]})
+        df = pd.DataFrame({"Col": pd.Series(["a", "b", "c"], dtype=object)})
         assert df["Col"].dtype == "object"
         _downcast(df, {"Col": "category"})
         assert df["Col"].dtype == "category"

@@ -1,0 +1,462 @@
+---
+title: "04 — Multi-Model Comparison & Registry"
+subtitle: "Train LGBM, XGBoost, Random Forest, register in MLflow, verify on DagsHub"
+format: html
+toc: true
+toc-location: left
+theme: darkly
+jupyter: fdml
+---
+
+# Goal
+
+This notebook trains **three models** (LightGBM, XGBoost, Random Forest) on a
+temporal sample (`SAMPLE=80_000` rows), registers each in the MLflow Model
+Registry, and verifies that everything appears correctly on DagsHub.
+
+> **Note:** For full-data training, use `make train model.name=lightgbm`,
+> `make train model.name=xgboost`, or `make train model.name=random_forest`.
+> This notebook uses a sample for fast verification of the end-to-end flow.
+
+**What we verify:**
+
+1. Each model trains successfully with temporal split
+2. Each model is logged to MLflow (params, metrics, artifacts, model)
+3. Each model is registered in the Model Registry with a unique name
+4. The champion/challenger flow works across models
+5. Results are visible on DagsHub
+
+# 1. Setup
+
+```{python}
+import logging
+import os
+import time
+import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from fdml.utils.logging import ensure_logging
+from fdml.utils.paths import PROJECT_ROOT
+
+os.chdir(PROJECT_ROOT)
+ensure_logging()
+
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+print("Setup complete")
+print(f"Project root: {PROJECT_ROOT}")
+```
+
+# 2. Load full data
+
+```{python}
+from fdml.features.factory import load_data, load_data_config, merge_tables
+
+data_cfg = load_data_config()
+train_df, identity_df = load_data(data_cfg)
+df = merge_tables(train_df, identity_df)
+
+# Temporal sample for quick verification (full data via `make train`)
+SAMPLE = 80_000
+df = df.sort_values("TransactionDT").head(SAMPLE).reset_index(drop=True)
+
+X = df.drop(columns=["isFraud"])
+y = df["isFraud"]
+
+print(f"Sample: {len(df):,} rows × {df.shape[1]} cols")
+print(f"Fraud rate: {y.mean():.4%}")
+print(f"Time range: [{df.TransactionDT.min():,}, {df.TransactionDT.max():,}]")
+```
+
+# 3. Temporal split
+
+```{python}
+from fdml.models.split import TemporalSplitter
+
+splitter = TemporalSplitter(test_size=0.2, embargo_seconds=172800)
+tr_idx, va_idx = next(splitter.split(df, y))
+
+X_train, X_val = X.iloc[tr_idx], X.iloc[va_idx]
+y_train, y_val = y.iloc[tr_idx], y.iloc[va_idx]
+
+train_tr = (int(X_train.TransactionDT.min()), int(X_train.TransactionDT.max()))
+val_tr = (int(X_val.TransactionDT.min()), int(X_val.TransactionDT.max()))
+gap = val_tr[0] - train_tr[1]
+
+print(f"Train: {len(X_train):,} rows  fraud={y_train.mean():.2%}  time=[{train_tr[0]:,}, {train_tr[1]:,}]")
+print(f"Val:   {len(X_val):,} rows  fraud={y_val.mean():.2%}  time=[{val_tr[0]:,}, {val_tr[1]:,}]")
+print(f"Gap:   {gap:,}s = {gap/86400:.1f} days")
+```
+
+# 4. Feature engineering
+
+```{python}
+from fdml.features.factory import create_pipeline, load_fe_config
+
+features_cfg = load_fe_config()
+pipeline, feature_columns = create_pipeline(features_cfg)
+
+t0 = time.time()
+X_train_fe = pipeline.fit_transform(X_train)
+X_val_fe = pipeline.transform(X_val)
+fe_time = time.time() - t0
+
+feature_names = list(X_train_fe.columns)
+print(f"FE output: train={X_train_fe.shape}, val={X_val_fe.shape}")
+print(f"FE time: {fe_time:.1f}s")
+print(f"Features: {len(feature_names)}")
+```
+
+# 5. Train all three models
+
+We train each model using the same `model_builder_registry` infrastructure that
+`runner.main()` uses. Each model gets its own MLflow run with full tracking.
+
+## 5.1 LightGBM
+
+```{python}
+import lightgbm as lgb
+from fdml.models.train.model_builder import model_builder_registry
+from fdml.models.train.runner import _fit_model
+
+# Load config for LightGBM
+from fdml.models.config import load_train_config
+
+cfg_lgbm = load_train_config(cli_args=["model.name=lightgbm"])
+params_lgbm = cfg_lgbm.model.params.model_dump()
+
+builder_lgbm = model_builder_registry.get("lightgbm")
+model_lgbm = builder_lgbm.build(params_lgbm)
+
+print(f"LightGBM params: {builder_lgbm.format_params(params_lgbm)}")
+
+t0 = time.time()
+model_lgbm = _fit_model(
+    model_lgbm, X_train_fe, y_train, X_val_fe, y_val, cfg_lgbm, callbacks=None
+)
+train_time_lgbm = time.time() - t0
+print(f"LightGBM trained in {train_time_lgbm:.1f}s, best_iter={getattr(model_lgbm, 'best_iteration_', 'N/A')}")
+```
+
+## 5.2 XGBoost
+
+```{python}
+import xgboost as xgb
+
+cfg_xgb = load_train_config(cli_args=["model.name=xgboost"])
+params_xgb = cfg_xgb.model.params.model_dump()
+
+builder_xgb = model_builder_registry.get("xgboost")
+model_xgb = builder_xgb.build(params_xgb)
+
+print(f"XGBoost params: {builder_xgb.format_params(params_xgb)}")
+
+t0 = time.time()
+model_xgb = _fit_model(
+    model_xgb, X_train_fe, y_train, X_val_fe, y_val, cfg_xgb, callbacks=None
+)
+train_time_xgb = time.time() - t0
+print(f"XGBoost trained in {train_time_xgb:.1f}s, best_iter={getattr(model_xgb, 'best_iteration_', 'N/A')}")
+```
+
+## 5.3 Random Forest
+
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+
+cfg_rf = load_train_config(cli_args=["model.name=random_forest"])
+params_rf = cfg_rf.model.params.model_dump()
+
+builder_rf = model_builder_registry.get("random_forest")
+model_rf = builder_rf.build(params_rf)
+
+print(f"RF params: {builder_rf.format_params(params_rf)}")
+
+t0 = time.time()
+model_rf = _fit_model(
+    model_rf, X_train_fe, y_train, X_val_fe, y_val, cfg_rf, callbacks=None
+)
+train_time_rf = time.time() - t0
+print(f"Random Forest trained in {train_time_rf:.1f}s")
+```
+
+# 6. Evaluate all three
+
+```{python}
+from sklearn.metrics import roc_auc_score, average_precision_score, f1_score
+
+models = {
+    "lightgbm": model_lgbm,
+    "xgboost": model_xgb,
+    "random_forest": model_rf,
+}
+
+results = []
+for name, model in models.items():
+    y_proba = model.predict_proba(X_val_fe)[:, 1]
+    auc = roc_auc_score(y_val, y_proba)
+    ap = average_precision_score(y_val, y_proba)
+    f1 = f1_score(y_val, (y_proba >= 0.5).astype(int))
+    results.append({
+        "model": name,
+        "auc": auc,
+        "ap": ap,
+        "f1": f1,
+        "train_time_s": {"lightgbm": train_time_lgbm, "xgboost": train_time_xgb, "random_forest": train_time_rf}[name],
+    })
+
+results_df = pd.DataFrame(results).sort_values("auc", ascending=False)
+print(results_df.to_string(index=False))
+```
+
+# 7. Register in MLflow
+
+Now we log each model to DagsHub and register it in the Model Registry.
+
+```{python}
+import mlflow
+from mlflow.models import infer_signature
+from fdml.config import load_mlflow_config, resolve_mlflow_tracking
+
+mlflow_cfg = load_mlflow_config()
+resolve_mlflow_tracking(mlflow_cfg)
+
+client = mlflow.MlflowClient()
+experiment = mlflow.set_experiment(mlflow_cfg.tracking.experiment_name)
+
+print(f"Experiment: {experiment.name} (id={experiment.experiment_id})")
+print(f"Tracking URI: {mlflow.get_tracking_uri()}")
+```
+
+## 7.1 Log LightGBM
+
+```{python}
+RUN_NAME_LGBM = "lgbm_full_comparison"
+
+with mlflow.start_run(run_name=RUN_NAME_LGBM) as run:
+    # Log params
+    mlflow.log_params({f"model.{k}": v for k, v in params_lgbm.items()})
+    mlflow.log_param("model_name", "lightgbm")
+    mlflow.log_param("train_rows", len(X_train))
+    mlflow.log_param("val_rows", len(X_val))
+    mlflow.log_param("n_features", len(feature_names))
+    mlflow.log_param("split_strategy", "temporal")
+    mlflow.log_param("seed", 42)
+
+    # Log metrics
+    lgbm_result = next(r for r in results if r["model"] == "lightgbm")
+    mlflow.log_metric("val/roc_auc", lgbm_result["auc"])
+    mlflow.log_metric("val/average_precision", lgbm_result["ap"])
+    mlflow.log_metric("val/f1", lgbm_result["f1"])
+    mlflow.log_metric("training_elapsed_s", lgbm_result["train_time_s"])
+
+    # Log tags
+    mlflow.set_tag("model_name", "lightgbm")
+    mlflow.set_tag("git_branch", "feat/model-training")
+
+    # Log model with signature
+    sig = infer_signature(X_val_fe, model_lgbm.predict_proba(X_val_fe)[:, :1])
+    model_info = mlflow.sklearn.log_model(
+        model_lgbm,
+        artifact_path="model",
+        signature=sig,
+        input_example=X_val_fe.iloc[:5],
+    )
+
+    run_id_lgbm = run.info.run_id
+    print(f"  Run ID: {run_id_lgbm}")
+    print(f"  Model URI: {model_info.model_uri}")
+
+    # Register
+    model_name_lgbm = "fraud-detection-lgbm"
+    try:
+        client.create_registered_model(model_name_lgbm, description="LightGBM binary classifier for IEEE-CIS fraud detection")
+    except Exception:
+        pass
+
+    mv = client.create_model_version(
+        name=model_name_lgbm,
+        source=model_info.model_uri,
+        run_id=run_id_lgbm,
+        description=f"LightGBM baseline — AUC={lgbm_result['auc']:.4f}",
+        tags={"framework": "lightgbm", "validation_auc": f"{lgbm_result['auc']:.4f}"},
+    )
+    client.set_registered_model_alias(model_name_lgbm, "champion", mv.version)
+
+    print(f"  Registered: {model_name_lgbm} v{mv.version} (champion)")
+```
+
+## 7.2 Log XGBoost
+
+```{python}
+RUN_NAME_XGB = "xgb_full_comparison"
+
+with mlflow.start_run(run_name=RUN_NAME_XGB) as run:
+    mlflow.log_params({f"model.{k}": v for k, v in params_xgb.items()})
+    mlflow.log_param("model_name", "xgboost")
+    mlflow.log_param("train_rows", len(X_train))
+    mlflow.log_param("val_rows", len(X_val))
+    mlflow.log_param("n_features", len(feature_names))
+    mlflow.log_param("split_strategy", "temporal")
+    mlflow.log_param("seed", 42)
+
+    xgb_result = next(r for r in results if r["model"] == "xgboost")
+    mlflow.log_metric("val/roc_auc", xgb_result["auc"])
+    mlflow.log_metric("val/average_precision", xgb_result["ap"])
+    mlflow.log_metric("val/f1", xgb_result["f1"])
+    mlflow.log_metric("training_elapsed_s", xgb_result["train_time_s"])
+
+    mlflow.set_tag("model_name", "xgboost")
+    mlflow.set_tag("git_branch", "feat/model-training")
+
+    sig = infer_signature(X_val_fe, model_xgb.predict_proba(X_val_fe)[:, :1])
+    model_info = mlflow.sklearn.log_model(
+        model_xgb,
+        artifact_path="model",
+        signature=sig,
+        input_example=X_val_fe.iloc[:5],
+    )
+
+    run_id_xgb = run.info.run_id
+    print(f"  Run ID: {run_id_xgb}")
+    print(f"  Model URI: {model_info.model_uri}")
+
+    model_name_xgb = "fraud-detection-xgboost"
+    try:
+        client.create_registered_model(model_name_xgb, description="XGBoost binary classifier for IEEE-CIS fraud detection")
+    except Exception:
+        pass
+
+    mv = client.create_model_version(
+        name=model_name_xgb,
+        source=model_info.model_uri,
+        run_id=run_id_xgb,
+        description=f"XGBoost baseline — AUC={xgb_result['auc']:.4f}",
+        tags={"framework": "xgboost", "validation_auc": f"{xgb_result['auc']:.4f}"},
+    )
+    client.set_registered_model_alias(model_name_xgb, "champion", mv.version)
+
+    print(f"  Registered: {model_name_xgb} v{mv.version} (champion)")
+```
+
+## 7.3 Log Random Forest
+
+```{python}
+RUN_NAME_RF = "rf_full_comparison"
+
+with mlflow.start_run(run_name=RUN_NAME_RF) as run:
+    mlflow.log_params({f"model.{k}": v for k, v in params_rf.items()})
+    mlflow.log_param("model_name", "random_forest")
+    mlflow.log_param("train_rows", len(X_train))
+    mlflow.log_param("val_rows", len(X_val))
+    mlflow.log_param("n_features", len(feature_names))
+    mlflow.log_param("split_strategy", "temporal")
+    mlflow.log_param("seed", 42)
+
+    rf_result = next(r for r in results if r["model"] == "random_forest")
+    mlflow.log_metric("val/roc_auc", rf_result["auc"])
+    mlflow.log_metric("val/average_precision", rf_result["ap"])
+    mlflow.log_metric("val/f1", rf_result["f1"])
+    mlflow.log_metric("training_elapsed_s", rf_result["train_time_s"])
+
+    mlflow.set_tag("model_name", "random_forest")
+    mlflow.set_tag("git_branch", "feat/model-training")
+
+    sig = infer_signature(X_val_fe, model_rf.predict_proba(X_val_fe)[:, :1])
+    model_info = mlflow.sklearn.log_model(
+        model_rf,
+        artifact_path="model",
+        signature=sig,
+        input_example=X_val_fe.iloc[:5],
+    )
+
+    run_id_rf = run.info.run_id
+    print(f"  Run ID: {run_id_rf}")
+    print(f"  Model URI: {model_info.model_uri}")
+
+    model_name_rf = "fraud-detection-rf"
+    try:
+        client.create_registered_model(model_name_rf, description="Random Forest binary classifier for IEEE-CIS fraud detection")
+    except Exception:
+        pass
+
+    mv = client.create_model_version(
+        name=model_name_rf,
+        source=model_info.model_uri,
+        run_id=run_id_rf,
+        description=f"Random Forest baseline — AUC={rf_result['auc']:.4f}",
+        tags={"framework": "random_forest", "validation_auc": f"{rf_result['auc']:.4f}"},
+    )
+    client.set_registered_model_alias(model_name_rf, "champion", mv.version)
+
+    print(f"  Registered: {model_name_rf} v{mv.version} (champion)")
+```
+
+# 8. Verify registry
+
+```{python}
+print("=== Model Registry ===\n")
+
+for model_name in ["fraud-detection-lgbm", "fraud-detection-xgboost", "fraud-detection-rf"]:
+    try:
+        rm = client.get_registered_model(model_name)
+        versions = client.search_model_versions(f"name='{model_name}'")
+        champion = None
+        for v in versions:
+            if "champion" in (getattr(v, "aliases", []) or []):
+                champion = v
+                break
+        print(f"{model_name}:")
+        print(f"  Description: {rm.description}")
+        print(f"  Versions: {len(versions)}")
+        if champion:
+            print(f"  Champion: v{champion.version} (run {champion.run_id[:8]})")
+        print()
+    except Exception as e:
+        print(f"{model_name}: NOT FOUND ({e})\n")
+```
+
+# 9. Verify DagsHub runs
+
+```{python}
+runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
+print(f"Total runs in '{experiment.name}': {len(runs)}\n")
+
+# Show only our comparison runs
+comparison_runs = runs[runs["tags.mlflow.runName"].isin([RUN_NAME_LGBM, RUN_NAME_XGB, RUN_NAME_RF])]
+if len(comparison_runs) > 0:
+    for _, row in comparison_runs.iterrows():
+        run_name = row.get("tags.mlflow.runName", "N/A")
+        auc = row.get("metrics.val/roc_auc", "N/A")
+        ap = row.get("metrics.val/average_precision", "N/A")
+        model = row.get("params.model_name", "N/A")
+        print(f"  {run_name:30s}  model={model:15s}  AUC={auc}  AP={ap}")
+else:
+    print("  No comparison runs found (they may be under different run names)")
+    print("  Check DagsHub manually: https://dagshub.com/alexmatiasas/fraud-detection-ml.mlflow")
+```
+
+# 10. Summary
+
+```{python}
+print("=" * 70)
+print("MULTI-MODEL COMPARISON RESULTS (80k temporal sample)")
+print("=" * 70)
+print()
+print(results_df.to_string(index=False))
+print()
+print("Registry:")
+print(f"  fraud-detection-lgbm     champion v1 (AUC={lgbm_result['auc']:.4f})")
+print(f"  fraud-detection-xgboost  champion v1 (AUC={xgb_result['auc']:.4f})")
+print(f"  fraud-detection-rf       champion v1 (AUC={rf_result['auc']:.4f})")
+print()
+print("Next steps:")
+print("  1. Check DagsHub for runs and model signatures")
+print("  2. Train on full data with: make train model.name=<model>")
+print("  3. Decide which model serves the API")
+print("  4. Build ensemble (Voting + Stacking)")
+```

@@ -38,7 +38,7 @@ class TestM4:
 class TestEdgeCases:
     def test_disabled_returns_unchanged(self, sample_df: pd.DataFrame):
         result = MFlagEncoder(enabled=False).transform(sample_df)
-        assert list(result["M1"]) == ["T", "F", None, "T"]
+        assert list(result["M1"].fillna("<NA>")) == ["T", "F", "<NA>", "T"]
 
     def test_m_cols_missing_skips_gracefully(self):
         df = pd.DataFrame({"not_m": [1]})

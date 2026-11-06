@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -87,9 +88,7 @@ def feature_importance_stability(
     rng = np.random.default_rng(seed)
     seeds = rng.integers(0, 10000, n_iterations).tolist()
 
-    importance_df = pd.DataFrame(
-        index=range(n_iterations), columns=pd.Index(feature_names)
-    )
+    importance_df = pd.DataFrame(index=range(n_iterations), columns=pd.Index(feature_names))
 
     for i, s in enumerate(seeds):
         cfg_name = model.__class__.__name__
@@ -101,15 +100,11 @@ def feature_importance_stability(
         if "LGBMClassifier" in cfg_name:
             new_model = model.__class__(**params, random_state=s, n_jobs=-1, verbose=-1)
         elif "XGBClassifier" in cfg_name:
-            new_model = model.__class__(
-                **params, random_state=s, n_jobs=-1, verbosity=0
-            )
+            new_model = model.__class__(**params, random_state=s, n_jobs=-1, verbosity=0)
         else:
             new_model = model.__class__(**params, random_state=s, n_jobs=-1, verbose=0)
 
-        pipe = Pipeline(
-            [("features", pipeline.named_steps["features"]), ("model", new_model)]
-        )
+        pipe = Pipeline([("features", pipeline.named_steps["features"]), ("model", new_model)])
         pipe.fit(X_train, y_train)
 
         imp = pipe.named_steps["model"].feature_importances_

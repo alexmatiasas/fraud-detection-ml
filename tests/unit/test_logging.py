@@ -56,9 +56,7 @@ class TestSetupLogging:
 
         assert path == tmp_path / "train_lgbm.log"
 
-    def test_stdout_handler_attached_at_most_once(
-        self, isolated_logging: tuple[Path, list]
-    ):
+    def test_stdout_handler_attached_at_most_once(self, isolated_logging: tuple[Path, list]):
         tmp_path, before = isolated_logging
         logging_utils.setup_logging(log_path=tmp_path / "a.log")
         logging_utils.setup_logging(log_path=tmp_path / "b.log")
@@ -70,9 +68,7 @@ class TestSetupLogging:
         ]
         assert len(stdout) == 1
 
-    def test_file_handler_attached_at_most_once_per_path(
-        self, isolated_logging: tuple[Path, list]
-    ):
+    def test_file_handler_attached_at_most_once_per_path(self, isolated_logging: tuple[Path, list]):
         tmp_path, before = isolated_logging
         logging_utils.setup_logging(log_path=tmp_path / "a.log")
         logging_utils.setup_logging(log_path=tmp_path / "a.log")
@@ -80,9 +76,7 @@ class TestSetupLogging:
         files = _added_handlers(before, logging.FileHandler)
         assert len(files) == 1
 
-    def test_returns_primary_path_when_no_path(
-        self, isolated_logging: tuple[Path, list]
-    ):
+    def test_returns_primary_path_when_no_path(self, isolated_logging: tuple[Path, list]):
         tmp_path, _ = isolated_logging
         path = logging_utils.setup_logging()
 
@@ -96,9 +90,7 @@ class TestEnsureLogging:
 
         assert path == tmp_path / "fdml.log"
 
-    def test_returns_same_path_without_new_handlers(
-        self, isolated_logging: tuple[Path, list]
-    ):
+    def test_returns_same_path_without_new_handlers(self, isolated_logging: tuple[Path, list]):
         tmp_path, before = isolated_logging
         first = logging_utils.setup_logging(log_path=tmp_path / "out.log")
         second = logging_utils.ensure_logging()

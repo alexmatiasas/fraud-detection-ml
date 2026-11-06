@@ -70,18 +70,14 @@ def _coerce(value: Any, dtype: Any, column: str) -> Any:
         try:
             return float(value)
         except (TypeError, ValueError) as exc:
-            raise OverrideError(
-                f"Feature '{column}' expects a number, got {value!r}"
-            ) from exc
+            raise OverrideError(f"Feature '{column}' expects a number, got {value!r}") from exc
     if kind == "b":
         return bool(value)
     if kind == "M":  # datetime
         try:
             return pd.Timestamp(value)
         except (TypeError, ValueError) as exc:
-            raise OverrideError(
-                f"Feature '{column}' expects a datetime, got {value!r}"
-            ) from exc
+            raise OverrideError(f"Feature '{column}' expects a datetime, got {value!r}") from exc
     return str(value)
 
 
@@ -106,7 +102,7 @@ def compute_explanation(
     """
     top_k = max(1, min(top_k, MAX_TOP_K))
     try:
-        import shap  # noqa: PLC0415 - optional serving dependency
+        import shap
     except ImportError:
         return None
 
@@ -123,14 +119,10 @@ def compute_explanation(
             base = base[1] if len(base) > 1 else base[0]
 
         names = _feature_names(X_fe, model, len(shap_1))
-        values = (
-            X_fe.iloc[0].tolist()
-            if isinstance(X_fe, pd.DataFrame)
-            else [None] * len(names)
-        )
-        ranked = sorted(
-            zip(names, values, shap_1), key=lambda item: abs(item[2]), reverse=True
-        )[:top_k]
+        values = X_fe.iloc[0].tolist() if isinstance(X_fe, pd.DataFrame) else [None] * len(names)
+        ranked = sorted(zip(names, values, shap_1), key=lambda item: abs(item[2]), reverse=True)[
+            :top_k
+        ]
 
         return {
             "base_value": float(base),

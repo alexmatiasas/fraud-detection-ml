@@ -9,18 +9,40 @@ tracking:
   run_name: lgbm_baseline
   # Local: sqlite:///mlruns.db  |  DagsHub: https://dagshub.com/user/repo.mlflow
   tracking_uri: sqlite:///mlruns.db
-  backend: local  # auto-detected if .env has dagshub credentials
+  backend: local # auto-detected if .env has dagshub credentials
 
 # ── Model Registry ────────────────────────────────────────────────────────────
 registry:
   enabled: true
   model_name: fraud-detection-lgbm
-  alias: champion  # champion | challenger | candidate
+  alias: champion # champion | challenger | candidate
+  # Quality gate: versiones por debajo de estos mínimos NO se registran
+  # (tag validation_status=rejected). 0 = umbral desactivado.
+  min_auc: 0.83
+  min_average_precision: 0.35
+  tags:
+    framework: lightgbm
+    dataset: ieee-cis-fraud
+    task: binary_classification
+  description: >-
+    LightGBM binary classifier for IEEE-CIS fraud detection.
+    Full pipeline (feature engineering + model) serves raw transactions.
 
 # ── Dataset lineage ───────────────────────────────────────────────────────────
 datasets:
-  enabled: true
+  enabled: false
   context: training
+
+# ── Native MLflow evaluation (sobre el pipeline logueado) ─────────────────────
+# Metricas estandar de clasificacion + artefactos interactivos (ROC/PR/matriz)
+# + SHAP explainer, vinculados al LoggedModel. Complementa el evaluate custom,
+# que conserva las metricas de fraude (coste, recall@k, segmentos, ...).
+native_evaluate:
+  enabled: true
+  log_explainer: true
+  # Muestra aleatoria (seed fija) del fold de validacion para mantener barata
+  # la evaluacion nativa y el explainer. 0 = fold completo.
+  max_rows: 20000
 
 # ── Artifacts ─────────────────────────────────────────────────────────────────
 log_model: true

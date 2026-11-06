@@ -222,7 +222,7 @@ def test_predict_with_bad_override_value_422(loader) -> None:
 
 
 def test_predict_with_shap(loader, monkeypatch) -> None:
-    def fake_explain(X, top_k=20):  # noqa: ANN001, ANN202
+    def fake_explain(X, top_k=20):
         return {
             "base_value": -1.5,
             "n_features": 2,
@@ -267,9 +267,7 @@ def test_list_transactions_paginated(loader) -> None:
 
 def test_predict_batch(loader) -> None:
     client = make_client(loader)
-    resp = client.post(
-        "/v1/predict/batch", json=[{"transaction_id": 1}, {"transaction_id": 3}]
-    )
+    resp = client.post("/v1/predict/batch", json=[{"transaction_id": 1}, {"transaction_id": 3}])
     assert resp.status_code == 200
     assert [r["transaction_id"] for r in resp.json()] == [1, 3]
 
@@ -359,9 +357,7 @@ def test_model_detail_unknown_404(loader, multi_loader) -> None:
 
 def test_predict_with_named_model(loader, multi_loader) -> None:
     client = make_client(loader)
-    resp = client.post(
-        "/v1/predict/fraud-detection-xgboost", json={"transaction_id": 2}
-    )
+    resp = client.post("/v1/predict/fraud-detection-xgboost", json={"transaction_id": 2})
     assert resp.status_code == 200
     body = resp.json()
     assert body["transaction_id"] == 2
@@ -500,8 +496,7 @@ def test_predict_rate_limit_429_after_budget(loader) -> None:
         assert first.status_code == 200
 
         statuses = [
-            client.post("/v1/predict/", json={"transaction_id": 1}).status_code
-            for _ in range(60)
+            client.post("/v1/predict/", json={"transaction_id": 1}).status_code for _ in range(60)
         ]
         assert statuses[-1] == 429
         assert statuses.count(429) >= 1  # only the tail hits the wall

@@ -5,8 +5,11 @@ repos:
       - id: ruff-check
         types_or: [ python, pyi ]
         args: [ --fix ]
+        # Lint scope matches CI and `just lint`: src/ and tests/ only.
+        exclude: ^scripts/
       - id: ruff-format
         types_or: [ python, pyi ]
+        exclude: ^scripts/
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.11.19

@@ -12,9 +12,7 @@ class ModelVersionInfo(BaseModel):
 
     version: int = Field(..., description="Model registry version number")
     status: str = Field(..., description="Registry status (e.g. READY, ARCHIVED)")
-    run_id: str | None = Field(
-        default=None, description="MLflow run that produced this version"
-    )
+    run_id: str | None = Field(default=None, description="MLflow run that produced this version")
     aliases: list[str] = Field(
         default_factory=list, description="Registry aliases (champion, challenger)"
     )
@@ -64,12 +62,8 @@ class RegisteredModelInfo(BaseModel):
     aliases: list[str] = Field(
         default_factory=list, description="Registry aliases (champion, challenger)"
     )
-    active: bool = Field(
-        default=False, description="True when this is the default served model"
-    )
-    loaded: bool = Field(
-        default=False, description="True when the pipeline is loaded in memory"
-    )
+    active: bool = Field(default=False, description="True when this is the default served model")
+    loaded: bool = Field(default=False, description="True when the pipeline is loaded in memory")
     n_features: int | None = Field(
         default=None, description="Number of features the model was trained on"
     )
@@ -94,9 +88,7 @@ class ModelList(BaseModel):
     default: str | None = Field(
         default=None, description="Model used by the default predict endpoint"
     )
-    models: list[RegisteredModelInfo] = Field(
-        default_factory=list, description="Registered models"
-    )
+    models: list[RegisteredModelInfo] = Field(default_factory=list, description="Registered models")
 
 
 class CompareRequest(BaseModel):
@@ -106,9 +98,7 @@ class CompareRequest(BaseModel):
     for what-if exploration with a single model.
     """
 
-    transaction_id: int = Field(
-        ..., description="TransactionID present in the demo sample"
-    )
+    transaction_id: int = Field(..., description="TransactionID present in the demo sample")
     models: list[str] | None = Field(
         default=None, description="Model names to compare (default: all registered)"
     )
@@ -124,9 +114,7 @@ class CompareItem(BaseModel):
     is_fraud: bool | None = Field(
         default=None, description="True when probability >= threshold, null on error"
     )
-    threshold: float | None = Field(
-        default=None, ge=0.0, le=1.0, description="Decision threshold"
-    )
+    threshold: float | None = Field(default=None, ge=0.0, le=1.0, description="Decision threshold")
     risk_level: Literal["critical", "high", "medium", "low"] | None = Field(
         default=None,
         description="Distance-based risk classification (critical/high/medium/low)",

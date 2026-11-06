@@ -70,7 +70,7 @@ class ROCCurvePlotter(Plotter):
             fontsize=11,
             fontweight="bold",
             va="top",
-            bbox=dict(boxstyle="round", facecolor="#1f77b4", alpha=0.15),
+            bbox={"boxstyle": "round", "facecolor": "#1f77b4", "alpha": 0.15},
         )
         ax.text(
             0.03,
@@ -108,7 +108,7 @@ class PRCurvePlotter(Plotter):
             fontsize=11,
             fontweight="bold",
             va="top",
-            bbox=dict(boxstyle="round", facecolor="#ff7f0e", alpha=0.15),
+            bbox={"boxstyle": "round", "facecolor": "#ff7f0e", "alpha": 0.15},
         )
         ax.text(
             0.03,
@@ -150,7 +150,7 @@ class CalibrationPlotter(Plotter):
             fontsize=11,
             fontweight="bold",
             va="top",
-            bbox=dict(boxstyle="round", facecolor="#2ca02c", alpha=0.15),
+            bbox={"boxstyle": "round", "facecolor": "#2ca02c", "alpha": 0.15},
         )
         ax.grid(alpha=0.3)
         ax.legend(loc="upper left")
@@ -190,7 +190,7 @@ class ErrorAnalysisPlotter:
         if "TransactionDT" in data.columns:
             data["hour"] = (data["TransactionDT"] % 86400) / 3600
             if "hour" not in self._features:
-                self._features = self._features + ["hour"]
+                self._features = [*self._features, "hour"]
 
         n_err = int(errors.sum())
         n_ok = len(y_true) - n_err
@@ -242,25 +242,17 @@ class ErrorAnalysisPlotter:
 def roc_curve_table(y_true: np.ndarray, y_proba: np.ndarray) -> list[dict[str, float]]:
     fpr, tpr, thr = roc_curve(y_true, y_proba)
     return [
-        {"fpr": float(f), "tpr": float(t), "threshold": float(h)}
-        for f, t, h in zip(fpr, tpr, thr)
+        {"fpr": float(f), "tpr": float(t), "threshold": float(h)} for f, t, h in zip(fpr, tpr, thr)
     ]
 
 
 def pr_curve_table(y_true: np.ndarray, y_proba: np.ndarray) -> list[dict[str, float]]:
     precision, recall, _ = precision_recall_curve(y_true, y_proba)
-    return [
-        {"precision": float(p), "recall": float(r)} for p, r in zip(precision, recall)
-    ]
+    return [{"precision": float(p), "recall": float(r)} for p, r in zip(precision, recall)]
 
 
 def calibration_curve_table(
     y_true: np.ndarray, y_proba: np.ndarray, n_bins: int = 10
 ) -> list[dict[str, float]]:
-    prob_true, prob_pred = calibration_curve(
-        y_true, y_proba, n_bins=n_bins, strategy="uniform"
-    )
-    return [
-        {"prob_pred": float(p), "prob_true": float(t)}
-        for p, t in zip(prob_pred, prob_true)
-    ]
+    prob_true, prob_pred = calibration_curve(y_true, y_proba, n_bins=n_bins, strategy="uniform")
+    return [{"prob_pred": float(p), "prob_true": float(t)} for p, t in zip(prob_pred, prob_true)]

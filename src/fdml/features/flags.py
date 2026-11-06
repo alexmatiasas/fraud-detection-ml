@@ -1,5 +1,6 @@
-import pandas as pd
 from typing import cast
+
+import pandas as pd
 
 from fdml.features.base import BaseFeatureTransformer
 

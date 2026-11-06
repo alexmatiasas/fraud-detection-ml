@@ -101,7 +101,7 @@ def recall_at_top_k(
     top-k% by risk, measure how much fraud was caught.
     """
     n = len(y_true)
-    k = max(1, int(round(n * k_fraction)))
+    k = max(1, round(n * k_fraction))
     n_pos = int(y_true.sum())
     if n_pos == 0:
         return 0.0

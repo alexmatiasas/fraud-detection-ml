@@ -14,7 +14,6 @@ import random
 
 from locust import HttpUser, between, task
 
-
 DEMO_TRANSACTION_IDS = [3538759, 3538812, 3538861, 3538920, 3538957]
 
 
@@ -40,10 +39,7 @@ class FraudAPIUser(HttpUser):
         n = random.randint(2, 5)
         self.client.post(
             "/v1/predict/batch",
-            json=[
-                {"transaction_id": tid}
-                for tid in random.sample(DEMO_TRANSACTION_IDS, n)
-            ],
+            json=[{"transaction_id": tid} for tid in random.sample(DEMO_TRANSACTION_IDS, n)],
             name="/v1/predict/batch",
         )
 

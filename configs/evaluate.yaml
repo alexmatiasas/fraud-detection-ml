@@ -47,11 +47,11 @@ model_card:
   filename: model_card.md
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
+# roc_curve y pr_curve los genera mlflow.evaluate() nativo; aqui solo quedan
+# los plots custom que MLflow no produce (calibration, error_analysis).
 plots:
   output_dir: models/
   plots:
-    - roc_curve
-    - pr_curve
     - calibration
   output_format: webp  # png | webp (webp for web embedding)
   dpi: 150
@@ -62,7 +62,7 @@ dvclive:
   enabled: true
   dir: dvclive
   # Modo report de dvclive: null | html | notebook | md. 'notebook' solo dentro
-  # de un notebook (warn en CLI); null/html para runs de `make train`.
+  # de un notebook (warn en CLI); null/html para runs de `just train`.
   report: null
 
 # ── Report (JSON, sin dependencia de MLflow) ─────────────────────────────────

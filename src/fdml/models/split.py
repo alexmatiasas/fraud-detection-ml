@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -41,7 +40,7 @@ class TemporalSplitter(BaseCrossValidator):
         self.embargo_seconds = embargo_seconds
 
     def get_n_splits(  # type: ignore[reportIncompatibleMethodOverride]
-        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+        self, X: pd.DataFrame, y: np.ndarray | None = None
     ) -> int:
         return 1
 
@@ -58,8 +57,8 @@ class TemporalSplitter(BaseCrossValidator):
     def split(  # type: ignore[reportIncompatibleMethodOverride]
         self,
         X: pd.DataFrame,
-        y: Optional[np.ndarray] = None,
-        groups: Optional[np.ndarray] = None,
+        y: np.ndarray | None = None,
+        groups: np.ndarray | None = None,
     ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         if self.time_col not in X.columns:
             msg = f"Column '{self.time_col}' not found in X"
@@ -67,7 +66,7 @@ class TemporalSplitter(BaseCrossValidator):
         yield self._time_split(X)
 
     def _iter_test_indices(  # type: ignore[reportIncompatibleMethodOverride]
-        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+        self, X: pd.DataFrame, y: np.ndarray | None = None
     ) -> Generator[np.ndarray, None, None]:
         yield self._time_split(X)[1]
 
@@ -88,15 +87,15 @@ class StratifiedSplitter(BaseCrossValidator):
         self.random_state = random_state
 
     def get_n_splits(  # type: ignore[reportIncompatibleMethodOverride]
-        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+        self, X: pd.DataFrame, y: np.ndarray | None = None
     ) -> int:
         return 1
 
     def split(  # type: ignore[reportIncompatibleMethodOverride]
         self,
         X: pd.DataFrame,
-        y: Optional[np.ndarray] = None,
-        groups: Optional[np.ndarray] = None,
+        y: np.ndarray | None = None,
+        groups: np.ndarray | None = None,
     ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         train_idx, val_idx = train_test_split(
             np.arange(len(X)),
@@ -107,7 +106,7 @@ class StratifiedSplitter(BaseCrossValidator):
         yield np.asarray(train_idx), np.asarray(val_idx)
 
     def _iter_test_indices(  # type: ignore[reportIncompatibleMethodOverride]
-        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+        self, X: pd.DataFrame, y: np.ndarray | None = None
     ) -> Generator[np.ndarray, None, None]:
         _, val_idx = train_test_split(
             np.arange(len(X)),
@@ -133,24 +132,22 @@ class StratifiedKFoldSplitter(BaseCrossValidator):
         self.n_splits = n_splits
         self.shuffle = shuffle
         self.random_state = random_state
-        self._kfold = StratifiedKFold(
-            n_splits=n_splits, shuffle=shuffle, random_state=random_state
-        )
+        self._kfold = StratifiedKFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
 
     def get_n_splits(  # type: ignore[reportIncompatibleMethodOverride]
-        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+        self, X: pd.DataFrame, y: np.ndarray | None = None
     ) -> int:
         return self.n_splits
 
     def split(  # type: ignore[reportIncompatibleMethodOverride]
         self,
         X: pd.DataFrame,
-        y: Optional[np.ndarray] = None,
-        groups: Optional[np.ndarray] = None,
+        y: np.ndarray | None = None,
+        groups: np.ndarray | None = None,
     ) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
         yield from self._kfold.split(X, y)
 
     def _iter_test_indices(  # type: ignore[reportIncompatibleMethodOverride]
-        self, X: pd.DataFrame, y: Optional[np.ndarray] = None
+        self, X: pd.DataFrame, y: np.ndarray | None = None
     ) -> Generator[np.ndarray, None, None]:
         yield from self._kfold._iter_test_indices(X, y)

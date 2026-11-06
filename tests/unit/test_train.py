@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import mlflow
 import numpy as np
 import pandas as pd
 import pytest
 from mlflow import MlflowClient
 from sklearn.datasets import make_classification
 
-import mlflow
 from fdml.features.category_encoder import CategoryEncoder
-from fdml.models.config import load_train_config
+from fdml.models.config import load_evaluation_config, load_train_config, save_model_card
 from fdml.models.evaluate.metrics import compute_metrics
 from fdml.models.split import StratifiedSplitter, TemporalSplitter
 from fdml.models.train.callbacks import IterationCallback
@@ -17,10 +19,11 @@ from fdml.models.train.runner import (
     _cap_train_fold,
     _fit_model,
     _get_splitter,
+    _register_model,
+    _run_native_evaluation,
     _sample_eval_set,
     features_fingerprint,
 )
-from fdml.models.config import load_evaluation_config, save_model_card
 
 
 class TestCapTrainFold:
@@ -125,12 +128,12 @@ class TestSampleEvalSet:
 
     def test_subsample_respects_max_rows(self):
         X, y = self._val()
-        X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
         assert len(y_es) == 2000
 
     def test_stratified_keeps_class_ratio(self):
         X, y = self._val()
-        X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=2000)
         assert y.mean() > 0
         assert np.isclose(y_es.mean(), y.mean(), atol=0.01)
 
@@ -143,9 +146,9 @@ class TestSampleEvalSet:
 
     def test_returns_full_when_smaller_or_zero(self):
         X, y = self._val()
-        X_es, y_es = _sample_eval_set(X, y, max_rows=0)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=0)
         assert len(y_es) == 5000
-        X_es, y_es = _sample_eval_set(X, y, max_rows=99999)
+        _X_es, y_es = _sample_eval_set(X, y, max_rows=99999)
         assert len(y_es) == 5000
 
 
@@ -166,9 +169,7 @@ class TestFitModel:
         )
 
     def test_lgbm_early_stopping_sets_best_iteration(self):
-        cfg = load_train_config(
-            cli_args=["model.n_estimators=200", "early_stopping.rounds=20"]
-        )
+        cfg = load_train_config(cli_args=["model.n_estimators=200", "early_stopping.rounds=20"])
         X, y, Xv, yv = self._synth()
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
         model = _fit_model(model, X, y, Xv, yv, cfg, callbacks=None)
@@ -176,9 +177,7 @@ class TestFitModel:
         assert model.n_estimators_ < 200
 
     def test_lgbm_logs_iteration_metrics_to_mlflow(self, tmp_path):
-        cfg = load_train_config(
-            cli_args=["model.n_estimators=50", "early_stopping.rounds=10"]
-        )
+        cfg = load_train_config(cli_args=["model.n_estimators=50", "early_stopping.rounds=10"])
         X, y, Xv, yv = self._synth()
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
 
@@ -202,9 +201,7 @@ class TestFitModel:
             assert len(hist) > 0
 
     def test_lgbm_logs_train_curve_when_enabled(self, tmp_path):
-        cfg = load_train_config(
-            cli_args=["model.n_estimators=50", "early_stopping.rounds=10"]
-        )
+        cfg = load_train_config(cli_args=["model.n_estimators=50", "early_stopping.rounds=10"])
         X, y, Xv, yv = self._synth()
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
 
@@ -266,6 +263,261 @@ class TestFitModel:
         model = model_builder_registry.build("lightgbm", cfg.model.params.model_dump())
         model = _fit_model(model, X, y, Xv, yv, cfg, callbacks=None)
         assert model.n_estimators_ == cfg.model.params.n_estimators
+
+
+class TestRegisterModel:
+    """_register_model must register the LoggedModel URI, not a legacy
+    runs:/ pointer (v50/v53 registered empty schemas that way), and must
+    enforce the min_auc/min_ap quality gate before registering."""
+
+    @staticmethod
+    def _cfg(
+        min_auc: float = 0.0,
+        min_ap: float = 0.0,
+        tags: dict[str, str] | None = None,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            registry=SimpleNamespace(
+                model_name="test-model",  # legacy field, now derived from cfg_model_name
+                min_auc=min_auc,
+                min_average_precision=min_ap,
+                tags=tags
+                or {
+                    "framework": "lightgbm",
+                    "dataset": "test",
+                    "task": "binary_classification",
+                },
+                description="Test registered model",
+            )
+        )
+
+    @staticmethod
+    def _fake_client(monkeypatch):
+        calls = {
+            "versions": [],
+            "aliases": [],
+            "params": [],
+            "tags": [],
+            "registered_model_desc": None,
+        }
+
+        class FakeClient:
+            def list_artifacts(self, run_id, path=None):
+                return []
+
+            def create_registered_model(self, name, description=None):
+                calls["registered_model_desc"] = description
+
+            def create_model_version(self, name, source, run_id, description=None, tags=None):
+                calls["versions"].append(
+                    {
+                        "name": name,
+                        "source": source,
+                        "run_id": run_id,
+                        "description": description,
+                        "tags": tags or [],
+                    }
+                )
+                return SimpleNamespace(version="7")
+
+            def get_model_version_by_alias(self, name, alias):
+                raise Exception("no champion yet")
+
+            def set_registered_model_alias(self, name, alias, version):
+                calls["aliases"].append(alias)
+
+        monkeypatch.setattr(mlflow, "MlflowClient", FakeClient)
+        monkeypatch.setattr(
+            mlflow,
+            "active_run",
+            lambda: SimpleNamespace(info=SimpleNamespace(run_id="run123")),
+        )
+        monkeypatch.setattr(mlflow, "log_param", lambda k, v: calls["params"].append((k, v)))
+        monkeypatch.setattr(mlflow, "set_tag", lambda k, v: calls["tags"].append((k, v)))
+        return calls
+
+    def test_skips_registration_without_logged_model_uri(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(self._cfg(), auc=0.85, run_id="run123", model_uri=None)
+        assert calls["versions"] == []
+        assert calls["aliases"] == []
+
+    def test_registers_logged_model_uri_and_logs_version(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+        )
+        assert len(calls["versions"]) == 1
+        v = calls["versions"][0]
+        assert v["name"] == "fraud-detection-lgbm"
+        assert v["source"] == "models:/m-abc123"
+        assert v["run_id"] == "run123"
+        assert ("registered_model_version", "7") in calls["params"]
+        assert ("registered_model_version", "7") in calls["tags"]
+        assert calls["aliases"] == ["champion"]
+
+    def test_version_has_description_with_metrics(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(),
+            auc=0.8812,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.4123,
+        )
+        v = calls["versions"][0]
+        assert "AUC=0.8812" in v["description"]
+        assert "AP=0.4123" in v["description"]
+
+    def test_version_has_config_tags(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(tags={"framework": "lightgbm", "custom": "yes"}),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+        )
+        tag_dict = calls["versions"][0]["tags"]
+        assert tag_dict["framework"] == "lightgbm"
+        assert tag_dict["custom"] == "yes"
+        assert tag_dict["validation_status"] == "approved"
+        assert tag_dict["validation_auc"] == "0.9000"
+
+    def test_registered_model_gets_description(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+        )
+        assert calls["registered_model_desc"] == "Test registered model"
+
+    def test_quality_gate_rejects_below_min_auc(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_auc=0.95),
+            auc=0.85,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.50,
+        )
+        assert calls["versions"] == []
+        assert calls["aliases"] == []
+        assert ("validation_status", "rejected") in calls["tags"]
+
+    def test_quality_gate_rejects_below_min_ap(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_ap=0.40),
+            auc=0.90,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.30,
+        )
+        assert calls["versions"] == []
+
+    def test_quality_gate_passes_above_thresholds(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_auc=0.83, min_ap=0.35),
+            auc=0.84,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.36,
+        )
+        assert len(calls["versions"]) == 1
+        assert ("validation_status", "approved") in calls["tags"]
+
+    def test_quality_gate_zero_thresholds_disabled(self, monkeypatch):
+        calls = self._fake_client(monkeypatch)
+        _register_model(
+            self._cfg(min_auc=0.0, min_ap=0.0),
+            auc=0.10,
+            run_id="run123",
+            model_uri="models:/m-abc123",
+            average_precision=0.05,
+        )
+        assert len(calls["versions"]) == 1
+
+
+class TestNativeEvaluation:
+    """_run_native_evaluation must call mlflow.models.evaluate on the raw
+    validation fold with the LoggedModel URI, or skip cleanly."""
+
+    @staticmethod
+    def _cfg(enabled=True, log_explainer=True, max_rows=0) -> SimpleNamespace:
+        return SimpleNamespace(
+            native_evaluate=SimpleNamespace(
+                enabled=enabled,
+                log_explainer=log_explainer,
+                max_rows=max_rows,
+            )
+        )
+
+    @staticmethod
+    def _data() -> tuple[pd.DataFrame, pd.Series]:
+        X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+        y = pd.Series([0, 1, 0])
+        return X, y
+
+    def test_calls_evaluate_with_model_uri_and_targets(self, monkeypatch):
+        calls = {}
+
+        def fake_evaluate(model_uri, data, **kwargs):
+            calls["model_uri"] = model_uri
+            calls["targets"] = kwargs.get("targets")
+            calls["rows"] = len(data)
+            calls["columns"] = list(data.columns)
+            calls["dtypes"] = data.dtypes.apply(lambda d: d.name).to_dict()
+
+        monkeypatch.setattr(mlflow.models, "evaluate", fake_evaluate)
+        X = pd.DataFrame(
+            {
+                "cat": pd.Categorical(["x", "y", "x"]),
+                "num": [1.0, 2.0, 3.0],
+            }
+        )
+        y = pd.Series([0, 1, 0])
+        _run_native_evaluation(
+            self._cfg(),
+            SimpleNamespace(model_uri="models:/m-abc"),
+            X,
+            y,
+        )
+        assert calls["model_uri"] == "models:/m-abc"
+        assert calls["targets"] == "isFraud"
+        assert calls["rows"] == 3
+        assert calls["columns"][-1] == "isFraud"
+        assert calls["dtypes"]["cat"] == "object"
+
+    def test_skips_when_disabled(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(mlflow.models, "evaluate", lambda *a, **k: calls.append(a))
+        X, y = self._data()
+        _run_native_evaluation(
+            self._cfg(enabled=False), SimpleNamespace(model_uri="models:/m-1"), X, y
+        )
+        _run_native_evaluation(self._cfg(), None, X, y)
+        assert calls == []
+
+    def test_respects_max_rows(self, monkeypatch):
+        captured = {}
+
+        def fake_evaluate(model_uri, data, **kwargs):
+            captured["rows"] = len(data)
+
+        monkeypatch.setattr(mlflow.models, "evaluate", fake_evaluate)
+        rng = np.random.default_rng(0)
+        X = pd.DataFrame({"a": rng.normal(size=100)})
+        y = pd.Series((rng.random(100) < 0.5).astype(int))
+        _run_native_evaluation(
+            self._cfg(max_rows=25), SimpleNamespace(model_uri="models:/m-1"), X, y
+        )
+        assert captured["rows"] == 25
 
 
 class TestCategoryEncoder:

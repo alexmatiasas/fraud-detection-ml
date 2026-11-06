@@ -33,12 +33,10 @@ def resolve_mlflow_tracking(mlflow_cfg: MlflowFullConfig) -> MlflowFullConfig:
                 from dotenv import load_dotenv
 
                 load_dotenv(env_path)
-                token = os.environ.get("DAGSHUB_TOKEN") or os.environ.get(
-                    "DAGSHUB_USER_TOKEN"
-                )
+                token = os.environ.get("DAGSHUB_TOKEN") or os.environ.get("DAGSHUB_USER_TOKEN")
                 user = os.environ.get("DAGSHUB_USERNAME")
                 repo = os.environ.get("DAGSHUB_REPO")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("  MLflow: could not load .env: %s", exc)
 
     if token and user and repo:

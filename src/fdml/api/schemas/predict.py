@@ -15,9 +15,7 @@ class PredictionRequest(BaseModel):
     pipeline rebuilds the exact 341-feature space it was trained on.
     """
 
-    transaction_id: int = Field(
-        ..., description="TransactionID present in the demo sample"
-    )
+    transaction_id: int = Field(..., description="TransactionID present in the demo sample")
     overrides: dict[str, Any] | None = Field(
         default=None,
         description=(

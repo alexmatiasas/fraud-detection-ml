@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -26,9 +25,7 @@ class BaseFeatureTransformer(BaseEstimator, TransformerMixin, ABC):
     def __init__(self, enabled: bool = True):
         self.enabled = enabled
 
-    def fit(
-        self, X: pd.DataFrame, y: Optional[pd.Series] = None
-    ) -> "BaseFeatureTransformer":
+    def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> "BaseFeatureTransformer":
         self._fitted_ = True
         return self
 

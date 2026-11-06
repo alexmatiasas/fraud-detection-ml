@@ -19,9 +19,7 @@ def small_data() -> pd.DataFrame:
     processed_dir = Path(load_train_config().data.processed_dir)
     data_file = processed_dir / "train_transaction.parquet"
     if not data_file.exists():
-        pytest.skip(
-            f"Training data not found at {data_file} (run `dvc pull` to fetch datasets)"
-        )
+        pytest.skip(f"Training data not found at {data_file} (run `dvc pull` to fetch datasets)")
     train = pd.read_parquet(
         data_file,
         columns=[
@@ -64,9 +62,7 @@ class TestTrainIntegration:
         X_train_fe = pipeline.fit_transform(X_train, y_train)
         X_val_fe = pipeline.transform(X_val)
 
-        model = model_builder_registry.build(
-            cfg.model.name, cfg.model.params.model_dump()
-        )
+        model = model_builder_registry.build(cfg.model.name, cfg.model.params.model_dump())
         model.fit(X_train_fe, y_train)
 
         y_proba = model.predict_proba(X_val_fe)[:, 1]
@@ -78,9 +74,7 @@ class TestTrainIntegration:
     @pytest.mark.parametrize("model_name", ["xgboost", "random_forest"])
     def test_end_to_end_other_models(self, small_data: pd.DataFrame, model_name: str):
         df = small_data.head(5000)
-        cfg = load_train_config(
-            cli_args=[f"model.name={model_name}", "split.embargo_seconds=0"]
-        )
+        cfg = load_train_config(cli_args=[f"model.name={model_name}", "split.embargo_seconds=0"])
         splitter = _get_splitter(cfg.split)
         train_idx, val_idx = next(splitter.split(df, df["isFraud"].to_numpy()))
 
@@ -93,9 +87,7 @@ class TestTrainIntegration:
         X_train_fe = pipeline.fit_transform(X_train, y_train)
         X_val_fe = pipeline.transform(X_val)
 
-        model = model_builder_registry.build(
-            cfg.model.name, cfg.model.params.model_dump()
-        )
+        model = model_builder_registry.build(cfg.model.name, cfg.model.params.model_dump())
         model.fit(X_train_fe, y_train)
 
         y_proba = model.predict_proba(X_val_fe)[:, 1]
@@ -128,9 +120,7 @@ class TestTrainIntegration:
         pipeline, _ = create_pipeline(load_features_config())
         X_train_fe = pipeline.fit_transform(X_train, y_train)
 
-        model = model_builder_registry.build(
-            cfg.model.name, cfg.model.params.model_dump()
-        )
+        model = model_builder_registry.build(cfg.model.name, cfg.model.params.model_dump())
         model.fit(X_train_fe, y_train)
 
         full_pipeline = Pipeline([("features", pipeline), ("model", model)])

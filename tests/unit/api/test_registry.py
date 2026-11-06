@@ -109,9 +109,7 @@ def fake_load_model(monkeypatch: pytest.MonkeyPatch):
 def test_load_discovers_registered_models(no_dagshub, install_client) -> None:
     install_client(
         versions={
-            "fraud-detection-lgbm": [
-                FakeModelVersion(49, "run-lgbm", aliases=["champion"])
-            ],
+            "fraud-detection-lgbm": [FakeModelVersion(49, "run-lgbm", aliases=["champion"])],
             "fraud-detection-xgboost": [FakeModelVersion(7, "run-xgb")],
         },
         reports={
@@ -316,9 +314,7 @@ def test_get_pipeline_no_version(no_dagshub) -> None:
 def test_get_pipeline_with_error(no_dagshub) -> None:
     loader = MultiModelLoader()
     loader._models = {
-        "m": reg_mod.RegisteredModel(
-            name="m", version=1, run_id="r", error="previous failure"
-        )
+        "m": reg_mod.RegisteredModel(name="m", version=1, run_id="r", error="previous failure")
     }
     with pytest.raises(ModelRegistryError, match="previous failure"):
         loader.predict_proba("m", pd.DataFrame({"x": [1]}))

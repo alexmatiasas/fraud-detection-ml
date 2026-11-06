@@ -1,8 +1,10 @@
 # ── Builder stage: install only the API dependency set ────────────────────────
 # The container ships ONLY the serving API. Training-only deps (xgboost, dvc,
-# optuna, shap, ...) live in the `train` group and are deliberately excluded —
-# see pyproject.toml. scikit-learn + lightgbm ARE installed: the served artifact
-# is a sklearn Pipeline wrapping an LGBMClassifier.
+# optuna, ...) live in the `train` optional extra and are deliberately excluded;
+# local dev/test tooling lives in the default `dev` dependency group, dropped
+# here with --no-dev — see pyproject.toml. scikit-learn, lightgbm and shap ARE
+# installed: the served artifact is a sklearn Pipeline wrapping an
+# LGBMClassifier, and the API computes SHAP explanations per prediction.
 #
 # uv.lock is copied and --frozen used so the container installs exactly the
 # versions resolved locally; uv never re-resolves the dependency graph.
@@ -50,7 +52,9 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    MLFLOW_HTTP_REQUEST_TIMEOUT=30 \
+    MLFLOW_HTTP_REQUEST_MAX_RETRIES=2
 
 # Run as non-root: the API only reads files, so it needs no write access.
 RUN groupadd --gid 1000 appuser && \

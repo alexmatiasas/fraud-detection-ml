@@ -15,9 +15,7 @@ def ts_data() -> pd.DataFrame:
     n = 1000
     return pd.DataFrame(
         {
-            "TransactionDT": rng.permutation(
-                np.arange(0, 86400 * n, 86400, dtype=np.int32)
-            ),
+            "TransactionDT": rng.permutation(np.arange(0, 86400 * n, 86400, dtype=np.int32)),
             "isFraud": rng.choice([0, 1], n, p=[0.965, 0.035]),
             "feature_a": rng.normal(0, 1, n),
         }
@@ -105,7 +103,7 @@ class TestStratifiedSplitter:
         splitter = StratifiedSplitter(test_size=0.2, random_state=42)
 
         # Act
-        train_idx, val_idx = next(splitter.split(X, y))
+        _train_idx, val_idx = next(splitter.split(X, y))
 
         # Assert
         orig_ratio = y.mean()
@@ -120,7 +118,7 @@ class TestStratifiedSplitter:
         splitter = StratifiedSplitter(test_size=test_size)
 
         # Act
-        train_idx, val_idx = next(splitter.split(X, y))
+        _train_idx, val_idx = next(splitter.split(X, y))
 
         # Assert
         n = len(X)

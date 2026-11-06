@@ -71,9 +71,7 @@ class DeviceFeatureExtractor(BaseFeatureTransformer):
 
         if self.use_brand:
             brand_series = pd.Series("missing", index=X.index, dtype="object")
-            brand_series[has_info] = X.loc[has_info, "DeviceInfo"].apply(
-                self._detect_brand
-            )
+            brand_series[has_info] = X.loc[has_info, "DeviceInfo"].apply(self._detect_brand)
             X["device_brand"] = brand_series
 
         X = X.drop(columns=["DeviceInfo"])

@@ -5,7 +5,7 @@ Usage:
     python scripts/compare_runs.py --tag B_reg --seed-bag
     python scripts/compare_runs.py --tag B_reg --seed-bag --dedupe --output models/compare_B_reg.csv
 
-The tracking URI is resolved the same way as `make train` (DagsHub via .env
+The tracking URI is resolved the same way as `just train` (DagsHub via .env
 when present, otherwise local). When stdout is a terminal the results open in
 an interactive, scrollable table (Textual DataTable — arrows to move, ``a`` to
 sort by AUC, ``s`` to toggle runs/summary, ``q`` to quit); pass ``--plain`` to

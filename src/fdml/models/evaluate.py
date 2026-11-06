@@ -57,9 +57,7 @@ def run_evaluation(
             "precision": report.precision,
             "recall": report.recall,
         },
-        "ci": (
-            (report.ci_lower, report.ci_upper) if report.ci_lower is not None else None
-        ),
+        "ci": ((report.ci_lower, report.ci_upper) if report.ci_lower is not None else None),
         "best_threshold": report.best_threshold,
         "best_f1": report.best_f1,
         "model_card": "",
