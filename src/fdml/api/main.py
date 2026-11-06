@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -19,7 +21,6 @@ from slowapi.errors import RateLimitExceeded
 from fdml.api.context import request_id as request_id_ctx
 from fdml.api.dependencies import get_model_loader, get_multi_loader
 from fdml.api.internal.loader import ModelLoadError
-from fdml.api.internal.registry import ModelRegistryError
 from fdml.api.limiter import limiter, rate_limit_exceeded_handler
 from fdml.api.metadata import DESCRIPTION, SUMMARY, TITLE, VERSION, tags_metadata
 from fdml.api.routers.features import features_router
@@ -64,6 +65,23 @@ ALLOWED_ORIGINS = [
 ]
 
 
+# Cloud Run kills the instance if the container does not listen within its
+# startup probe (~4 min). Model/report downloads from DagsHub have no reliable
+# upper bound, so bound them here: startup completes, /v1/ready/ reports 503
+# until the model is actually available.
+STARTUP_MODEL_TIMEOUT = 90.0
+STARTUP_REGISTRY_TIMEOUT = 45.0
+
+
+async def _load_bounded(label: str, load: Callable[[], None], timeout: float) -> None:
+    try:
+        await asyncio.wait_for(asyncio.to_thread(load), timeout=timeout)
+    except TimeoutError:
+        logger.warning("%s timed out after %.0fs; serving not-ready", label, timeout)
+    except Exception as exc:  # noqa: BLE001 - startup must never crash the app
+        logger.warning("%s failed: %s", label, exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the model(s) and demo sample once at startup."""
@@ -71,17 +89,11 @@ async def lifespan(app: FastAPI):
     logger.info("API starting (environment=%s)", ENVIRONMENT)
 
     loader = get_model_loader()
-    try:
-        loader.load()
-    except ModelLoadError as exc:
-        logger.warning("Model not loaded at startup: %s", exc)
+    await _load_bounded("Model load", loader.load, STARTUP_MODEL_TIMEOUT)
     loader.load_sample()
 
     multi = get_multi_loader()
-    try:
-        multi.load()
-    except ModelRegistryError as exc:
-        logger.warning("Model registry not loaded at startup: %s", exc)
+    await _load_bounded("Model registry load", multi.load, STARTUP_REGISTRY_TIMEOUT)
     yield
 
 

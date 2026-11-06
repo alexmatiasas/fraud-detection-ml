@@ -52,7 +52,9 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    MLFLOW_HTTP_REQUEST_TIMEOUT=30 \
+    MLFLOW_HTTP_REQUEST_MAX_RETRIES=2
 
 # Run as non-root: the API only reads files, so it needs no write access.
 RUN groupadd --gid 1000 appuser && \
