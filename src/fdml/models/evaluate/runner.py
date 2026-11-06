@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -217,10 +217,10 @@ def evaluate(
                 SegmentResult(
                     segment_col=str(row["segment_col"]),
                     segment_value=str(row["segment_value"]),
-                    count=int(row["count"]),
-                    fraud_rate=float(row["fraud_rate"]),
-                    roc_auc=float(row["roc_auc"]),
-                    average_precision=float(row["average_precision"]),
+                    count=int(cast(float, row["count"])),
+                    fraud_rate=float(cast(float, row["fraud_rate"])),
+                    roc_auc=float(cast(float, row["roc_auc"])),
+                    average_precision=float(cast(float, row["average_precision"])),
                 )
             )
 

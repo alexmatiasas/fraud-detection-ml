@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import mlflow
 import numpy as np
@@ -62,13 +62,13 @@ class OptunaHPO(HPOStrategy):
         self,
         n_trials: int = 50,
         timeout_seconds: int | None = 3600,
-        direction: str = "maximize",
+        direction: Literal["maximize", "minimize"] = "maximize",
         study_name: str = "fraud_study",
         save_best: bool = True,
     ):
         self._n_trials = n_trials
         self._timeout = timeout_seconds
-        self._direction = direction
+        self._direction: Literal["maximize", "minimize"] = direction
         self._study_name = study_name
         self._save_best = save_best
 

@@ -7,7 +7,7 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import mlflow
@@ -176,10 +176,10 @@ def _evaluate_and_track(
             mlflow.log_params(
                 {
                     "split_embargo_seconds": cfg.split.embargo_seconds,
-                    "train_dt_min": int(result.X_train[cfg.split.time_col].min()),
-                    "train_dt_max": int(result.X_train[cfg.split.time_col].max()),
-                    "val_dt_min": int(result.X_val[cfg.split.time_col].min()),
-                    "val_dt_max": int(result.X_val[cfg.split.time_col].max()),
+                    "train_dt_min": int(cast(float, result.X_train[cfg.split.time_col].min())),
+                    "train_dt_max": int(cast(float, result.X_train[cfg.split.time_col].max())),
+                    "val_dt_min": int(cast(float, result.X_val[cfg.split.time_col].min())),
+                    "val_dt_max": int(cast(float, result.X_val[cfg.split.time_col].max())),
                 }
             )
 

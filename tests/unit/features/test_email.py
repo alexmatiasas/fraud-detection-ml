@@ -13,11 +13,11 @@ class TestEmailFeatureExtractor:
             }
         )
         result = EmailFeatureExtractor().transform(df)
-        assert list(result["P_emaildomain"]) == [
+        assert list(result["P_emaildomain"].fillna("<NA>")) == [
             "microsoft",
             "gmail.com",
             "microsoft",
-            None,
+            "<NA>",
         ]
         assert list(result["R_emaildomain"]) == [
             "microsoft",

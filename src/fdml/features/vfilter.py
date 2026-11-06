@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import pandas as pd
 
@@ -83,7 +85,7 @@ class VFeatureFilter(BaseFeatureTransformer):
         keep = list(v_cols)
         v_data = X[v_cols]
 
-        variances = {c: float(v_data[c].var()) for c in keep}
+        variances = {c: float(cast(float, v_data[c].var())) for c in keep}
         keep = [c for c in keep if variances[c] > self.variance_threshold]
 
         if len(keep) > 1:

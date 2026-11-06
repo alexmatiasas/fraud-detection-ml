@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import pandas as pd
 
@@ -27,8 +29,8 @@ class DtypeOptimizer(BaseFeatureTransformer):
             if X[col].dtype == np.dtype("float64"):
                 X[col] = X[col].astype("float32")
             elif X[col].dtype == np.dtype("int64"):
-                lo = int(X[col].min())
-                hi = int(X[col].max())
+                lo = int(cast(float, X[col].min()))
+                hi = int(cast(float, X[col].max()))
                 if np.iinfo("int32").min < lo and hi < np.iinfo("int32").max:
                     X[col] = X[col].astype("int32")
 

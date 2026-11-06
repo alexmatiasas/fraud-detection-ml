@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 import lightgbm as lgb
 import optuna
@@ -110,7 +110,7 @@ class LGBMBuilder(ModelBuilder):
         model.fit(
             X_train,
             y_train,
-            eval_set=eval_set,
+            eval_set=cast(Any, eval_set),
             eval_names=eval_names or ["validation"],
             eval_metric=eval_metric,
             callbacks=[

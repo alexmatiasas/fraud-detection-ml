@@ -171,7 +171,7 @@ class TestDowncast:
         assert df["Amt"].dtype == "float32"
 
     def test_object_to_category(self):
-        df = pd.DataFrame({"Col": ["a", "b", "c"]})
+        df = pd.DataFrame({"Col": pd.Series(["a", "b", "c"], dtype=object)})
         assert df["Col"].dtype == "object"
         _downcast(df, {"Col": "category"})
         assert df["Col"].dtype == "category"

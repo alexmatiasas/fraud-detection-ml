@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pandas as pd
 from fastapi import APIRouter, Depends, Request, Response
 
@@ -64,8 +66,8 @@ def list_features(
                     )
                 )
             elif is_numeric and bool(series.notna().any()):
-                min_val = float(series.min())
-                max_val = float(series.max())
+                min_val = float(cast(float, series.min()))
+                max_val = float(cast(float, series.max()))
                 features.append(
                     FeatureInfo(
                         name=col,
