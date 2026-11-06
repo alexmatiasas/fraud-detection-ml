@@ -19,7 +19,7 @@ Fraud detection on transactional data is a classic imbalanced-classification pro
 
 The project is written to portfolio standards: every decision is documented (`configs/*.yaml`, notebooks, model card), and the suite of **511 tests** covers transformers, training, evaluation, and API behavior.
 
-**Docs:** [index](docs/index.md) · [architecture](docs/architecture.md) · [pipeline](docs/pipeline.md) · [decisions](docs/decisions.md) · [results](docs/results.md) · [implementation](docs/index.md#implementation)
+**Docs:** [project map](docs/project-map.md) · [index](docs/index.md) · [architecture](docs/architecture.md) · [pipeline](docs/pipeline.md) · [decisions](docs/decisions.md) · [results](docs/results.md) · [implementation](docs/index.md#implementation)
 
 ## Current model
 

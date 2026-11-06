@@ -7,6 +7,7 @@ these documents explain the contracts that are hard to see from a single file.
 
 | If you are… | Read in this order |
 |---|---|
+| Lost / retaking the project | [project map](project-map.md) → `configs/*.yaml` → the 8 files listed there |
 | New to the project | [README](../README.md) → [results](results.md) → [architecture](architecture.md) → [pipeline](pipeline.md) |
 | Reviewing the ML work | [results](results.md) → [decisions](decisions.md) → [evaluation](implementation/evaluation.md) |
 | Contributing code | [architecture](architecture.md) → [implementation](#implementation) → `configs/*.yaml` |
@@ -16,6 +17,7 @@ these documents explain the contracts that are hard to see from a single file.
 
 | Document | Answers |
 |---|---|
+| [project map](project-map.md) | One-page model of the whole repo: flow, module map, reading order, current state, gaps. |
 | [README](../README.md) | What the project is, quickstart, API reference, roadmap. |
 | [architecture](architecture.md) | Package layout, serving contract, config flow, MLflow resolution, project-root discovery. |
 | [pipeline](pipeline.md) | DVC stages, temporal split, feature engineering stage, CRISP-DM mapping. |
